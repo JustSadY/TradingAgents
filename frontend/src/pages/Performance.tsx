@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import type { GridColDef } from '@mui/x-data-grid'
 import { useAnalysisGetPerformance, useAnalysisListAnalysis, useAnalysisGetPerformanceAttribution } from '../api/generated/analysis/analysis'
 import { useTradingGetPortfolioStats } from '../api/generated/trading/trading'
 import { useAnalyticsGetTokenUsage } from '../api/generated/analytics/analytics'
@@ -7,8 +8,15 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Cell, PieChart, Pie, Legend
 } from 'recharts'
 import { ResponsiveChart } from '../components/ui/ResponsiveChart'
+import AppDataGrid from '../components/ui/AppDataGrid'
 import { useTranslation } from '../contexts/LanguageContext'
 import { signalTone, TONE_TEXT_CLASS } from '../utils/signalTone'
+import type {
+  AnalystAttributionItem,
+  AnalysisListItem,
+  TickerBreakdownRecord,
+  TokenUsageBreakdown,
+} from '../api/generated/model'
 
 function ReturnCell({ value }: { value: number | null }) {
   if (value === null) return <span className="text-slate-600 font-semibold">—</span>
@@ -37,6 +45,216 @@ export default function Performance() {
   const loading = perfQuery.isPending || historyQuery.isPending
 
   const handleFilter = () => setFilterTicker(ticker)
+
+  const tickerColumns = useMemo<GridColDef<TickerBreakdownRecord>[]>(() => [
+    {
+      field: 'ticker',
+      headerName: t('performance.col_ticker'),
+      minWidth: 96,
+      flex: 0.6,
+      renderCell: ({ row }) => <span className="font-mono font-bold text-white">{row.ticker}</span>,
+    },
+    {
+      field: 'trades',
+      headerName: t('performance.col_trades'),
+      type: 'number',
+      minWidth: 88,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: ({ row }) => <span className="text-slate-400">{row.trades}</span>,
+    },
+    {
+      field: 'win_rate',
+      headerName: t('performance.col_win_rate'),
+      type: 'number',
+      minWidth: 96,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: ({ row }) => (
+        <span className={`font-mono font-semibold ${row.win_rate >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>
+          {row.win_rate.toFixed(0)}%
+        </span>
+      ),
+    },
+    {
+      field: 'total_pnl',
+      headerName: t('performance.col_total_pnl'),
+      type: 'number',
+      minWidth: 104,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => (
+        <span className={`font-mono font-semibold ${row.total_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+          {row.total_pnl >= 0 ? '+' : ''}${row.total_pnl.toFixed(2)}
+        </span>
+      ),
+    },
+  ], [t])
+
+  const attributionColumns = useMemo<GridColDef<AnalystAttributionItem>[]>(() => [
+    {
+      field: 'label',
+      headerName: t('performance.col_analyst'),
+      minWidth: 160,
+      flex: 1,
+      renderCell: ({ row }) => (
+        <span className="flex items-center gap-1.5 font-bold text-white text-xs md:text-sm">
+          {row.label}
+          {row.chronic_underperformer && (
+            <span
+              title={t('performance.chronic_underperformer_hint')}
+              className="text-[9px] font-bold text-rose-300 bg-rose-500/15 border border-rose-500/30 px-1.5 py-0.5 rounded-full"
+            >
+              {t('performance.chronic_underperformer')}
+            </span>
+          )}
+        </span>
+      ),
+    },
+    {
+      field: 'total_predictions',
+      headerName: t('performance.col_predictions'),
+      type: 'number',
+      minWidth: 104,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: ({ row }) => <span className="text-slate-400 font-mono">{row.total_predictions}</span>,
+    },
+    {
+      field: 'win_rate',
+      headerName: t('performance.col_accuracy'),
+      type: 'number',
+      minWidth: 152,
+      renderCell: ({ row }) => (
+        <div className="flex items-center gap-3">
+          <span className="text-emerald-400 font-mono font-semibold w-10 text-right">{row.win_rate}%</span>
+          <div className="hidden sm:block w-24 bg-slate-800 rounded-full h-1 overflow-hidden shrink-0">
+            <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${row.win_rate}%` }} />
+          </div>
+        </div>
+      ),
+    },
+    {
+      field: 'weight',
+      headerName: t('performance.col_weight'),
+      type: 'number',
+      minWidth: 88,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => (
+        <span className="inline-flex items-center text-[10px] font-bold text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20">
+          {row.weight}%
+        </span>
+      ),
+    },
+  ], [t])
+
+  const historyColumns = useMemo<GridColDef<AnalysisListItem>[]>(() => [
+    {
+      field: 'ticker',
+      headerName: t('performance.col_symbol'),
+      minWidth: 96,
+      flex: 0.6,
+      renderCell: ({ row }) => <span className="font-mono font-bold text-white text-sm">{row.ticker}</span>,
+    },
+    {
+      field: 'trade_date',
+      headerName: t('performance.col_date'),
+      minWidth: 104,
+      renderCell: ({ row }) => <span className="text-slate-400 font-semibold">{row.trade_date}</span>,
+    },
+    {
+      field: 'signal',
+      headerName: t('performance.col_signal'),
+      minWidth: 104,
+      renderCell: ({ row }) => (
+        <span className={`text-[11px] font-bold ${TONE_TEXT_CLASS[signalTone(row.signal)]}`}>{row.signal ?? '—'}</span>
+      ),
+    },
+    {
+      field: 'raw_return',
+      headerName: t('performance.col_raw_return'),
+      type: 'number',
+      minWidth: 104,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => <ReturnCell value={row.raw_return} />,
+    },
+    {
+      field: 'alpha_return',
+      headerName: t('performance.col_alpha'),
+      type: 'number',
+      minWidth: 96,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => <ReturnCell value={row.alpha_return} />,
+    },
+    {
+      field: 'holding_days',
+      headerName: t('performance.col_days'),
+      type: 'number',
+      minWidth: 80,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => <span className="text-slate-500 font-mono">{row.holding_days ?? '—'}</span>,
+    },
+  ], [t])
+
+  const breakdownColumns = useMemo<GridColDef<TokenUsageBreakdown>[]>(() => [
+    {
+      field: 'provider',
+      headerName: t('performance.col_provider'),
+      minWidth: 104,
+      renderCell: ({ row }) => <span className="text-slate-300 font-semibold capitalize">{row.provider}</span>,
+    },
+    {
+      field: 'model',
+      headerName: t('performance.col_model'),
+      minWidth: 180,
+      flex: 1,
+      renderCell: ({ row }) => <span className="text-slate-400 font-mono text-[10px]">{row.model}</span>,
+    },
+    {
+      field: 'analyses',
+      headerName: t('performance.col_analyses'),
+      type: 'number',
+      minWidth: 88,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => <span className="text-slate-400">{row.analyses}</span>,
+    },
+    {
+      field: 'tokens_in',
+      headerName: t('performance.col_input_tokens'),
+      type: 'number',
+      minWidth: 104,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => <span className="text-sky-400 font-mono">{row.tokens_in.toLocaleString()}</span>,
+    },
+    {
+      field: 'tokens_out',
+      headerName: t('performance.col_output_tokens'),
+      type: 'number',
+      minWidth: 104,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => <span className="text-violet-400 font-mono">{row.tokens_out.toLocaleString()}</span>,
+    },
+    {
+      field: 'estimated_cost_usd',
+      headerName: t('performance.col_est_cost'),
+      type: 'number',
+      minWidth: 104,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => (
+        <span className="text-emerald-400 font-mono font-bold">
+          {row.estimated_cost_usd == null ? '—' : `$${row.estimated_cost_usd.toFixed(4)}`}
+        </span>
+      ),
+    },
+  ], [t])
 
   const bySignalData = perf ? Object.entries(perf.by_signal).map(([sig, d]) => ({
     signal: sig, win_rate: d.win_rate, avg_return: d.avg_return, count: d.count,
@@ -141,36 +359,15 @@ export default function Performance() {
 
                 {/* By-ticker table */}
                 {tradingStats.by_ticker.length > 0 && (
-                  <div className="overflow-x-auto rounded-xl border border-white/[0.04]">
-                    <table className="w-full text-xs min-w-[380px]">
-                      <thead>
-                        <tr className="text-[9px] uppercase tracking-wider text-slate-500 bg-white/[0.01]">
-                          <th className="px-4 py-2.5 text-left font-bold">{t('performance.col_ticker')}</th>
-                          <th className="px-4 py-2.5 text-center font-bold">{t('performance.col_trades')}</th>
-                          <th className="px-4 py-2.5 text-center font-bold">{t('performance.col_win_rate')}</th>
-                          <th className="px-4 py-2.5 text-right font-bold">{t('performance.col_total_pnl')}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/[0.02]">
-                        {tradingStats.by_ticker.map(r => (
-                          <tr key={r.ticker} className="hover:bg-white/[0.01] transition-colors">
-                            <td className="px-4 py-2.5 font-mono font-bold text-white">{r.ticker}</td>
-                            <td className="px-4 py-2.5 text-center text-slate-400">{r.trades}</td>
-                            <td className="px-4 py-2.5 text-center">
-                              <span className={`font-mono font-semibold ${r.win_rate >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                {r.win_rate.toFixed(0)}%
-                              </span>
-                            </td>
-                            <td className="px-4 py-2.5 text-right font-mono font-semibold">
-                              <span className={r.total_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                                {r.total_pnl >= 0 ? '+' : ''}${r.total_pnl.toFixed(2)}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <AppDataGrid<TickerBreakdownRecord>
+                    rows={tradingStats.by_ticker}
+                    columns={tickerColumns}
+                    getRowId={row => row.ticker}
+                    ariaLabel={t('performance.col_ticker')}
+                    minHeight={200}
+                    density="compact"
+                    hideFooter
+                  />
                 )}
               </div>
             </div>
@@ -236,47 +433,16 @@ export default function Performance() {
                 <h3 className="text-sm font-display font-semibold text-slate-200">{t('performance.analyst_title')}</h3>
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed">{t('performance.analyst_subtitle')}</p>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs text-slate-300 min-w-[500px]">
-                  <thead>
-                    <tr className="text-slate-500 text-[10px] uppercase tracking-wider bg-white/[0.01]">
-                      <th className="px-5 py-3 text-left font-bold">{t('performance.col_analyst')}</th>
-                      <th className="px-5 py-3 text-center font-bold">{t('performance.col_predictions')}</th>
-                      <th className="px-5 py-3 text-left font-bold">{t('performance.col_accuracy')}</th>
-                      <th className="px-5 py-3 text-right font-bold">{t('performance.col_weight')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/[0.02]">
-                    {attribution.map(item => (
-                      <tr key={item.key} className="hover:bg-white/[0.01] transition-colors">
-                        <td className="px-5 py-3.5 font-bold text-white text-xs md:text-sm">
-                          <span className="flex items-center gap-1.5">
-                            {item.label}
-                            {item.chronic_underperformer && (
-                              <span title={t('performance.chronic_underperformer_hint')} className="text-[9px] font-bold text-rose-300 bg-rose-500/15 border border-rose-500/30 px-1.5 py-0.5 rounded-full">
-                                {t('performance.chronic_underperformer')}
-                              </span>
-                            )}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5 text-center text-slate-400 font-mono">{item.total_predictions}</td>
-                        <td className="px-5 py-3.5">
-                          <div className="flex items-center gap-3">
-                            <span className="text-emerald-400 font-mono font-semibold w-10 text-right">{item.win_rate}%</span>
-                            <div className="hidden sm:block w-24 bg-slate-800 rounded-full h-1 overflow-hidden shrink-0">
-                              <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${item.win_rate}%` }} />
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-5 py-3.5 text-right">
-                          <span className="inline-flex items-center text-[10px] font-bold text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20">
-                            {item.weight}%
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="p-2">
+                <AppDataGrid<AnalystAttributionItem>
+                  rows={attribution}
+                  columns={attributionColumns}
+                  getRowId={row => row.key}
+                  ariaLabel={t('performance.col_analyst')}
+                  minHeight={240}
+                  density="compact"
+                  hideFooter
+                />
               </div>
             </div>
           )}
@@ -287,33 +453,15 @@ export default function Performance() {
               <div className="px-5 py-4 border-b border-white/[0.04]">
                 <h3 className="text-sm font-display font-semibold text-slate-200">{t('performance.history_title')}</h3>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs text-slate-300 min-w-[400px]">
-                  <thead>
-                    <tr className="text-slate-500 text-[10px] uppercase tracking-wider bg-white/[0.01]">
-                      <th className="px-5 py-3 text-left font-bold">{t('performance.col_symbol')}</th>
-                      <th className="px-5 py-3 text-left font-bold">{t('performance.col_date')}</th>
-                      <th className="px-5 py-3 text-left font-bold">{t('performance.col_signal')}</th>
-                      <th className="px-5 py-3 text-right font-bold">{t('performance.col_raw_return')}</th>
-                      <th className="px-5 py-3 text-right hidden sm:table-cell font-bold">{t('performance.col_alpha')}</th>
-                      <th className="px-5 py-3 text-right hidden sm:table-cell font-bold">{t('performance.col_days')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/[0.02]">
-                    {history.slice(0, 50).map(item => (
-                      <tr key={item.id} className="hover:bg-white/[0.01] transition-colors">
-                        <td className="px-5 py-3.5 font-mono font-bold text-white text-sm">{item.ticker}</td>
-                        <td className="px-5 py-3.5 text-slate-400 font-semibold">{item.trade_date}</td>
-                        <td className="px-5 py-3.5">
-                          <span className={`text-[11px] font-bold ${TONE_TEXT_CLASS[signalTone(item.signal)]}`}>{item.signal ?? '—'}</span>
-                        </td>
-                        <td className="px-5 py-3.5 text-right font-medium"><ReturnCell value={item.raw_return} /></td>
-                        <td className="px-5 py-3.5 text-right hidden sm:table-cell font-medium"><ReturnCell value={item.alpha_return} /></td>
-                        <td className="px-5 py-3.5 text-right text-slate-500 hidden sm:table-cell font-mono">{item.holding_days ?? '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="p-2">
+                <AppDataGrid<AnalysisListItem>
+                  rows={history.slice(0, 50)}
+                  columns={historyColumns}
+                  ariaLabel={t('performance.history_title')}
+                  minHeight={280}
+                  density="compact"
+                  hideFooter
+                />
               </div>
             </div>
           )}
@@ -411,31 +559,16 @@ export default function Performance() {
             {/* Provider / model breakdown table */}
             <div>
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">{t('performance.model_breakdown')}</p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs text-slate-300 min-w-[480px]">
-                  <thead>
-                    <tr className="text-slate-500 text-[10px] uppercase tracking-wider bg-white/[0.01]">
-                      <th className="px-4 py-2.5 text-left font-bold">{t('performance.col_provider')}</th>
-                      <th className="px-4 py-2.5 text-left font-bold">{t('performance.col_model')}</th>
-                      <th className="px-4 py-2.5 text-right font-bold">{t('performance.col_analyses')}</th>
-                      <th className="px-4 py-2.5 text-right font-bold">{t('performance.col_input_tokens')}</th>
-                      <th className="px-4 py-2.5 text-right font-bold">{t('performance.col_output_tokens')}</th>
-                      <th className="px-4 py-2.5 text-right font-bold">{t('performance.col_est_cost')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/[0.02]">
-                    {tokenUsage.breakdown.map((b, i) => (
-                      <tr key={i} className="hover:bg-white/[0.01] transition-colors">
-                        <td className="px-4 py-3 text-slate-300 font-semibold capitalize">{b.provider}</td>
-                        <td className="px-4 py-3 text-slate-400 font-mono text-[10px]">{b.model}</td>
-                        <td className="px-4 py-3 text-right text-slate-400">{b.analyses}</td>
-                        <td className="px-4 py-3 text-right text-sky-400 font-mono">{b.tokens_in.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right text-violet-400 font-mono">{b.tokens_out.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right text-emerald-400 font-mono font-bold">{b.estimated_cost_usd == null ? '—' : `$${b.estimated_cost_usd.toFixed(4)}`}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="p-2">
+                <AppDataGrid<TokenUsageBreakdown>
+                  rows={tokenUsage.breakdown}
+                  columns={breakdownColumns}
+                  getRowId={row => `${row.provider}:${row.model}`}
+                  ariaLabel={t('performance.model_breakdown')}
+                  minHeight={200}
+                  density="compact"
+                  hideFooter
+                />
               </div>
             </div>
           </div>

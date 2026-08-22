@@ -283,26 +283,28 @@ export default function EarningsCalendar() {
         </div>
       )}
 
-      <AppDataGrid<EarningsEntry>
-        rows={results}
-        columns={columns}
-        getRowId={row => row.ticker}
-        loading={loading}
-        error={earningsQuery.error}
-        emptyMessage={t('earnings.no_data')}
-        ariaLabel="Earnings Calendar"
-        minHeight={320}
-        density="compact"
-        sx={{
-          minWidth: 900,
-          '& .earnings-positive:hover': { backgroundColor: 'rgba(16,185,129,.035)' },
-          '& .earnings-negative:hover': { backgroundColor: 'rgba(244,63,94,.035)' },
-        }}
-        getRowClassName={({ row }) => {
-          if (row.status !== 'reported' || row.surprise_pct === null) return ''
-          return row.surprise_pct >= 0 ? 'earnings-positive' : 'earnings-negative'
-        }}
-      />
+      <div className="glass-panel rounded-2xl p-2">
+        <AppDataGrid<EarningsEntry>
+          rows={results}
+          columns={columns}
+          getRowId={row => row.ticker}
+          loading={loading}
+          error={earningsQuery.error}
+          emptyMessage={t('earnings.no_data')}
+          ariaLabel="Earnings Calendar"
+          minHeight={320}
+          density="compact"
+          sx={{
+            minWidth: 900,
+            '& .earnings-positive:hover': { backgroundColor: 'rgba(16,185,129,.035)' },
+            '& .earnings-negative:hover': { backgroundColor: 'rgba(244,63,94,.035)' },
+          }}
+          getRowClassName={({ row }) => {
+            if (row.status !== 'reported' || row.surprise_pct === null) return ''
+            return row.surprise_pct >= 0 ? 'earnings-positive' : 'earnings-negative'
+          }}
+        />
+      </div>
     </div>
   )
 }

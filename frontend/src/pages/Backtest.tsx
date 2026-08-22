@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import type { GridColDef } from '@mui/x-data-grid'
 import { useTradingRunBacktest } from '../api/generated/trading/trading'
 import {
   Play, BarChart2, TrendingUp, TrendingDown, Target, Search,
@@ -8,6 +9,7 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid
 } from 'recharts'
 import { ResponsiveChart } from '../components/ui/ResponsiveChart'
+import AppDataGrid from '../components/ui/AppDataGrid'
 import { useTranslation } from '../contexts/LanguageContext'
 import OptimizationPanel from '../components/backtest/OptimizationPanel'
 
@@ -66,6 +68,92 @@ export default function Backtest() {
   const backtest = useTradingRunBacktest()
   const loading = backtest.isPending
   const results = (backtest.data ?? null) as BacktestResults | null
+
+  const tradeColumns = useMemo<GridColDef<Trade>[]>(() => {
+    const money = (value: number) => `$${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+    return [
+      {
+        field: 'entry_date',
+        headerName: t('backtest.col_entry'),
+        minWidth: 104,
+        renderCell: ({ row }) => <span className="font-mono text-slate-400">{row.entry_date}</span>,
+      },
+      {
+        field: 'exit_date',
+        headerName: t('backtest.col_exit'),
+        minWidth: 104,
+        renderCell: ({ row }) => <span className="font-mono text-slate-400">{row.exit_date}</span>,
+      },
+      {
+        field: 'side',
+        headerName: t('backtest.col_side'),
+        minWidth: 88,
+        align: 'center',
+        headerAlign: 'center',
+        renderCell: ({ row }) => (
+          <span className={`px-2 py-0.5 rounded-lg text-[10px] uppercase font-bold tracking-wide ${row.side === 'long' ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'}`}>
+            {row.side}
+          </span>
+        ),
+      },
+      {
+        field: 'entry_price',
+        headerName: t('backtest.col_entry_price'),
+        type: 'number',
+        minWidth: 104,
+        align: 'right',
+        headerAlign: 'right',
+        renderCell: ({ row }) => <span className="font-mono font-semibold">{money(row.entry_price)}</span>,
+      },
+      {
+        field: 'exit_price',
+        headerName: t('backtest.col_exit_price'),
+        type: 'number',
+        minWidth: 104,
+        align: 'right',
+        headerAlign: 'right',
+        renderCell: ({ row }) => <span className="font-mono font-semibold">{money(row.exit_price)}</span>,
+      },
+      {
+        field: 'pnl',
+        headerName: t('backtest.col_pnl'),
+        type: 'number',
+        minWidth: 104,
+        align: 'right',
+        headerAlign: 'right',
+        renderCell: ({ row }) => (
+          <span className={`font-mono font-bold ${row.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {row.pnl >= 0 ? '+' : ''}{money(row.pnl)}
+          </span>
+        ),
+      },
+      {
+        field: 'return_pct',
+        headerName: t('backtest.col_return'),
+        type: 'number',
+        minWidth: 96,
+        align: 'right',
+        headerAlign: 'right',
+        renderCell: ({ row }) => (
+          <span className={`font-mono font-bold ${row.return_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {row.return_pct >= 0 ? '+' : ''}{row.return_pct.toFixed(2)}%
+          </span>
+        ),
+      },
+      {
+        field: 'reason',
+        headerName: t('backtest.col_reason'),
+        minWidth: 112,
+        align: 'center',
+        headerAlign: 'center',
+        renderCell: ({ row }) => (
+          <span className="text-[10px] font-bold text-slate-500 bg-white/5 border border-white/[0.04] px-2 py-0.5 rounded-lg uppercase tracking-wide">
+            {row.reason}
+          </span>
+        ),
+      },
+    ]
+  }, [t])
 
   const handleRun = async () => {
     const sym = ticker.trim().toUpperCase()
@@ -265,47 +353,16 @@ export default function Backtest() {
             {results.trades.length === 0 ? (
               <div className="p-8 text-slate-600 text-xs text-center font-medium">{t('backtest.no_trades')}</div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs text-slate-300 min-w-[500px]">
-                  <thead>
-                    <tr className="text-slate-500 text-[10px] uppercase tracking-wider bg-white/[0.01]">
-                      <th className="px-5 py-3 text-left font-bold">{t('backtest.col_entry')}</th>
-                      <th className="px-5 py-3 text-left font-bold">{t('backtest.col_exit')}</th>
-                      <th className="px-5 py-3 text-center font-bold">{t('backtest.col_side')}</th>
-                      <th className="px-5 py-3 text-right font-bold">{t('backtest.col_entry_price')}</th>
-                      <th className="px-5 py-3 text-right font-bold">{t('backtest.col_exit_price')}</th>
-                      <th className="px-5 py-3 text-right font-bold">{t('backtest.col_pnl')}</th>
-                      <th className="px-5 py-3 text-right font-bold">{t('backtest.col_return')}</th>
-                      <th className="px-5 py-3 text-center font-bold">{t('backtest.col_reason')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/[0.02]">
-                    {results.trades.map((trade, i) => (
-                      <tr key={i} className="hover:bg-white/[0.01] transition-colors">
-                        <td className="px-5 py-3.5 font-mono text-slate-400">{trade.entry_date}</td>
-                        <td className="px-5 py-3.5 font-mono text-slate-400">{trade.exit_date}</td>
-                        <td className="px-5 py-3.5 text-center">
-                          <span className={`px-2 py-0.5 rounded-lg text-[10px] uppercase font-bold tracking-wide ${trade.side === 'long' ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'}`}>
-                            {trade.side}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5 text-right font-mono font-semibold">${trade.entry_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                        <td className="px-5 py-3.5 text-right font-mono font-semibold">${trade.exit_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                        <td className={`px-5 py-3.5 text-right font-mono font-bold ${trade.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {trade.pnl >= 0 ? '+' : ''}${trade.pnl.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className={`px-5 py-3.5 text-right font-mono font-bold ${trade.return_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {trade.return_pct >= 0 ? '+' : ''}{trade.return_pct.toFixed(2)}%
-                        </td>
-                        <td className="px-5 py-3.5 text-center">
-                          <span className="text-[10px] font-bold text-slate-500 bg-white/5 border border-white/[0.04] px-2 py-0.5 rounded-lg uppercase tracking-wide">
-                            {trade.reason}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="p-2">
+                <AppDataGrid<Trade>
+                  rows={results.trades}
+                  columns={tradeColumns}
+                  getRowId={row => `${row.entry_date}-${row.exit_date}-${row.entry_price}`}
+                  ariaLabel={t('backtest.col_entry')}
+                  minHeight={240}
+                  density="compact"
+                  hideFooter
+                />
               </div>
             )}
           </div>

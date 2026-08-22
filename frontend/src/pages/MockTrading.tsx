@@ -1,11 +1,13 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
+import type { GridColDef } from '@mui/x-data-grid'
 import { useTradingGetPerformance, useTradingCreateOrder, useTradingResetPortfolio } from '../api/generated/trading/trading'
+import AppDataGrid from '../components/ui/AppDataGrid'
 import {
   TrendingUp, TrendingDown, DollarSign, ShoppingCart, BarChart2,
   RefreshCw, RotateCcw, AlertCircle, CheckCircle, Loader2
 } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
-import type { OrderResponse } from '../api/generated/model'
+import type { OrderResponse, HoldingItem } from '../api/generated/model'
 import type { BackendSchemasTradingPerformanceResponse } from '../api/generated/model'
 import { errorDetail } from '../utils/errorDetail'
 import { isRecord } from '../utils/isRecord'
@@ -89,6 +91,82 @@ export default function MockTrading() {
   const [quantity, setQuantity] = useState('')
   const [leverage, setLeverage] = useState(1)
   const [orderResult, setOrderResult] = useState<{ ok: boolean; msg: string } | null>(null)
+
+  const money = (value: number | null | undefined) =>
+    `$${(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const moneyOrDash = (value: number | null | undefined) => ((value ?? 0) > 0 ? money(value) : '—')
+
+  const holdingColumns = useMemo<GridColDef<HoldingItem>[]>(() => {
+    const numeric = (
+      field: keyof HoldingItem,
+      headerName: string,
+      render: (row: HoldingItem) => React.ReactNode,
+      minWidth = 96,
+    ): GridColDef<HoldingItem> => ({
+      field: field as string,
+      headerName,
+      type: 'number',
+      minWidth,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => render(row),
+    })
+
+    return [
+      {
+        field: 'ticker',
+        headerName: t('mocktrading.col_symbol'),
+        minWidth: 104,
+        flex: 0.7,
+        renderCell: ({ row }) => (
+          <span className="inline-flex items-center gap-1.5 font-mono font-bold text-white text-sm">
+            {row.ticker}
+            {row.side === 'short' && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/20">
+                SHORT
+              </span>
+            )}
+          </span>
+        ),
+      },
+      numeric('quantity', t('mocktrading.col_quantity'), row => (
+        <span className="font-mono text-slate-400">{(row.quantity ?? 0).toFixed(4)}</span>
+      ), 88),
+      numeric('avg_buy_price', t('mocktrading.col_avg_cost'), row => (
+        <span className="font-mono text-slate-400">{money(row.avg_buy_price)}</span>
+      )),
+      numeric('current_price', t('mocktrading.col_current_price'), row => (
+        <span className="font-mono text-slate-400">{money(row.current_price)}</span>
+      )),
+      numeric('leverage', t('mocktrading.col_leverage'), row => (
+        <span className={`font-mono font-semibold ${(row.leverage ?? 1) > 1 ? 'text-amber-400' : 'text-slate-500'}`}>
+          {(row.leverage ?? 1).toFixed(1)}x
+        </span>
+      ), 80),
+      numeric('liquidation_price', t('mocktrading.col_liquidation'), row => (
+        <span className="font-mono text-slate-400">{moneyOrDash(row.liquidation_price)}</span>
+      )),
+      numeric('stop_loss', t('mocktrading.col_stop_loss'), row => (
+        <span className="font-mono text-rose-400/80">{moneyOrDash(row.stop_loss)}</span>
+      )),
+      numeric('take_profit', t('mocktrading.col_take_profit'), row => (
+        <span className="font-mono text-emerald-400/80">{moneyOrDash(row.take_profit)}</span>
+      )),
+      numeric('market_value', t('mocktrading.col_market_value'), row => (
+        <span className="font-mono text-slate-400">{money(row.market_value)}</span>
+      )),
+      numeric('unrealized_pnl', t('mocktrading.col_pnl'), row => (
+        <span className={`font-mono font-semibold ${(row.unrealized_pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+          {(row.unrealized_pnl ?? 0) >= 0 ? '+' : ''}{money(row.unrealized_pnl)}
+        </span>
+      )),
+      numeric('pnl_pct', t('mocktrading.col_pnl_pct'), row => (
+        <span className={`font-mono font-semibold ${(row.pnl_pct ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+          {(row.pnl_pct ?? 0) >= 0 ? '+' : ''}{(row.pnl_pct ?? 0).toFixed(2)}%
+        </span>
+      ), 88),
+    ]
+  }, [t])
 
 
   const perfQuery = useTradingGetPerformance()
@@ -362,73 +440,16 @@ export default function MockTrading() {
         {/* Holdings List Card */}
         <div className="lg:col-span-2 glass-panel rounded-2xl p-5">
           <h3 className="text-sm font-display font-semibold text-slate-200 mb-4">{t('mocktrading.positions_title')}</h3>
-          {(p.holdings ?? []).length === 0 ? (
-            <p className="text-slate-500 text-xs py-8 text-center">{t('mocktrading.positions_empty')}</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-slate-300 min-w-[500px]">
-                <thead>
-                  <tr className="text-slate-500 text-[10px] uppercase tracking-wider border-b border-white/[0.04] bg-white/[0.01]">
-                    <th className="px-3 py-2 text-left font-bold">{t('mocktrading.col_symbol')}</th>
-                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_quantity')}</th>
-                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_avg_cost')}</th>
-                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_current_price')}</th>
-                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_leverage')}</th>
-                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_liquidation')}</th>
-                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_stop_loss')}</th>
-                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_take_profit')}</th>
-                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_market_value')}</th>
-                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_pnl')}</th>
-                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_pnl_pct')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/[0.02]">
-                  {(p.holdings ?? []).map(h => (
-                    <tr key={h.ticker} className="hover:bg-white/[0.01] transition-colors">
-                      <td className="px-3 py-3 font-mono font-bold text-white text-sm">
-                        <span className="inline-flex items-center gap-1.5">
-                          {h.ticker}
-                          {h.side === 'short' && (
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/20">
-                              SHORT
-                            </span>
-                          )}
-                        </span>
-                      </td>
-                       <td className="px-3 py-3 text-right font-mono text-slate-400">{(h.quantity ?? 0).toFixed(4)}</td>
-                      <td className="px-3 py-3 text-right font-mono text-slate-400">${(h.avg_buy_price ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className="px-3 py-3 text-right font-mono text-slate-400">${(h.current_price ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className={`px-3 py-3 text-right font-mono font-semibold ${(h.leverage ?? 1) > 1 ? 'text-amber-400' : 'text-slate-500'}`}>
-                        {(h.leverage ?? 1).toFixed(1)}x
-                      </td>
-                      <td className="px-3 py-3 text-right font-mono text-slate-400">
-                        {(h.liquidation_price ?? 0) > 0
-                          ? `$${(h.liquidation_price ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                          : '—'}
-                      </td>
-                      <td className="px-3 py-3 text-right font-mono text-rose-400/80">
-                        {(h.stop_loss ?? 0) > 0
-                          ? `$${(h.stop_loss ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                          : '—'}
-                      </td>
-                      <td className="px-3 py-3 text-right font-mono text-emerald-400/80">
-                        {(h.take_profit ?? 0) > 0
-                          ? `$${(h.take_profit ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                          : '—'}
-                      </td>
-                      <td className="px-3 py-3 text-right font-mono text-slate-400">${(h.market_value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className={`px-3 py-3 text-right font-mono font-semibold ${(h.unrealized_pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {(h.unrealized_pnl ?? 0) >= 0 ? '+' : ''}${(h.unrealized_pnl ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td className={`px-3 py-3 text-right font-mono font-semibold ${(h.pnl_pct ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {(h.pnl_pct ?? 0) >= 0 ? '+' : ''}{(h.pnl_pct ?? 0).toFixed(2)}%
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <AppDataGrid<HoldingItem>
+            rows={p.holdings ?? []}
+            columns={holdingColumns}
+            getRowId={row => row.ticker}
+            emptyMessage={t('mocktrading.positions_empty')}
+            ariaLabel={t('mocktrading.positions_title')}
+            minHeight={240}
+            density="compact"
+            hideFooter
+          />
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
+import type { GridColDef } from '@mui/x-data-grid'
 import { usePortfolioListPortfolios, usePortfolioListHoldings } from '../api/generated/portfolio/portfolio'
 import { useTradingRebalancePortfolio, useTradingGetRiskDashboard, useTradingCreateOrder, useTradingGetCorrelation } from '../api/generated/trading/trading'
 import { useQueryErrorToast } from '../api/useQueryErrorToast'
@@ -8,7 +9,8 @@ import { useTranslation } from '../contexts/LanguageContext'
 import { notify } from '../utils/notify'
 import { exportPortfolioCSV } from '../utils/csvExport'
 import { ErrorBoundary } from '../components/ErrorBoundary'
-import type { HoldingRead, PortfolioRead, RiskDashboardResponse, RebalanceResponse } from '../api/generated/model'
+import AppDataGrid from '../components/ui/AppDataGrid'
+import type { HoldingRead, HoldingRisk, PortfolioRead, RiskDashboardResponse, RebalanceResponse } from '../api/generated/model'
 import { errorDetail } from '../utils/errorDetail'
 
 const LONG_HOLD_DAYS = 30
@@ -89,6 +91,145 @@ export default function Portfolio() {
   // toggle, not part of the page's initial load.
   const riskQuery = useTradingGetRiskDashboard({ query: { enabled: showRisk } })
   const riskData = (riskQuery.data ?? null) as RiskDashboardResponse | null
+
+  const riskColumns = useMemo<GridColDef<HoldingRisk>[]>(() => [
+    {
+      field: 'ticker',
+      headerName: t('portfolio.col_ticker'),
+      minWidth: 96,
+      flex: 0.6,
+      renderCell: ({ row }) => <span className="font-mono font-bold text-white">{row.ticker}</span>,
+    },
+    {
+      field: 'sector',
+      headerName: t('portfolio.col_sector'),
+      minWidth: 120,
+      flex: 1,
+      renderCell: ({ row }) => <span className="text-slate-400 text-[10px]">{row.sector}</span>,
+    },
+    {
+      field: 'weight_pct',
+      headerName: t('portfolio.col_weight'),
+      type: 'number',
+      minWidth: 88,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => <span className="font-mono text-slate-300">{row.weight_pct.toFixed(1)}%</span>,
+    },
+    {
+      field: 'beta',
+      headerName: t('portfolio.col_beta'),
+      type: 'number',
+      minWidth: 80,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => row.beta == null
+        ? <span className="text-slate-600">—</span>
+        : <span className={`font-mono ${row.beta > 1.5 ? 'text-rose-400' : row.beta < 0 ? 'text-amber-400' : 'text-slate-300'}`}>{row.beta.toFixed(2)}</span>,
+    },
+    {
+      field: 'volatility_annual',
+      headerName: t('portfolio.col_volatility'),
+      type: 'number',
+      minWidth: 96,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => row.volatility_annual == null
+        ? <span className="text-slate-600">—</span>
+        : <span className={`font-mono ${row.volatility_annual > 0.5 ? 'text-rose-400' : 'text-slate-300'}`}>{(row.volatility_annual * 100).toFixed(1)}%</span>,
+    },
+  ], [t])
+
+  const holdingColumns = useMemo<GridColDef<HoldingRead>[]>(() => {
+    const marketValueOf = (row: HoldingRead) => (row.current_price ?? row.avg_buy_price) * row.quantity
+    const pnlOf = (row: HoldingRead) =>
+      row.unrealized_pnl ?? (marketValueOf(row) - row.avg_buy_price * row.quantity)
+
+    return [
+      {
+        field: 'ticker',
+        headerName: t('portfolio.col_symbol'),
+        minWidth: 104,
+        flex: 0.7,
+        renderCell: ({ row }) => {
+          const days = holdingDays(row.opened_at)
+          const longHeld = days !== null && days >= LONG_HOLD_DAYS
+          return (
+            <span className="flex items-center gap-1.5 font-mono font-bold text-white text-sm">
+              {row.ticker}
+              {longHeld && (
+                <span
+                  title={t('portfolio.long_held_hint', { days })}
+                  className="text-[9px] font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 rounded-full normal-case"
+                >
+                  {days}d
+                </span>
+              )}
+            </span>
+          )
+        },
+      },
+      {
+        field: 'quantity',
+        headerName: t('portfolio.col_quantity'),
+        type: 'number',
+        minWidth: 92,
+        align: 'right',
+        headerAlign: 'right',
+        renderCell: ({ row }) => <span className="font-mono font-semibold text-slate-300">{(row.quantity ?? 0).toFixed(4)}</span>,
+      },
+      {
+        field: 'avg_buy_price',
+        headerName: t('portfolio.col_avg_cost'),
+        type: 'number',
+        minWidth: 96,
+        align: 'right',
+        headerAlign: 'right',
+        renderCell: ({ row }) => <span className="font-mono text-slate-300">${(row.avg_buy_price ?? 0).toFixed(2)}</span>,
+      },
+      {
+        field: 'current_price',
+        headerName: t('portfolio.col_current_price'),
+        type: 'number',
+        minWidth: 104,
+        align: 'right',
+        headerAlign: 'right',
+        renderCell: ({ row }) => <span className="font-mono text-slate-300">{row.current_price != null ? `$${row.current_price.toFixed(2)}` : '—'}</span>,
+      },
+      {
+        field: 'market_value',
+        headerName: t('portfolio.col_market_value'),
+        type: 'number',
+        minWidth: 104,
+        align: 'right',
+        headerAlign: 'right',
+        valueGetter: (_value, row) => marketValueOf(row),
+        renderCell: ({ row }) => <span className="font-mono text-white font-bold">${marketValueOf(row).toFixed(2)}</span>,
+      },
+      {
+        field: 'unrealized_pnl',
+        headerName: t('portfolio.col_unrealized_pnl'),
+        type: 'number',
+        minWidth: 112,
+        align: 'right',
+        headerAlign: 'right',
+        valueGetter: (_value, row) => pnlOf(row),
+        renderCell: ({ row }) => {
+          const pnl = pnlOf(row)
+          const positive = pnl >= 0
+          return (
+            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md ${
+              positive
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
+                : 'bg-rose-500/10 text-rose-400 border border-rose-500/15'
+            }`}>
+              {positive ? '+' : ''}${pnl.toFixed(2)}
+            </span>
+          )
+        },
+      },
+    ]
+  }, [t])
   const loadingRisk = showRisk && riskQuery.isFetching
   useQueryErrorToast(riskQuery.error, 'Risk dashboard failed', 'Risk')
   const loadRiskDashboard = useCallback(() => setShowRisk(true), [])
@@ -362,38 +503,15 @@ export default function Portfolio() {
 
                   {/* Holdings risk table */}
                   {riskData.holdings_risk.length > 0 && (
-                    <div className="overflow-x-auto rounded-xl border border-white/[0.04]">
-                      <table className="w-full text-xs min-w-[440px]">
-                        <thead>
-                          <tr className="text-[9px] uppercase tracking-wider text-slate-500 bg-white/[0.01]">
-                            <th className="px-4 py-2.5 text-left font-bold">{t('portfolio.col_ticker')}</th>
-                            <th className="px-4 py-2.5 text-left font-bold">{t('portfolio.col_sector')}</th>
-                            <th className="px-4 py-2.5 text-right font-bold">{t('portfolio.col_weight')}</th>
-                            <th className="px-4 py-2.5 text-right font-bold">{t('portfolio.col_beta')}</th>
-                            <th className="px-4 py-2.5 text-right font-bold">{t('portfolio.col_volatility')}</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/[0.02]">
-                          {riskData.holdings_risk.map(h => (
-                            <tr key={h.ticker} className="hover:bg-white/[0.01] transition-colors">
-                              <td className="px-4 py-2.5 font-mono font-bold text-white">{h.ticker}</td>
-                              <td className="px-4 py-2.5 text-slate-400 text-[10px]">{h.sector}</td>
-                              <td className="px-4 py-2.5 text-right font-mono text-slate-300">{h.weight_pct.toFixed(1)}%</td>
-                              <td className="px-4 py-2.5 text-right font-mono">
-                                {h.beta != null
-                                  ? <span className={h.beta > 1.5 ? 'text-rose-400' : h.beta < 0 ? 'text-amber-400' : 'text-slate-300'}>{h.beta.toFixed(2)}</span>
-                                  : <span className="text-slate-600">—</span>}
-                              </td>
-                              <td className="px-4 py-2.5 text-right font-mono">
-                                {h.volatility_annual != null
-                                  ? <span className={h.volatility_annual > 0.5 ? 'text-rose-400' : 'text-slate-300'}>{(h.volatility_annual * 100).toFixed(1)}%</span>
-                                  : <span className="text-slate-600">—</span>}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <AppDataGrid<HoldingRisk>
+                      rows={riskData.holdings_risk}
+                      columns={riskColumns}
+                      getRowId={row => row.ticker}
+                      ariaLabel={t('portfolio.col_ticker')}
+                      minHeight={200}
+                      density="compact"
+                      hideFooter
+                    />
                   )}
 
                   {/* Top correlations */}
@@ -510,59 +628,15 @@ export default function Portfolio() {
             <p className="text-[10px] text-slate-500 mt-1">{t('portfolio.empty_hint')}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-slate-300 min-w-[650px]">
-              <thead>
-                <tr className="text-slate-500 text-[10px] uppercase tracking-wider bg-white/[0.01]">
-                  <th className="px-5 py-3.5 text-left font-bold">{t('portfolio.col_symbol')}</th>
-                  <th className="px-5 py-3.5 text-right font-bold">{t('portfolio.col_quantity')}</th>
-                  <th className="px-5 py-3.5 text-right font-bold">{t('portfolio.col_avg_cost')}</th>
-                  <th className="px-5 py-3.5 text-right font-bold">{t('portfolio.col_current_price')}</th>
-                  <th className="px-5 py-3.5 text-right font-bold">{t('portfolio.col_market_value')}</th>
-                  <th className="px-5 py-3.5 text-right font-bold">{t('portfolio.col_unrealized_pnl')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.02]">
-                {holdings.map(h => {
-                  const price = h.current_price ?? h.avg_buy_price
-                  const marketValue = price * h.quantity
-                  const pnl = h.unrealized_pnl ?? (marketValue - h.avg_buy_price * h.quantity)
-                  const positive = pnl >= 0
-                  const days = holdingDays(h.opened_at)
-                  const longHeld = days !== null && days >= LONG_HOLD_DAYS
-
-                  return (
-                    <tr key={h.id} className="hover:bg-white/[0.01] transition-colors">
-                      <td className="px-5 py-3.5 font-mono font-bold text-white text-sm">
-                        <span className="flex items-center gap-1.5">
-                          {h.ticker}
-                          {longHeld && (
-                            <span title={t('portfolio.long_held_hint', { days })} className="text-[9px] font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 rounded-full normal-case">
-                              {days}d
-                            </span>
-                          )}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-right font-mono font-semibold text-slate-300">{(h.quantity ?? 0).toFixed(4)}</td>
-                      <td className="px-5 py-3.5 text-right font-mono text-slate-300">${(h.avg_buy_price ?? 0).toFixed(2)}</td>
-                      <td className="px-5 py-3.5 text-right font-mono text-slate-300">
-                        {h.current_price != null ? `$${(h.current_price ?? 0).toFixed(2)}` : '—'}
-                      </td>
-                      <td className="px-5 py-3.5 text-right font-mono text-white font-bold">${(marketValue ?? 0).toFixed(2)}</td>
-                      <td className="px-5 py-3.5 text-right">
-                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md ${
-                          positive 
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15' 
-                            : 'bg-rose-500/10 text-rose-400 border border-rose-500/15'
-                        }`}>
-                          {positive ? '+' : ''}${(pnl ?? 0).toFixed(2)}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          <div className="p-2">
+            <AppDataGrid<HoldingRead>
+              rows={holdings}
+              columns={holdingColumns}
+              ariaLabel={t('portfolio.col_symbol')}
+              minHeight={240}
+              density="compact"
+              hideFooter
+            />
           </div>
         )}
       </div>

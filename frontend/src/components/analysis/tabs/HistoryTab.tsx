@@ -19,7 +19,9 @@ import { notify } from '../../../utils/notify'
 import { buildPublicShareUrl } from '../../../utils/shareLink'
 import { useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Copy, Download, FileDown, Loader2, Share2, Trash2, X } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { GridColDef } from '@mui/x-data-grid'
+import AppDataGrid from '../../ui/AppDataGrid'
 
 export function HistoryTab({
   initialDetailId,
@@ -128,6 +130,75 @@ export function HistoryTab({
     if (initialDetailId) openDetail(initialDetailId)
   }, [initialDetailId, openDetail])
 
+  const columns = useMemo<GridColDef<AnalysisListItem>[]>(() => [
+    {
+      field: 'ticker',
+      headerName: t('analysis.history.col_symbol'),
+      minWidth: 96,
+      flex: 0.6,
+      renderCell: ({ row }) => <span className="font-mono font-bold text-white">{row.ticker}</span>,
+    },
+    {
+      field: 'trade_date',
+      headerName: t('analysis.history.col_date'),
+      minWidth: 104,
+      renderCell: ({ row }) => <span className="text-slate-400 font-semibold">{row.trade_date}</span>,
+    },
+    {
+      field: 'signal',
+      headerName: t('analysis.history.col_signal'),
+      minWidth: 104,
+      renderCell: ({ row }) => <SignalBadge signal={row.signal} />,
+    },
+    {
+      field: 'duration_seconds',
+      headerName: t('analysis.history.col_duration'),
+      type: 'number',
+      minWidth: 96,
+      renderCell: ({ row }) => <span className="text-slate-500 font-mono">{(row.duration_seconds ?? 0).toFixed(1)}s</span>,
+    },
+    {
+      field: 'triggered_by',
+      headerName: t('analysis.history.col_source'),
+      minWidth: 96,
+      renderCell: ({ row }) => <span className="text-slate-500">{row.triggered_by}</span>,
+    },
+    {
+      field: 'created_at',
+      headerName: t('analysis.history.col_time'),
+      minWidth: 132,
+      renderCell: ({ row }) => (
+        <span className="text-slate-600 font-mono text-[10px]">
+          {new Date(row.created_at).toLocaleString(undefined, {
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </span>
+      ),
+    },
+    {
+      field: 'actions',
+      headerName: t('analysis.history.col_actions'),
+      minWidth: 84,
+      sortable: false,
+      filterable: false,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => (
+        <button
+          onClick={event => { event.stopPropagation(); setItemToDelete(row.id) }}
+          disabled={deletingId === row.id}
+          className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-50"
+          title={t('analysis.history.confirm_delete_single')}
+        >
+          {deletingId === row.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+        </button>
+      ),
+    },
+  ], [t, deletingId])
+
   const historyReportEntries = detail
     ? visibleReportEntries(detail as unknown as Record<string, unknown>)
     : []
@@ -157,42 +228,16 @@ export function HistoryTab({
                 {t('analysis.history.btn_clear_all')}
               </button>
             </div>
-            <table className="w-full text-xs min-w-[500px]">
-              <thead>
-                <tr className="text-slate-500 text-[10px] uppercase tracking-wider border-b border-white/[0.04] bg-slate-900/10">
-                  <th className="px-5 py-3 text-left font-bold">{t('analysis.history.col_symbol')}</th>
-                  <th className="px-5 py-3 text-left font-bold">{t('analysis.history.col_date')}</th>
-                  <th className="px-5 py-3 text-left font-bold">{t('analysis.history.col_signal')}</th>
-                  <th className="px-5 py-3 text-left font-bold">{t('analysis.history.col_duration')}</th>
-                  <th className="px-5 py-3 text-left hidden sm:table-cell font-bold">{t('analysis.history.col_source')}</th>
-                  <th className="px-5 py-3 text-left hidden md:table-cell font-bold">{t('analysis.history.col_time')}</th>
-                  <th className="px-5 py-3 text-right font-bold">{t('analysis.history.col_actions')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.02] text-slate-300">
-                {items.map(item => (
-                  <tr key={item.id} onClick={() => openDetail(item.id)}
-                    className="hover:bg-white/[0.02] cursor-pointer transition-colors">
-                    <td className="px-5 py-3.5 font-mono font-bold text-white">{item.ticker}</td>
-                    <td className="px-5 py-3.5 text-slate-400 font-semibold">{item.trade_date}</td>
-                    <td className="px-5 py-3.5"><SignalBadge signal={item.signal} /></td>
-                    <td className="px-5 py-3.5 text-slate-500 font-mono">{(item.duration_seconds ?? 0).toFixed(1)}s</td>
-                    <td className="px-5 py-3.5 text-slate-500 hidden sm:table-cell">{item.triggered_by}</td>
-                    <td className="px-5 py-3.5 text-slate-600 hidden md:table-cell font-mono">{new Date(item.created_at).toLocaleString()}</td>
-                    <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setItemToDelete(item.id) }}
-                        disabled={deletingId === item.id}
-                        className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-50"
-                        title={t('analysis.history.confirm_delete_single')}
-                      >
-                        {deletingId === item.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <AppDataGrid<AnalysisListItem>
+              rows={items}
+              columns={columns}
+              ariaLabel={t('analysis.history.col_symbol')}
+              minHeight={280}
+              density="compact"
+              hideFooter
+              onRowClick={params => openDetail(params.row.id)}
+              sx={{ '& .MuiDataGrid-row': { cursor: 'pointer' } }}
+            />
           </div>
         )}
       </div>

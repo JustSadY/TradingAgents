@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import type { GridColDef } from '@mui/x-data-grid'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   useUsersListUsersRun,
@@ -34,6 +35,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import Settings from './Settings'
 import ToolSettingsPanel from '../components/settings/ToolSettingsPanel'
+import AppDataGrid from '../components/ui/AppDataGrid'
 import { useMeta } from '../hooks/useMeta'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Cell
@@ -287,6 +289,140 @@ export default function Admin() {
     if (selectedUserId === id) setSelectedUserId(null)
   }
 
+  const userColumns = useMemo<GridColDef<UserRecord>[]>(() => [
+    {
+      field: 'username',
+      headerName: t('admin.col_username'),
+      minWidth: 168,
+      flex: 1,
+      renderCell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-700 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow shadow-violet-500/10">
+            {row.username.charAt(0).toUpperCase()}
+          </div>
+          <div className="flex flex-col leading-tight">
+            <span className="text-white font-semibold">{row.username}</span>
+            {row.display_name && <span className="text-[10px] text-slate-500 font-medium">{row.display_name}</span>}
+          </div>
+        </div>
+      ),
+    },
+    {
+      field: 'email',
+      headerName: t('admin.col_email'),
+      minWidth: 160,
+      flex: 1,
+      renderCell: ({ row }) => <span className="text-slate-400 font-semibold">{row.email || '—'}</span>,
+    },
+    {
+      field: 'role',
+      headerName: t('admin.col_role'),
+      minWidth: 104,
+      renderCell: ({ row }) => {
+        if (row.role === 'owner') {
+          return (
+            <span className="text-[9px] px-2 py-0.5 rounded-full border bg-amber-500/10 text-amber-300 border-amber-500/20 font-bold uppercase tracking-wide select-none">
+              {t('admin.role_owner')}
+            </span>
+          )
+        }
+        if (isOwner) {
+          return (
+            <button
+              onClick={() => toggleRole(row)}
+              className={`text-[9px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-wide transition-colors cursor-pointer ${
+                row.role === 'admin'
+                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
+                  : 'bg-violet-500/10 text-violet-400 border-violet-500/20 hover:bg-violet-500/20'
+              }`}
+            >
+              {t(`admin.role_${row.role}`)}
+            </button>
+          )
+        }
+        return (
+          <span className={`text-[9px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-wide select-none ${
+            row.role === 'admin'
+              ? 'bg-amber-500/5 text-amber-400/60 border-amber-500/10'
+              : 'bg-violet-500/5 text-violet-400/60 border-violet-500/10'
+          }`}>
+            {t(`admin.role_${row.role}`)}
+          </span>
+        )
+      },
+    },
+    {
+      field: 'is_active',
+      headerName: t('admin.col_active'),
+      minWidth: 88,
+      renderCell: ({ row }) => row.role === 'owner' ? (
+        <div className="relative inline-flex h-4 w-7 items-center rounded-full bg-emerald-600/30 cursor-not-allowed select-none">
+          <span className="inline-block h-3 w-3 transform rounded-full bg-white/55 translate-x-3.5" />
+        </div>
+      ) : (
+        <button
+          onClick={() => toggleActive(row)}
+          className={`relative inline-flex h-4.5 w-8 items-center rounded-full transition-colors cursor-pointer ${row.is_active ? 'bg-emerald-600' : 'bg-slate-700'}`}
+        >
+          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${row.is_active ? 'translate-x-4' : 'translate-x-0.5'}`} />
+        </button>
+      ),
+    },
+    {
+      field: 'created_at',
+      headerName: t('admin.col_created'),
+      minWidth: 104,
+      renderCell: ({ row }) => (
+        <span className="text-slate-500 font-mono text-[10px]">{new Date(row.created_at).toLocaleDateString()}</span>
+      ),
+    },
+    {
+      field: 'actions',
+      headerName: '',
+      minWidth: 56,
+      sortable: false,
+      filterable: false,
+      align: 'right',
+      renderCell: ({ row }) => row.role === 'owner' ? null : (
+        <button
+          onClick={() => deleteUser(row.id)}
+          className="text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"
+          title={t('admin.delete_user')}
+        >
+          <Trash2 size={13} />
+        </button>
+      ),
+    },
+  ], [t, isOwner])
+
+  const nodeErrorColumns = useMemo<GridColDef<{ id: string; node: string; errors: number; fallbacks: number }>[]>(() => [
+    {
+      field: 'node',
+      headerName: t('admin.col_node'),
+      minWidth: 180,
+      flex: 1,
+      renderCell: ({ row }) => <span className="text-slate-300 font-mono text-[10px]">{row.node}</span>,
+    },
+    {
+      field: 'errors',
+      headerName: t('admin.col_errors'),
+      type: 'number',
+      minWidth: 96,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => <span className="text-rose-400 font-mono font-bold">{row.errors}</span>,
+    },
+    {
+      field: 'fallbacks',
+      headerName: t('admin.col_fallbacks'),
+      type: 'number',
+      minWidth: 104,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => <span className="text-amber-400 font-mono">{row.fallbacks}</span>,
+    },
+  ], [t])
+
   const saveSystemSettings = async () => {
     if (!systemSettings) return
     try {
@@ -398,91 +534,15 @@ export default function Admin() {
               {users.length === 0 ? (
                 <p className="text-slate-600 text-xs">{t('admin.no_users')}</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-slate-300 min-w-[500px]">
-                    <thead>
-                      <tr className="text-left text-slate-500 text-[10px] uppercase tracking-wider border-b border-white/[0.04] bg-white/[0.01]">
-                        <th className="px-3 py-2 pr-4 font-bold">{t('admin.col_username')}</th>
-                        <th className="px-3 py-2 pr-4 font-bold">{t('admin.col_email')}</th>
-                        <th className="px-3 py-2 pr-4 font-bold">{t('admin.col_role')}</th>
-                        <th className="px-3 py-2 pr-4 font-bold">{t('admin.col_active')}</th>
-                        <th className="px-3 py-2 pr-4 font-bold">{t('admin.col_created')}</th>
-                        <th className="px-3 py-2"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/[0.02]">
-                      {users.map(u => (
-                        <tr key={u.id} className="group hover:bg-white/[0.01]">
-                          <td className="py-2.5 px-3 pr-4">
-                            <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-700 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow shadow-violet-500/10">
-                                {u.username.charAt(0).toUpperCase()}
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-white font-semibold">{u.username}</span>
-                                {u.display_name && <span className="text-[10px] text-slate-500 font-medium">{u.display_name}</span>}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-3 pr-4 text-slate-400 font-semibold">{u.email || '—'}</td>
-                          <td className="py-2.5 px-3 pr-4">
-                            {u.role === 'owner' ? (
-                              <span className="text-[9px] px-2 py-0.5 rounded-full border bg-amber-500/10 text-amber-300 border-amber-500/20 font-bold uppercase tracking-wide select-none">
-                                {t('admin.role_owner')}
-                              </span>
-                            ) : isOwner ? (
-                              <button
-                                onClick={() => toggleRole(u)}
-                                className={`text-[9px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-wide transition-colors cursor-pointer ${
-                                  u.role === 'admin'
-                                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
-                                    : 'bg-violet-500/10 text-violet-400 border-violet-500/20 hover:bg-violet-500/20'
-                                }`}
-                              >
-                                {t(`admin.role_${u.role}`)}
-                              </button>
-                            ) : (
-                              <span className={`text-[9px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-wide select-none ${
-                                u.role === 'admin'
-                                  ? 'bg-amber-500/5 text-amber-400/60 border-amber-500/10'
-                                  : 'bg-violet-500/5 text-violet-400/60 border-violet-500/10'
-                              }`}>
-                                {t(`admin.role_${u.role}`)}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 pr-4">
-                            {u.role === 'owner' ? (
-                              <div className="relative inline-flex h-4 w-7 items-center rounded-full bg-emerald-600/30 cursor-not-allowed select-none">
-                                <span className="inline-block h-3 w-3 transform rounded-full bg-white/55 translate-x-3.5" />
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => toggleActive(u)}
-                                className={`relative inline-flex h-4.5 w-8 items-center rounded-full transition-colors cursor-pointer ${u.is_active ? 'bg-emerald-600' : 'bg-slate-700'}`}
-                              >
-                                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${u.is_active ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                              </button>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 pr-4 text-slate-500 font-mono text-[10px]">
-                            {new Date(u.created_at).toLocaleDateString()}
-                          </td>
-                          <td className="py-2.5 px-3">
-                            {u.role !== 'owner' && (
-                              <button
-                                onClick={() => deleteUser(u.id)}
-                                className="text-slate-500 hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
-                                title={t('admin.delete_user')}
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="p-2">
+                  <AppDataGrid<UserRecord>
+                    rows={users}
+                    columns={userColumns}
+                    ariaLabel={t('admin.col_username')}
+                    minHeight={240}
+                    density="compact"
+                    hideFooter
+                  />
                 </div>
               )}
             </Section>
@@ -916,25 +976,20 @@ export default function Admin() {
                 {Object.keys(sysMetrics.node_errors).length > 0 && (
                   <div>
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">{t('admin.node_errors_fallbacks')}</p>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs text-slate-300 min-w-[380px]">
-                        <thead>
-                          <tr className="text-slate-500 text-[10px] uppercase tracking-wider bg-white/[0.01]">
-                            <th className="px-4 py-2.5 text-left font-bold">{t('admin.col_node')}</th>
-                            <th className="px-4 py-2.5 text-right font-bold">{t('admin.col_errors')}</th>
-                            <th className="px-4 py-2.5 text-right font-bold">{t('admin.col_fallbacks')}</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/[0.02]">
-                          {Object.entries(sysMetrics.node_errors).map(([node, errs]) => (
-                            <tr key={node} className="hover:bg-white/[0.01] transition-colors">
-                              <td className="px-4 py-3 text-slate-300 font-mono text-[10px]">{node}</td>
-                              <td className="px-4 py-3 text-right text-rose-400 font-mono font-bold">{errs}</td>
-                              <td className="px-4 py-3 text-right text-amber-400 font-mono">{sysMetrics.node_fallbacks[node] ?? 0}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                    <div className="p-2">
+                      <AppDataGrid
+                        rows={Object.entries(sysMetrics.node_errors).map(([node, errs]) => ({
+                          id: node,
+                          node,
+                          errors: errs as number,
+                          fallbacks: sysMetrics.node_fallbacks[node] ?? 0,
+                        }))}
+                        columns={nodeErrorColumns}
+                        ariaLabel={t('admin.node_errors_fallbacks')}
+                        minHeight={180}
+                        density="compact"
+                        hideFooter
+                      />
                     </div>
                   </div>
                 )}

@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import type { GridColDef } from '@mui/x-data-grid'
 import { useScreenerScan, useScreenerScanWatchlist } from '../api/generated/screener/screener'
 import { useAnalysisRunAnalysis } from '../api/generated/analysis/analysis'
 import { Filter, Play, TrendingUp, Loader2, ExternalLink, BarChart2 } from 'lucide-react'
 import { notify } from '../utils/notify'
 import { useTranslation } from '../contexts/LanguageContext'
 import { errorDetail } from '../utils/errorDetail'
+import AppDataGrid from '../components/ui/AppDataGrid'
 
 interface ScreenResult {
   ticker: string
@@ -86,6 +88,160 @@ export default function Screener() {
   const scoreVerdict = (score: number) => score >= 60 ? 'Strong' : score < 20 ? 'Weak' : 'Neutral'
   const momentumBar = (momentum: number) => Math.min(100, Math.abs(momentum) / 25 * 100)
   const volumeBar = (ratio: number) => Math.min(100, Math.max(0, ratio / 3 * 100))
+
+  const columns = useMemo<GridColDef<ScreenResult>[]>(() => [
+    {
+      field: 'rank',
+      headerName: t('screener.col_rank'),
+      minWidth: 64,
+      sortable: false,
+      renderCell: ({ api, id }) => (
+        <span className="text-slate-600 font-mono font-bold">
+          {api.getSortedRowIds().indexOf(id) + 1}
+        </span>
+      ),
+    },
+    {
+      field: 'ticker',
+      headerName: t('screener.col_ticker'),
+      minWidth: 96,
+      flex: 0.6,
+      renderCell: ({ row }) => <span className="font-mono font-bold text-white text-sm">{row.ticker}</span>,
+    },
+    {
+      field: 'score',
+      headerName: t('screener.col_score'),
+      type: 'number',
+      minWidth: 96,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: ({ row }) => (
+        <div className="flex flex-col items-center gap-1 w-full">
+          <span className={`font-mono font-bold text-sm ${scoreColor(row.score)}`}>{row.score.toFixed(0)}</span>
+          <div className="w-16 h-1 rounded-full bg-white/[0.04]">
+            <div
+              className={`h-full rounded-full ${row.score >= 60 ? 'bg-emerald-500' : row.score >= 30 ? 'bg-amber-500' : 'bg-rose-500'}`}
+              style={{ width: `${scoreBar(row.score)}%` }}
+            />
+          </div>
+        </div>
+      ),
+    },
+    {
+      field: 'momentum_1m_pct',
+      headerName: t('screener.col_momentum'),
+      type: 'number',
+      minWidth: 104,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: ({ row }) => (
+        <div className="flex flex-col items-center gap-1 w-full">
+          <div className="w-12 h-1 rounded-full bg-white/[0.04]">
+            <div
+              className={`h-full rounded-full ${row.momentum_1m_pct >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}
+              style={{ width: `${momentumBar(row.momentum_1m_pct)}%` }}
+            />
+          </div>
+          <span className={`text-[9px] font-mono ${row.momentum_1m_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {row.momentum_1m_pct >= 0 ? '+' : ''}{row.momentum_1m_pct.toFixed(1)}%
+          </span>
+        </div>
+      ),
+    },
+    {
+      field: 'trend',
+      headerName: t('screener.col_trend'),
+      minWidth: 104,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: ({ row }) => (
+        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+          row.trend === 'above_sma50'
+            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+            : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+        }`}>
+          {t(row.trend === 'above_sma50' ? 'screener.trend_above_sma50' : 'screener.trend_below_sma50')}
+        </span>
+      ),
+    },
+    {
+      field: 'volume_surge',
+      headerName: t('screener.col_volume'),
+      type: 'number',
+      minWidth: 96,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: ({ row }) => (
+        <div className="flex flex-col items-center gap-1 w-full">
+          <div className="w-12 h-1 rounded-full bg-white/[0.04]">
+            <div
+              className={`h-full rounded-full ${row.volume_surge >= 1.5 ? 'bg-emerald-500' : 'bg-slate-500'}`}
+              style={{ width: `${volumeBar(row.volume_surge)}%` }}
+            />
+          </div>
+          <span className="text-[9px] font-mono text-slate-300">{row.volume_surge.toFixed(2)}×</span>
+        </div>
+      ),
+    },
+    {
+      field: 'rsi_14',
+      headerName: t('screener.col_rsi'),
+      type: 'number',
+      minWidth: 76,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => (
+        <span className={`font-mono ${row.rsi_14 < 30 ? 'text-emerald-400 font-bold' : row.rsi_14 > 70 ? 'text-rose-400 font-bold' : 'text-slate-300'}`}>
+          {row.rsi_14.toFixed(0)}
+        </span>
+      ),
+    },
+    {
+      field: 'verdict',
+      headerName: t('screener.col_verdict'),
+      minWidth: 96,
+      align: 'center',
+      headerAlign: 'center',
+      valueGetter: (_value, row) => scoreVerdict(row.score),
+      renderCell: ({ row }) => {
+        const verdict = scoreVerdict(row.score)
+        return (
+          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${VERDICT_STYLES[verdict]}`}>
+            {t(`screener.verdict_${verdict.toLowerCase()}`)}
+          </span>
+        )
+      },
+    },
+    {
+      field: 'action',
+      headerName: t('screener.col_action'),
+      minWidth: 132,
+      sortable: false,
+      filterable: false,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: ({ row }) => (
+        <div className="flex items-center justify-center gap-1.5">
+          <button
+            onClick={() => runAnalysis(row.ticker)}
+            disabled={!!analyzing}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet-600/80 hover:bg-violet-600 text-white text-[9px] font-bold transition disabled:opacity-40 cursor-pointer"
+            title={t('screener.run_analysis_title')}
+          >
+            {analyzing === row.ticker ? <Loader2 size={9} className="animate-spin" /> : <TrendingUp size={9} />}
+            {t('screener.analyse')}
+          </button>
+          <a
+            href={`/chart?ticker=${row.ticker}`}
+            className="p-1.5 rounded-lg text-slate-600 hover:text-violet-400 hover:bg-violet-500/10 transition"
+            title={t('screener.view_chart_title')}
+          >
+            <ExternalLink size={11} />
+          </a>
+        </div>
+      ),
+    },
+  ], [t, analyzing])
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
@@ -176,104 +332,16 @@ export default function Screener() {
             </div>
             <p className="text-[10px] text-slate-500">{t('screener.sorted_by_score')}</p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs min-w-[700px]">
-              <thead>
-                <tr className="text-[9px] uppercase tracking-wider text-slate-500 bg-white/[0.01]">
-                  <th className="px-5 py-3 text-left font-bold">{t('screener.col_rank')}</th>
-                  <th className="px-5 py-3 text-left font-bold">{t('screener.col_ticker')}</th>
-                  <th className="px-5 py-3 text-center font-bold">{t('screener.col_score')}</th>
-                  <th className="px-5 py-3 text-center font-bold">{t('screener.col_momentum')}</th>
-                  <th className="px-5 py-3 text-center font-bold">{t('screener.col_trend')}</th>
-                  <th className="px-5 py-3 text-center font-bold">{t('screener.col_volume')}</th>
-                  <th className="px-5 py-3 text-right font-bold">{t('screener.col_rsi')}</th>
-                  <th className="px-5 py-3 text-center font-bold">{t('screener.col_verdict')}</th>
-                  <th className="px-5 py-3 text-center font-bold">{t('screener.col_action')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.02]">
-                {results.map((r, i) => (
-                  <tr key={r.ticker} className="hover:bg-white/[0.01] transition-colors">
-                    <td className="px-5 py-3 text-slate-600 font-mono font-bold">{i + 1}</td>
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-white text-sm">{r.ticker}</span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3 text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <span className={`font-mono font-bold text-sm ${scoreColor(r.score)}`}>{r.score.toFixed(0)}</span>
-                        <div className="w-16 h-1 rounded-full bg-white/[0.04]">
-                          <div className={`h-full rounded-full ${r.score >= 60 ? 'bg-emerald-500' : r.score >= 30 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${scoreBar(r.score)}%` }} />
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3 text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="w-12 h-1 rounded-full bg-white/[0.04] mx-auto">
-                          <div className={`h-full rounded-full ${r.momentum_1m_pct >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`} style={{ width: `${momentumBar(r.momentum_1m_pct)}%` }} />
-                        </div>
-                        <span className={`text-[9px] font-mono ${r.momentum_1m_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {r.momentum_1m_pct >= 0 ? '+' : ''}{r.momentum_1m_pct.toFixed(1)}%
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3 text-center">
-                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
-                        r.trend === 'above_sma50'
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                          : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                      }`}>
-                        {t(r.trend === 'above_sma50' ? 'screener.trend_above_sma50' : 'screener.trend_below_sma50')}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="w-12 h-1 rounded-full bg-white/[0.04] mx-auto">
-                          <div className={`h-full rounded-full ${r.volume_surge >= 1.5 ? 'bg-emerald-500' : 'bg-slate-500'}`} style={{ width: `${volumeBar(r.volume_surge)}%` }} />
-                        </div>
-                        <span className="text-[9px] font-mono text-slate-300">{r.volume_surge.toFixed(2)}×</span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3 text-right font-mono text-slate-300">
-                      <span className={r.rsi_14 < 30 ? 'text-emerald-400 font-bold' : r.rsi_14 > 70 ? 'text-rose-400 font-bold' : 'text-slate-300'}>
-                        {r.rsi_14.toFixed(0)}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-center">
-                      {(() => {
-                        const verdict = scoreVerdict(r.score)
-                        return (
-                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${VERDICT_STYLES[verdict]}`}>
-                            {t(`screener.verdict_${verdict.toLowerCase()}`)}
-                          </span>
-                        )
-                      })()}
-                    </td>
-                    <td className="px-5 py-3 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          onClick={() => runAnalysis(r.ticker)}
-                          disabled={!!analyzing}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet-600/80 hover:bg-violet-600 text-white text-[9px] font-bold transition disabled:opacity-40 cursor-pointer"
-                          title={t('screener.run_analysis_title')}
-                        >
-                          {analyzing === r.ticker ? <Loader2 size={9} className="animate-spin" /> : <TrendingUp size={9} />}
-                          {t('screener.analyse')}
-                        </button>
-                        <a
-                          href={`/chart?ticker=${r.ticker}`}
-                          className="p-1.5 rounded-lg text-slate-600 hover:text-violet-400 hover:bg-violet-500/10 transition"
-                          title={t('screener.view_chart_title')}
-                        >
-                          <ExternalLink size={11} />
-                        </a>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="p-2">
+            <AppDataGrid<ScreenResult>
+              rows={results}
+              columns={columns}
+              getRowId={row => row.ticker}
+              ariaLabel={t('screener.col_ticker')}
+              minHeight={280}
+              density="comfortable"
+              hideFooter
+            />
           </div>
         </div>
       )}

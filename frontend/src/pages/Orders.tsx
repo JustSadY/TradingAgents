@@ -186,14 +186,14 @@ export default function Orders() {
     {
       field: 'ticker',
       headerName: t('orders.col_symbol'),
-      minWidth: 105,
+      minWidth: 88,
       flex: 0.8,
       renderCell: ({ value }) => <span className="font-mono font-bold text-white text-sm">{String(value ?? '')}</span>,
     },
     {
       field: 'action',
       headerName: t('orders.col_direction'),
-      minWidth: 105,
+      minWidth: 84,
       renderCell: ({ value }) => {
         const action = String(value ?? '')
         return <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-md ${ACTION_BADGES[action] || 'text-white'}`}>{action}</span>
@@ -203,7 +203,7 @@ export default function Orders() {
       field: 'quantity_filled',
       headerName: t('orders.col_quantity'),
       type: 'number',
-      minWidth: 105,
+      minWidth: 92,
       align: 'right',
       headerAlign: 'right',
       renderCell: ({ value }) => <span className="font-mono font-semibold text-slate-300">{Number(value ?? 0).toFixed(4)}</span>,
@@ -212,7 +212,7 @@ export default function Orders() {
       field: 'price_per_share',
       headerName: t('orders.col_price'),
       type: 'number',
-      minWidth: 100,
+      minWidth: 88,
       align: 'right',
       headerAlign: 'right',
       renderCell: ({ value }) => <span className="font-mono text-slate-300">{value == null ? '—' : `$${Number(value).toFixed(2)}`}</span>,
@@ -221,7 +221,7 @@ export default function Orders() {
       field: 'total_value',
       headerName: t('orders.col_total'),
       type: 'number',
-      minWidth: 105,
+      minWidth: 96,
       align: 'right',
       headerAlign: 'right',
       renderCell: ({ value }) => <span className="font-mono font-semibold text-slate-300">{value == null ? '—' : `$${Number(value).toFixed(2)}`}</span>,
@@ -230,7 +230,7 @@ export default function Orders() {
       field: 'realized_pnl',
       headerName: 'P&L',
       type: 'number',
-      minWidth: 105,
+      minWidth: 92,
       align: 'right',
       headerAlign: 'right',
       renderCell: ({ row }) => {
@@ -242,7 +242,7 @@ export default function Orders() {
     {
       field: 'status',
       headerName: t('orders.col_status'),
-      minWidth: 120,
+      minWidth: 96,
       align: 'center',
       headerAlign: 'center',
       renderCell: ({ value }) => {
@@ -253,20 +253,29 @@ export default function Orders() {
     {
       field: 'ai_signal',
       headerName: t('orders.col_signal'),
-      minWidth: 145,
+      minWidth: 110,
       flex: 1,
       renderCell: ({ value }) => <span className="text-slate-400 font-medium truncate">{String(value || '—')}</span>,
     },
     {
       field: 'created_at',
       headerName: t('orders.col_date'),
-      minWidth: 170,
-      renderCell: ({ value }) => <span className="text-slate-500 font-mono text-[10px]">{new Date(String(value)).toLocaleString()}</span>,
+      minWidth: 116,
+      renderCell: ({ value }) => (
+        <span className="text-slate-500 font-mono text-[10px]">
+          {new Date(String(value)).toLocaleString(undefined, {
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </span>
+      ),
     },
     {
       field: 'journal',
       headerName: 'Journal',
-      minWidth: 90,
+      minWidth: 72,
       sortable: false,
       filterable: false,
       align: 'center',
@@ -318,17 +327,18 @@ export default function Orders() {
       </div>
 
       <ErrorBoundary name="OrdersTable">
-        <AppDataGrid<OrderRead>
-          rows={orders}
-          columns={columns}
-          loading={loading}
-          error={ordersQuery.error}
-          emptyMessage={t('orders.empty')}
-          ariaLabel="Orders"
-          minHeight={320}
-          density="compact"
-          sx={{ minWidth: 1040 }}
-        />
+        <div className="glass-panel rounded-2xl p-2">
+          <AppDataGrid<OrderRead>
+            rows={orders}
+            columns={columns}
+            loading={loading}
+            error={ordersQuery.error}
+            emptyMessage={t('orders.empty')}
+            ariaLabel="Orders"
+            minHeight={320}
+            density="compact"
+          />
+        </div>
       </ErrorBoundary>
     </div>
   )

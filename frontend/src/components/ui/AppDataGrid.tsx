@@ -60,7 +60,7 @@ export function AppDataGrid<R extends GridValidRowModel>({
     return (
       <Box
         role="status"
-        sx={{ minHeight, display: 'grid', placeItems: 'center', border: '1px solid', borderColor: 'divider', borderRadius: 2, backgroundColor: 'rgba(15,23,42,.35)' }}
+        sx={{ minHeight, display: 'grid', placeItems: 'center' }}
       >
         <Typography variant="body2" color="text.secondary">{emptyMessage}</Typography>
       </Box>
@@ -79,14 +79,12 @@ export function AppDataGrid<R extends GridValidRowModel>({
         initialState={initialState ?? { pagination: { paginationModel: { page: 0, pageSize: 10 } } }}
         sx={{
           minWidth: 620,
-          border: '1px solid',
-          borderColor: 'divider',
-          borderRadius: 2,
+          border: 'none',
+          backgroundColor: 'transparent',
+          borderRadius: 0,
           // The grid ships its own 14px cell text; matching the theme's control
           // size keeps a table the same weight as the Tailwind tables beside it.
           fontSize: 12,
-          backgroundColor: 'rgba(15, 23, 42, 0.38)',
-          backdropFilter: 'blur(16px)',
           '& .MuiDataGrid-columnHeaders': {
             backgroundColor: 'rgba(255,255,255,.02)',
             color: 'text.secondary',
