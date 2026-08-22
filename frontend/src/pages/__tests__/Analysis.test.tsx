@@ -380,8 +380,10 @@ describe('Analysis', () => {
     })
 
     const card = await screen.findByTestId('portfolio-decision-card')
-    expect(card).toHaveTextContent('Portfolio Manager Recommendation')
-    expect(card).toHaveTextContent('Single AI authority for sizing and trade parameters')
+    // The Decision Stability Controller, not the Portfolio Manager, owns the
+    // final decision, so the card is labelled for the canonical outcome.
+    expect(card).toHaveTextContent('Canonical Final Decision')
+    expect(card).toHaveTextContent('Neutral research plan, persistent thesis, and controller-approved decision.')
     expect(card).toHaveTextContent('82%')
     expect(card).toHaveTextContent('$120.00')
     expect(card).toHaveTextContent('8.0%')
@@ -421,7 +423,7 @@ describe('Analysis', () => {
     })
 
     const user = userEvent.setup()
-    localStorage.setItem('ta_access', 'test-token')
+    sessionStorage.setItem('ta_access', 'test-token')
     renderWithQuery(<Analysis />)
     await user.click(screen.getByText('Multi Stock').closest('button')!)
 
@@ -846,7 +848,7 @@ describe('Analysis', () => {
 
     await act(async () => {
       MockWebSocket.instances[0].emit({ type: 'token', agent: 'market', token: 'market update' })
-      MockWebSocket.instances[0].emit({ type: 'token', agent: 'sentiment', token: 'sentiment update' })
+      MockWebSocket.instances[0].emit({ type: 'token', agent: 'social', token: 'sentiment update' })
     })
     await user.click(screen.getByRole('button', { name: /Reports/ }))
 

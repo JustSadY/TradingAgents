@@ -318,7 +318,7 @@ async def store_analyst_cache(analyst_key: str, ticker: str, data_hash: str, rep
     Memoisation only: the report has already been produced by the time this
     runs, so a persistence failure is logged and swallowed. Letting it
     propagate failed the analyst node *after* a good report existed, and the
-    user get the raised database error as the report body.
+    user got the raised database error as the report body.
     """
     report = _usable_report(report_text)
     if report is None:

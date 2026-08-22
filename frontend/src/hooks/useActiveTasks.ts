@@ -23,7 +23,20 @@ const EMPTY: ActiveTask[] = []
  */
 export function useActiveTasks() {
   const query = useAnalysisGetActiveTasks({
-    query: { refetchInterval: 30_000 },
+    query: {
+      // Engine Status describes the server, not this browser tab: a run may
+      // have been started from another device, or before this tab existed.
+      // The shared client defaults (30s staleTime, no refetch on focus) let
+      // that state sit stale, so the panel could show Idle for half a minute
+      // while an analysis was running. Revalidate whenever the page is
+      // mounted or looked at, and poll quickly while something is running.
+      refetchInterval: query => (query.state.data as unknown[] | undefined)?.length ? 5_000 : 15_000,
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      refetchOnMount: 'always',
+      staleTime: 0,
+    },
   })
 
   // A malformed payload is treated the same as a failed request: callers gate

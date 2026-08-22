@@ -153,6 +153,16 @@ async def websocket_analysis(
                 if not await _revalidate_or_close():
                     return
                 continue
+            except RuntimeError:
+                # Starlette raises RuntimeError ("need to call accept first")
+                # rather than WebSocketDisconnect once the socket has left the
+                # connected state. `wait_for` cancels the pending receive on
+                # every revalidation timeout, which can consume the disconnect
+                # frame without surfacing it, so this is an ordinary client
+                # disconnect and not a server fault worth an ERROR + traceback.
+                _logger.debug("Analysis WebSocket already disconnected task=%s", task_id)
+                await ws_manager.disconnect(task_id, websocket)
+                return
             if message == _WS_KEEPALIVE_MESSAGE:
                 if not await _revalidate_or_close():
                     return

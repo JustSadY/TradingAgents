@@ -296,9 +296,17 @@ axios.interceptors.response.use(
       const newToken = await refreshAccessToken()
       original.headers.Authorization = `Bearer ${newToken}`
       return axios(original)
-    } catch {
-      setAccessToken(null)
-      _onForceLogout?.()
+    } catch (refreshErr) {
+      // Only the server actually rejecting the refresh credential means the
+      // session is gone. A rate limit (the endpoint allows 30/min), a 5xx, or
+      // a dropped connection says nothing about the refresh cookie — tearing
+      // the session down on those turned a transient hiccup into an
+      // unexplained trip back to the login screen.
+      const refreshStatus = (refreshErr as { response?: { status?: number } })?.response?.status
+      if (refreshStatus === 401 || refreshStatus === 403) {
+        setAccessToken(null)
+        _onForceLogout?.()
+      }
       throw err
     }
   },

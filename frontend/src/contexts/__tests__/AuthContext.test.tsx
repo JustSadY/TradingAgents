@@ -192,15 +192,30 @@ describe('AuthContext', () => {
     consoleError.mockRestore()
   })
 
-  it('clears React auth state when cookie refresh fails', async () => {
+  it('clears React auth state when the server rejects the refresh cookie', async () => {
     sessionStorage.setItem('ta_access', jwt('alice'))
     renderWithAuth(<TestConsumer />)
     await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('alice'))
 
-    vi.mocked(axios.post).mockRejectedValue(new Error('refresh rejected'))
+    vi.mocked(axios.post).mockRejectedValue({ response: { status: 401, data: {} } })
     expect(responseErrorHandler).toBeDefined()
     const fakeError = { config: { url: '/api/portfolio', headers: {} }, response: { status: 401, data: {} } }
     await expect(responseErrorHandler!(fakeError)).rejects.toBeTruthy()
     await waitFor(() => expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('false'))
+  })
+
+  it('keeps the session when a refresh is rate limited rather than rejected', async () => {
+    // `/auth/refresh` allows 30/min. A burst that trips the limiter says
+    // nothing about the refresh cookie, so it must not sign the user out.
+    sessionStorage.setItem('ta_access', jwt('alice'))
+    renderWithAuth(<TestConsumer />)
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('alice'))
+
+    vi.mocked(axios.post).mockRejectedValue({ response: { status: 429, data: {} } })
+    const fakeError = { config: { url: '/api/portfolio', headers: {} }, response: { status: 401, data: {} } }
+    await expect(responseErrorHandler!(fakeError)).rejects.toBeTruthy()
+
+    expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('true')
+    expect(getAccessToken()).toBeTruthy()
   })
 })
