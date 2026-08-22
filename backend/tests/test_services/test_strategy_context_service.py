@@ -131,6 +131,9 @@ async def test_same_day_replay_does_not_see_later_strategy_revision(db_session, 
     )
     assert later.applied
 
+    # A replay carries the checkpoint's recorded time, exactly as Time Travel
+    # passes it. Without it the cutoff defaults to the end of the business day
+    # and the 15:00 revision is legitimately inside the window.
     context = await load_strategy_context(
         db_session,
         user_id=test_user.id,
@@ -139,6 +142,7 @@ async def test_same_day_replay_does_not_see_later_strategy_revision(db_session, 
         trade_date="2026-08-08",
         historical_mode=True,
         learning_eligible=False,
+        knowledge_cutoff=replay_started,
     )
 
     assert context["source"] == "historical_version"

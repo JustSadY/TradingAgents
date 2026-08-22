@@ -89,17 +89,17 @@ async def test_final_portfolio_decision_constrains_auto_order_and_provenance(mon
         id=19,
         signal="Buy",
         final_decision="Portfolio Manager: Buy because the final risk-adjusted decision is positive.",
+        portfolio_decision_json={
+            "rating": "Buy",
+            "confidence_score": 0.8,
+            "entry_price": 100,
+            "stop_loss": 95,
+            "take_profit_price": 110,
+            "position_size_pct": 5,
+            "suggested_capital": 300,
+            "recommended_leverage": 2.5,
+        },
         chart_annotations={
-            "portfolio_decision": {
-                "rating": "Buy",
-                "confidence_score": 0.8,
-                "entry_price": 100,
-                "stop_loss": 95,
-                "take_profit_price": 110,
-                "position_size_pct": 5,
-                "suggested_capital": 300,
-                "recommended_leverage": 2.5,
-            },
             "trader_proposal": {"stop_loss": 80, "take_profit_price": 140, "position_size_pct": 90},
         },
     )
@@ -200,14 +200,13 @@ async def test_underweight_reduces_only_to_final_target_allocation(monkeypatch):
         id=20,
         signal="Underweight",
         final_decision="Portfolio Manager: reduce the long position to a 6% allocation.",
-        chart_annotations={
-            "portfolio_decision": {
-                "rating": "Underweight",
-                "position_size_pct": 6,
-                "suggested_capital": 400,
-                "recommended_leverage": 1,
-            }
+        portfolio_decision_json={
+            "rating": "Underweight",
+            "position_size_pct": 6,
+            "suggested_capital": 400,
+            "recommended_leverage": 1,
         },
+        chart_annotations={},
     )
 
     result = await trading_orchestrator.place_signal_order(
