@@ -58,6 +58,9 @@ describe('AuthContext', () => {
   })
 
   it('restores a session from the HttpOnly refresh cookie', async () => {
+    // A browser holding a refresh cookie has signed in here before, which is
+    // what the scope marker records.
+    localStorage.setItem('ta_user_scope', 'alice')
     vi.mocked(axios.post).mockResolvedValueOnce({ data: { access_token: jwt('alice', 'admin') } })
     renderWithAuth(<TestConsumer />)
     await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('alice'))
@@ -102,6 +105,7 @@ describe('AuthContext', () => {
   })
 
   it('does not authenticate from legacy localStorage tokens and purges them', async () => {
+    localStorage.setItem('ta_user_scope', 'legacy')
     localStorage.setItem('ta_access', jwt('legacy'))
     localStorage.setItem('ta_refresh', 'legacy-refresh-token')
 
@@ -178,6 +182,18 @@ describe('AuthContext', () => {
     expect(queryClient.getQueryCache().getAll()).toHaveLength(0)
     expect(queryClient.getMutationCache().getAll()).toHaveLength(0)
     expect(vi.mocked(axios.post)).toHaveBeenCalledWith('/auth/logout')
+  })
+
+  it('does not ask to refresh in a browser that has never signed in', async () => {
+    // The refresh cookie is HttpOnly and unreadable, so a bootstrap request is
+    // the only way to find out — and for a visitor who is simply logged out it
+    // answers 401 and leaves a console error on the login screen.
+    renderWithAuth(<TestConsumer />)
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+
+    expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('false')
+    expect(vi.mocked(axios.post)).not.toHaveBeenCalledWith('/auth/refresh')
+    expect(vi.mocked(axios.get)).toHaveBeenCalledWith('/auth/setup-status')
   })
 
   it('getAccessToken reads session storage only', () => {

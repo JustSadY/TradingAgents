@@ -167,10 +167,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const initAuth = useCallback(async () => {
     const epoch = _authEpoch
+
+    const settleSignedOut = async () => {
+      // A failed (or skipped) restore says nothing about a session established
+      // after this attempt started, so it must not tear one down.
+      if (epoch !== _authEpoch) return
+      clearLocalAuthState()
+      // Only an installation with no accounts at all can be set up, so this is
+      // asked once, here, rather than on every load.
+      try {
+        const status = await axios.get('/auth/setup-status')
+        if (epoch === _authEpoch) setSetupRequired(status.data?.setup_required === true)
+      } catch {
+        if (epoch === _authEpoch) setSetupRequired(false)
+      }
+    }
+
     try {
       const current = getAccessToken()
       if (current && applyAccessToken(current)) return
       setAccessToken(null)
+
+      // The refresh token is an HttpOnly cookie, so the page cannot look for
+      // it directly — but a browser that has never signed in, or that signed
+      // out of the session it had, has no cookie to trade in. Asking anyway
+      // answers 401 and puts a red console error in front of every visitor who
+      // simply is not logged in. The scope marker is written on sign-in and
+      // cleared on sign-out, which makes it a reliable local proxy for "there
+      // is a session worth restoring".
+      if (!localStorage.getItem(USER_SCOPE_KEY)) {
+        await settleSignedOut()
+        return
+      }
 
       // Restore a server-side session using the HttpOnly refresh cookie.
       // `refreshAccessToken` applies the token itself, so a second caller
@@ -178,18 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // bootstrap) reuses the same round trip rather than rotating again.
       await refreshAccessToken()
     } catch {
-      // A failed restore says nothing about a session established after this
-      // attempt started, so it must not tear one down.
-      if (epoch !== _authEpoch) return
-      clearLocalAuthState()
-      // Only an installation with no accounts at all can be set up, so this is
-      // asked once, after a failed session restore, rather than on every load.
-      try {
-        const status = await axios.get('/auth/setup-status')
-        if (epoch === _authEpoch) setSetupRequired(status.data?.setup_required === true)
-      } catch {
-        if (epoch === _authEpoch) setSetupRequired(false)
-      }
+      await settleSignedOut()
     } finally {
       setLoading(false)
     }
