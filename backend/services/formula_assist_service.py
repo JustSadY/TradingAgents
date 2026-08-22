@@ -10,13 +10,19 @@ compute.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 
 import numpy as np
 import pandas as pd
 from sqlalchemy.ext.asyncio import AsyncSession
+from tenacity import (
+    AsyncRetrying,
+    before_sleep_log,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential_jitter,
+)
 
 from backend.core.exceptions import ExternalServiceError
 from backend.services.indicator_service import evaluate_formula_safely
@@ -109,29 +115,23 @@ def _is_transient_provider_error(exc: BaseException) -> bool:
 
 async def _invoke_formula_llm(llm, messages):
     """Invoke the formula LLM with bounded backoff for provider saturation."""
-    for attempt in range(_LLM_ATTEMPTS):
-        try:
-            return await llm.ainvoke(messages)
-        except Exception as exc:
-            if not _is_transient_provider_error(exc):
-                raise
-
-            if attempt + 1 >= _LLM_ATTEMPTS:
-                raise ExternalServiceError(
-                    "The AI provider is temporarily at capacity. Please try again shortly.",
-                    status_code=503,
-                ) from exc
-
-            delay = _LLM_RETRY_BASE_DELAY_SECONDS * (2**attempt)
-            _logger.warning(
-                "Formula-assist provider capacity error; retrying in %.1fs (%d/%d): %s",
-                delay,
-                attempt + 1,
-                _LLM_ATTEMPTS,
-                exc,
-            )
-            await asyncio.sleep(delay)
-
+    try:
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(_LLM_ATTEMPTS),
+            wait=wait_exponential_jitter(initial=_LLM_RETRY_BASE_DELAY_SECONDS, max=30.0),
+            retry=retry_if_exception(_is_transient_provider_error),
+            before_sleep=before_sleep_log(_logger, logging.WARNING),
+            reraise=True,
+        ):
+            with attempt:
+                return await llm.ainvoke(messages)
+    except Exception as exc:
+        if _is_transient_provider_error(exc):
+            raise ExternalServiceError(
+                "The AI provider is temporarily at capacity. Please try again shortly.",
+                status_code=503,
+            ) from exc
+        raise
     raise AssertionError("unreachable")
 
 

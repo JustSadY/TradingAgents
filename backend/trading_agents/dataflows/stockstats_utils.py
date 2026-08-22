@@ -4,6 +4,14 @@ import time
 
 import pandas as pd
 import yfinance as yf
+from cachetools import TTLCache
+from tenacity import (
+    Retrying,
+    before_sleep_log,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential_jitter,
+)
 from yfinance.exceptions import YFPricesMissingError, YFRateLimitError, YFTickerMissingError
 
 from backend.core.utils import safe_ticker_component
@@ -14,7 +22,10 @@ logger = logging.getLogger(__name__)
 
 _MISSING_TICKER_COOLDOWN_SECONDS = 300.0
 _missing_ticker_lock = threading.Lock()
-_missing_tickers: dict[str, tuple[float, str]] = {}
+# TTLCache expires and bounds the entries; the stored deadline is only there so
+# callers can report how long is left. The lock stays: cachetools stores are not
+# thread-safe and yfinance calls run in worker threads.
+_missing_tickers: TTLCache = TTLCache(maxsize=1024, ttl=_MISSING_TICKER_COOLDOWN_SECONDS, timer=time.monotonic)
 
 class YFinanceTickerUnavailableError(RuntimeError):
     """Yahoo reported a ticker as unavailable, or its short cooldown is active."""
@@ -36,16 +47,12 @@ def _ticker_key(ticker: str | None) -> str | None:
     return normalized or None
 
 def _get_missing_ticker_cooldown(ticker: str) -> tuple[float, str] | None:
-    now = time.monotonic()
     with _missing_ticker_lock:
         entry = _missing_tickers.get(ticker)
-        if entry is None:
-            return None
-        expires_at, reason = entry
-        if expires_at <= now:
-            _missing_tickers.pop(ticker, None)
-            return None
-        return expires_at - now, reason
+    if entry is None:
+        return None
+    expires_at, reason = entry
+    return max(0.0, expires_at - time.monotonic()), reason
 
 def _remember_missing_ticker(ticker: str, reason: str) -> None:
     with _missing_ticker_lock:
@@ -73,7 +80,7 @@ def yf_retry(func, max_retries=3, base_delay=2.0, *, ticker: str | None = None):
             retry_after, reason = cached
             raise YFinanceTickerUnavailableError(ticker_key, reason, retry_after, from_cooldown=True)
 
-    for attempt in range(max_retries + 1):
+    def _call():
         try:
             return func()
         except YFTickerMissingError as exc:
@@ -87,25 +94,16 @@ def yf_retry(func, max_retries=3, base_delay=2.0, *, ticker: str | None = None):
                 _MISSING_TICKER_COOLDOWN_SECONDS,
                 from_cooldown=False,
             ) from exc
-        except YFRateLimitError:
-            if attempt < max_retries:
-                delay = base_delay * (2**attempt)
-                logger.warning(
-                    f"Yahoo Finance rate limited, retrying in {delay:.0f}s (attempt {attempt + 1}/{max_retries})"
-                )
-                time.sleep(delay)
-            else:
-                raise
-        except (ConnectionError, TimeoutError, OSError) as exc:
-            if attempt < max_retries:
-                delay = base_delay * (2**attempt)
-                logger.warning(
-                    f"Yahoo Finance connection error, retrying in {delay:.0f}s "
-                    f"(attempt {attempt + 1}/{max_retries}): {exc}"
-                )
-                time.sleep(delay)
-            else:
-                raise
+
+    for attempt in Retrying(
+        stop=stop_after_attempt(max_retries + 1),
+        wait=wait_exponential_jitter(initial=base_delay, max=60.0),
+        retry=retry_if_exception_type((YFRateLimitError, ConnectionError, TimeoutError, OSError)),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    ):
+        with attempt:
+            return _call()
 
 def _clean_dataframe(data: pd.DataFrame) -> pd.DataFrame:
     dates = pd.to_datetime(data["Date"], errors="coerce")

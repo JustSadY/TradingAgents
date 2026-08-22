@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-from urllib.error import HTTPError
 
+import httpx
 import pandas as pd
 import pytest
 from yfinance.exceptions import YFPricesMissingError, YFTzMissingError
@@ -39,8 +39,11 @@ def _reset_provider_state(tmp_path):
     APICache.close()
     APICache.get_cache_path = old_get_path
 
-def _http_error(code: int) -> HTTPError:
-    return HTTPError("https://api.stocktwits.com/test", code, "test error", hdrs=None, fp=None)
+def _http_error(code: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", "https://api.stocktwits.com/test")
+    return httpx.HTTPStatusError(
+        "test error", request=request, response=httpx.Response(code, request=request)
+    )
 
 def test_stocktwits_403_is_logged_once_then_cooldown_skips_network(monkeypatch, caplog):
     import backend.trading_agents.dataflows.stocktwits as stocktwits
@@ -52,7 +55,7 @@ def test_stocktwits_403_is_logged_once_then_cooldown_skips_network(monkeypatch, 
         calls += 1
         raise _http_error(403)
 
-    monkeypatch.setattr(stocktwits, "urlopen", denied)
+    monkeypatch.setattr(stocktwits.httpx, "get", denied)
     caplog.set_level(logging.DEBUG, logger=stocktwits.__name__)
 
     first = fetch_stocktwits_messages("AAPL")

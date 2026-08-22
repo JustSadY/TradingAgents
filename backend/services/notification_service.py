@@ -3,11 +3,21 @@ import json
 import logging
 from dataclasses import dataclass
 
+from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt, wait_exponential_jitter
+
 from backend.core.constants import WEBHOOK_EVENTS, signal_direction
 
 _logger = logging.getLogger(__name__)
 
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+
+class _WebhookRejected(Exception):
+    """A non-2xx response, retried like a transport error."""
+
+    def __init__(self, status_code: int) -> None:
+        super().__init__(f"webhook returned HTTP {status_code}")
+        self.status_code = status_code
 
 
 @dataclass(frozen=True)
@@ -294,19 +304,21 @@ async def send_webhook(
         target = await resolve_webhook_target(url)
         payload = _build_payload(url, event, data)
         async with _webhook_client(target) as client:
-            for attempt in range(retries + 1):
-                try:
-                    r = await client.post(url, json=payload)
+            async for attempt in AsyncRetrying(
+                stop=stop_after_attempt(retries + 1),
+                wait=wait_exponential_jitter(initial=1.0, max=30.0),
+                retry=retry_if_exception_type((httpx.RequestError, _WebhookRejected)),
+            ):
+                with attempt:
+                    try:
+                        r = await client.post(url, json=payload)
+                    except httpx.RequestError as exc:
+                        last_error = str(exc)
+                        raise
                     last_status_code = r.status_code
-                    if r.status_code < 300:
-                        result = True
-                        break
-                    if attempt < retries:
-                        await asyncio.sleep(2**attempt)
-                except httpx.RequestError as exc:
-                    last_error = str(exc)
-                    if attempt < retries:
-                        await asyncio.sleep(2**attempt)
+                    if r.status_code >= 300:
+                        raise _WebhookRejected(r.status_code)
+                    result = True
     except Exception as exc:
         _logger.warning("Webhook failed: %s", exc)
         last_error = str(exc)

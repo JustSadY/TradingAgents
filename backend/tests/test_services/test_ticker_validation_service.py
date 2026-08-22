@@ -9,9 +9,11 @@ from backend.services import ticker_validation_service as ticker_validation
 
 @pytest.fixture(autouse=True)
 def _clear_validation_cache():
-    ticker_validation._VALIDATION_CACHE.clear()
+    ticker_validation._VALID_CACHE.clear()
+    ticker_validation._INVALID_CACHE.clear()
     yield
-    ticker_validation._VALIDATION_CACHE.clear()
+    ticker_validation._VALID_CACHE.clear()
+    ticker_validation._INVALID_CACHE.clear()
 
 async def test_valid_ticker_is_confirmed_from_exact_quote_match(monkeypatch):
     quote_lookup = AsyncMock(return_value=[{"symbol": "AAPL", "quoteType": "EQUITY"}])

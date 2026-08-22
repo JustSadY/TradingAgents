@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 
+from cachetools import TTLCache
 from fastapi import APIRouter, Depends, Request
 
 from backend.api.deps import require_any_page
@@ -13,8 +13,8 @@ from backend.models.user import User
 router = APIRouter(prefix="/api/market", tags=["market"])
 _logger = logging.getLogger(__name__)
 
-_cache: dict = {"rates": {}, "ts": 0.0}
 _CACHE_TTL = 3600
+_cache: TTLCache = TTLCache(maxsize=1, ttl=_CACHE_TTL)
 
 SUPPORTED_CURRENCIES = {
     "USD": 1.0,
@@ -68,15 +68,17 @@ async def get_fx_rates(
     Response: {"USD": 1.0, "EUR": 1.085, "GBP": 1.27, ...}
     Cached for 1 hour.
     """
-    now = time.time()
-    if now - _cache["ts"] > _CACHE_TTL or not _cache["rates"]:
-        rates = await _fetch_rates()
-        if rates:
-            _cache["rates"] = rates
-            _cache["ts"] = now
+    cached = _cache.get("rates")
+    if not cached:
+        fetched = await _fetch_rates()
+        if fetched:
+            _cache["rates"] = fetched
+            cached = fetched
+        else:
+            cached = {}
 
     result = {}
     for currency in SUPPORTED_CURRENCIES:
-        result[currency] = _cache["rates"].get(currency)
+        result[currency] = cached.get(currency)
     result["USD"] = 1.0
     return result

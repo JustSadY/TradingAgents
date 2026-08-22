@@ -5,8 +5,8 @@ import logging
 import math
 import threading
 import time
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+
+import httpx
 
 logger = logging.getLogger(__name__)
 _API = "https://api.stocktwits.com/api/2/streams/symbol/{ticker}.json"
@@ -62,29 +62,31 @@ def fetch_stocktwits_messages(ticker: str, limit: int = 30, timeout: float = 10.
         return _unavailable_message(reason, retry_after)
 
     url = _API.format(ticker=ticker.upper())
-    req = Request(
-        url,
-        headers={
-            "User-Agent": _UA,
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9",
-        },
-    )
     try:
-        with urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read())
-    except HTTPError as exc:
-        if exc.code in (401, 403):
-            reason = f"HTTP {exc.code} access denied"
+        response = httpx.get(
+            url,
+            headers={
+                "User-Agent": _UA,
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "en-US,en;q=0.9",
+            },
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        data = response.json()
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        if status in (401, 403):
+            reason = f"HTTP {status} access denied"
             started = _start_cooldown(reason, _ACCESS_DENIED_COOLDOWN_SECONDS)
             if started:
                 logger.warning(
                     "StockTwits denied unauthenticated access (HTTP %s); source cooling down for %.0fs.",
-                    exc.code,
+                    status,
                     _ACCESS_DENIED_COOLDOWN_SECONDS,
                 )
             return _unavailable_message(reason, _ACCESS_DENIED_COOLDOWN_SECONDS)
-        if exc.code == 429:
+        if status == 429:
             reason = "HTTP 429 rate limited"
             started = _start_cooldown(reason, _RATE_LIMIT_COOLDOWN_SECONDS)
             if started:
@@ -92,9 +94,9 @@ def fetch_stocktwits_messages(ticker: str, limit: int = 30, timeout: float = 10.
                     "StockTwits rate limited requests; source cooling down for %.0fs.", _RATE_LIMIT_COOLDOWN_SECONDS
                 )
             return _unavailable_message(reason, _RATE_LIMIT_COOLDOWN_SECONDS)
-        logger.warning("StockTwits fetch failed for %s: HTTP %s", ticker, exc.code)
-        return StockTwitsUnavailable(f"<stocktwits unavailable: HTTP {exc.code}>")
-    except (URLError, json.JSONDecodeError, TimeoutError) as exc:
+        logger.warning("StockTwits fetch failed for %s: HTTP %s", ticker, status)
+        return StockTwitsUnavailable(f"<stocktwits unavailable: HTTP {status}>")
+    except (httpx.HTTPError, json.JSONDecodeError, ValueError) as exc:
         logger.warning("StockTwits fetch failed for %s: %s", ticker, exc)
         return StockTwitsUnavailable(f"<stocktwits unavailable: {type(exc).__name__}>")
 

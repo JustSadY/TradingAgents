@@ -13,11 +13,11 @@ intended to analyse.
 from __future__ import annotations
 
 import asyncio
-import time
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
+from cachetools import TTLCache
 
 from backend.core.utils import safe_ticker_component
 
@@ -57,12 +57,11 @@ class TickerNotFoundError(ValueError):
 class TickerValidationUnavailableError(RuntimeError):
     """Raised when symbol validation cannot obtain a trustworthy answer."""
 
-@dataclass(frozen=True)
-class _CachedValidation:
-    expires_at: float
-    suggestions: tuple[TickerSuggestion, ...] | None
-
-_VALIDATION_CACHE: dict[str, _CachedValidation] = {}
+_CACHE_MAX_ENTRIES = 2048
+# Two stores because the answers keep different company: a symbol that resolved
+# is stable, a rejection is worth re-checking sooner.
+_VALID_CACHE: TTLCache = TTLCache(maxsize=_CACHE_MAX_ENTRIES, ttl=_VALID_CACHE_TTL_SECONDS)
+_INVALID_CACHE: TTLCache = TTLCache(maxsize=_CACHE_MAX_ENTRIES, ttl=_INVALID_CACHE_TTL_SECONDS)
 
 def _normalize_ticker(ticker: str) -> str:
     if not isinstance(ticker, str):
@@ -139,17 +138,17 @@ def _suggestions_from_candidates(candidates: list[dict[str, Any]], ticker: str) 
     return tuple(suggestions)
 
 def _cache_result(ticker: str, suggestions: tuple[TickerSuggestion, ...] | None) -> None:
-    ttl = _VALID_CACHE_TTL_SECONDS if suggestions is None else _INVALID_CACHE_TTL_SECONDS
-    _VALIDATION_CACHE[ticker] = _CachedValidation(expires_at=time.monotonic() + ttl, suggestions=suggestions)
+    if suggestions is None:
+        _VALID_CACHE[ticker] = True
+    else:
+        _INVALID_CACHE[ticker] = suggestions
 
 async def _validate_normalized_ticker(normalized: str) -> TickerValidationResult:
-    cached = _VALIDATION_CACHE.get(normalized)
-    if cached is not None:
-        if cached.expires_at > time.monotonic():
-            if cached.suggestions is None:
-                return TickerValidationResult(ticker=normalized)
-            raise TickerNotFoundError(normalized, cached.suggestions)
-        _VALIDATION_CACHE.pop(normalized, None)
+    if normalized in _VALID_CACHE:
+        return TickerValidationResult(ticker=normalized)
+    cached_suggestions = _INVALID_CACHE.get(normalized)
+    if cached_suggestions is not None:
+        raise TickerNotFoundError(normalized, cached_suggestions)
 
     quote_failure: TickerValidationUnavailableError | None = None
     try:

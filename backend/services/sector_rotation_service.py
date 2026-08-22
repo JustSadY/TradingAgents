@@ -6,10 +6,15 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import yfinance as yf
+from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential_jitter
 
 from backend.services.indicator_service import calculate_rsi
 
 _logger = logging.getLogger(__name__)
+
+
+class _EmptyDownload(Exception):
+    """An empty frame is retried like a failure but is not an error to report."""
 
 SECTORS: dict[str, str] = {
     "XLK": "Technology",
@@ -56,25 +61,18 @@ async def get_sector_rotation() -> list[dict[str, Any]]:
         )
 
     loop = asyncio.get_running_loop()
-    max_retries = 3
-    delay = 1.0
     raw = None
-    for attempt in range(max_retries):
-        try:
-            raw = await loop.run_in_executor(None, _fetch)
-            if raw is not None and not getattr(raw, "empty", False):
-                break
-            if attempt < max_retries - 1:
-                await asyncio.sleep(delay)
-                delay *= 2
-        except Exception:
-            if attempt < max_retries - 1:
-                await asyncio.sleep(delay)
-                delay *= 2
-            else:
-                raise
-
-    if raw is None or getattr(raw, "empty", False):
+    try:
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential_jitter(initial=1.0, max=10.0),
+            reraise=True,
+        ):
+            with attempt:
+                raw = await loop.run_in_executor(None, _fetch)
+                if raw is None or getattr(raw, "empty", False):
+                    raise _EmptyDownload
+    except _EmptyDownload:
         return []
 
     results: list[dict[str, Any]] = []

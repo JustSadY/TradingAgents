@@ -5,6 +5,7 @@ import math
 import httpx
 import pandas as pd
 import yfinance as yf
+from tenacity import AsyncRetrying, before_sleep_log, stop_after_attempt, wait_exponential_jitter
 
 _logger = logging.getLogger(__name__)
 
@@ -157,41 +158,34 @@ async def _fetch_individual_fallbacks(still_missing: list[str]) -> dict[str, flo
 
 async def get_historical_data(ticker: str, start_date: str, end_date: str):
     """Fetch historical OHLCV data for a ticker."""
-    max_retries = 3
-    delay = 1.0
-    for attempt in range(max_retries):
-        try:
 
-            def _fetch():
-                data = yf.Ticker(ticker).history(start=start_date, end=end_date)
-                if data.empty:
-                    return data
+    def _fetch():
+        data = yf.Ticker(ticker).history(start=start_date, end=end_date)
+        if data.empty:
+            return data
 
-                if isinstance(data.columns, pd.MultiIndex):
-                    data.columns = data.columns.get_level_values(0)
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
 
-                if data.index.tz is not None:
-                    data.index = data.index.tz_localize(None)
+        if data.index.tz is not None:
+            data.index = data.index.tz_localize(None)
 
-                data = data[~data.index.duplicated(keep="last")]
-                data = data.sort_index()
-                return data
+        data = data[~data.index.duplicated(keep="last")]
+        data = data.sort_index()
+        return data
 
-            return await asyncio.to_thread(_fetch)
-        except Exception as exc:
-            if attempt < max_retries - 1:
-                _logger.warning(
-                    "Historical data fetch for %s failed on attempt %d: %s. Retrying in %.1fs...",
-                    ticker,
-                    attempt + 1,
-                    exc,
-                    delay,
-                )
-                await asyncio.sleep(delay)
-                delay *= 2
-            else:
-                _logger.exception("Historical data fetch for %s failed after %d attempts", ticker, max_retries)
-                raise
+    try:
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential_jitter(initial=1.0, max=10.0),
+            before_sleep=before_sleep_log(_logger, logging.WARNING),
+            reraise=True,
+        ):
+            with attempt:
+                return await asyncio.to_thread(_fetch)
+    except Exception:
+        _logger.exception("Historical data fetch for %s failed", ticker)
+        raise
 
 async def calculate_returns(
     ticker: str, start_date: str, holding_days: int = 5, benchmark: str = "SPY"

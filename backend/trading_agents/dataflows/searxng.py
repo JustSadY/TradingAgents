@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import json
 import logging
 import threading
 import time
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+
+import httpx
 
 logger = logging.getLogger(__name__)
 _UA = "tradingagents/0.2 (+https://github.com/JustSadY/TradingAgents)"
@@ -43,10 +42,14 @@ def fetch_searxng_results(query: str, base_url: str, limit: int = 10, timeout: f
     a rich error message.
     """
     base = base_url.rstrip("/")
-    url = f"{base}/search?{urlencode({'q': query, 'format': 'json'})}"
-    req = Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
-    with urlopen(req, timeout=timeout) as resp:
-        payload = json.loads(resp.read())
+    response = httpx.get(
+        f"{base}/search",
+        params={"q": query, "format": "json"},
+        headers={"User-Agent": _UA, "Accept": "application/json"},
+        timeout=timeout,
+    )
+    response.raise_for_status()
+    payload = response.json()
 
     results = payload.get("results") if isinstance(payload, dict) else None
     if not results:

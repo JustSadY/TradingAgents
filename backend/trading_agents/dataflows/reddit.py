@@ -5,9 +5,9 @@ import json
 import logging
 import time
 from collections.abc import Iterable
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+
+import httpx
 
 logger = logging.getLogger(__name__)
 from backend.trading_agents.dataflows.config import get_config
@@ -42,17 +42,17 @@ def _get_oauth_token(client_id: str, client_secret: str, user_agent: str, timeou
     if cached and cached[1] - 30 > now:
         return cached[0]
     basic = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
-    req = Request(
+    response = httpx.post(
         _OAUTH_TOKEN_URL,
-        data=urlencode({"grant_type": "client_credentials"}).encode(),
+        data={"grant_type": "client_credentials"},
         headers={
             "Authorization": f"Basic {basic}",
             "User-Agent": user_agent,
-            "Content-Type": "application/x-www-form-urlencoded",
         },
+        timeout=timeout,
     )
-    with urlopen(req, timeout=timeout) as resp:
-        payload = json.loads(resp.read())
+    response.raise_for_status()
+    payload = response.json()
     token = payload.get("access_token")
     if not token:
         raise ValueError("reddit oauth response missing access_token")
@@ -86,17 +86,18 @@ def _fetch_subreddit(
     if creds:
         try:
             token = _get_oauth_token(creds[0], creds[1], user_agent, timeout)
-            req = Request(
+            response = httpx.get(
                 _OAUTH_SEARCH.format(sub=sub, qs=qs),
                 headers={
                     "Authorization": f"Bearer {token}",
                     "User-Agent": user_agent,
                     "Accept": "application/json",
                 },
+                timeout=timeout,
             )
-            with urlopen(req, timeout=timeout) as resp:
-                return _parse_children(json.loads(resp.read()))
-        except (HTTPError, URLError, json.JSONDecodeError, TimeoutError, ValueError) as exc:
+            response.raise_for_status()
+            return _parse_children(response.json())
+        except (httpx.HTTPError, json.JSONDecodeError, ValueError) as exc:
             logger.warning(
                 "Reddit OAuth fetch failed for r/%s · %s (%s); falling back to public API",
                 sub,
@@ -105,14 +106,15 @@ def _fetch_subreddit(
             )
             _TOKEN_CACHE.pop(creds[0], None)
 
-    req = Request(
-        _PUBLIC_SEARCH.format(sub=sub, qs=qs),
-        headers={"User-Agent": user_agent, "Accept": "application/json"},
-    )
     try:
-        with urlopen(req, timeout=timeout) as resp:
-            return _parse_children(json.loads(resp.read()))
-    except (HTTPError, URLError, json.JSONDecodeError, TimeoutError) as exc:
+        response = httpx.get(
+            _PUBLIC_SEARCH.format(sub=sub, qs=qs),
+            headers={"User-Agent": user_agent, "Accept": "application/json"},
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return _parse_children(response.json())
+    except (httpx.HTTPError, json.JSONDecodeError, ValueError) as exc:
         logger.warning("Reddit fetch failed for r/%s · %s: %s", sub, ticker, exc)
         return []
 

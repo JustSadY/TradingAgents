@@ -83,11 +83,6 @@ async def test_formula_assist_retries_transient_worker_capacity_error(monkeypatc
             SimpleNamespace(content="SMA(20)"),
         ]
     )
-    delays: list[float] = []
-
-    async def fake_sleep(delay: float):
-        delays.append(delay)
-
     async def get_settings(_db, _user):
         return SimpleNamespace(llm_provider="nvidia", llm_model="test-model")
 
@@ -99,24 +94,18 @@ async def test_formula_assist_retries_transient_worker_capacity_error(monkeypatc
     )
     monkeypatch.setattr(formula_assist_service, "_synthetic_ohlcv", lambda: object())
     monkeypatch.setattr(formula_assist_service, "evaluate_formula_safely", lambda _frame, _formula: None)
-    monkeypatch.setattr(formula_assist_service.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(formula_assist_service, "_LLM_RETRY_BASE_DELAY_SECONDS", 0.0)
 
     result = await formula_assist_service.generate_formula(object(), "20 day moving average", object())
 
     assert result == "SMA(20)"
     assert llm.calls == 2
-    assert delays == [0.5]
 
 
 @pytest.mark.asyncio
 async def test_formula_assist_returns_503_when_worker_capacity_stays_exhausted(monkeypatch):
     error = RuntimeError("ResourceExhausted: Worker local total request limit reached (33/32)")
     llm = _SequenceFormulaLLM([error, error, error])
-    delays: list[float] = []
-
-    async def fake_sleep(delay: float):
-        delays.append(delay)
-
     async def get_settings(_db, _user):
         return SimpleNamespace(llm_provider="nvidia", llm_model="test-model")
 
@@ -126,7 +115,7 @@ async def test_formula_assist_returns_503_when_worker_capacity_stays_exhausted(m
         "backend.trading_agents.llm_clients.factory.create_llm_client",
         lambda **_kwargs: _FormulaClient(llm),
     )
-    monkeypatch.setattr(formula_assist_service.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(formula_assist_service, "_LLM_RETRY_BASE_DELAY_SECONDS", 0.0)
 
     with pytest.raises(ExternalServiceError) as exc_info:
         await formula_assist_service.generate_formula(object(), "20 day moving average", object())
@@ -134,4 +123,3 @@ async def test_formula_assist_returns_503_when_worker_capacity_stays_exhausted(m
     assert exc_info.value.status_code == 503
     assert "temporarily at capacity" in exc_info.value.detail
     assert llm.calls == 3
-    assert delays == [0.5, 1.0]
