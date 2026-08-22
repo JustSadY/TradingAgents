@@ -36,7 +36,7 @@ class TokenUsageRead(BaseModel):
     total_tokens_in: int
     total_tokens_out: int
     total_tokens: int
-    total_cost_usd: float
+    total_cost_usd: float | None
     breakdown: list[TokenUsageBreakdown]
     daily: list[TokenUsageDay]
 

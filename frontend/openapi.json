@@ -7608,8 +7608,15 @@
             "type": "array"
           },
           "total_cost_usd": {
-            "title": "Total Cost Usd",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Cost Usd"
           },
           "total_tokens": {
             "title": "Total Tokens",

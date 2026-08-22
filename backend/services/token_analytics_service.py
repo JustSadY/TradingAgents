@@ -10,6 +10,7 @@ async def get_token_analytics(db: AsyncSession, user_id: int) -> dict[str, Any]:
     rows = await repo.get_token_usage_rows(db, user_id)
     breakdown: list[dict[str, Any]] = []
     total_in = total_out = total_cost = 0.0
+    priced_rows = 0
     for row in rows:
         ti = int(row.tokens_in or 0)
         to = int(row.tokens_out or 0)
@@ -34,6 +35,7 @@ async def get_token_analytics(db: AsyncSession, user_id: int) -> dict[str, Any]:
         # overstated it, so the row is simply not counted toward the sum.
         if cost is not None:
             total_cost += cost
+            priced_rows += 1
 
     daily_rows = await repo.get_daily_token_usage_rows(db, user_id, 30)
     daily = [
@@ -50,7 +52,7 @@ async def get_token_analytics(db: AsyncSession, user_id: int) -> dict[str, Any]:
         "total_tokens_in": int(total_in),
         "total_tokens_out": int(total_out),
         "total_tokens": int(total_in + total_out),
-        "total_cost_usd": round(total_cost, 4),
+        "total_cost_usd": round(total_cost, 4) if priced_rows else None,
         # Unpriced rows sort last rather than raising on a None comparison.
         "breakdown": sorted(breakdown, key=lambda x: x["estimated_cost_usd"] or 0.0, reverse=True),
         "daily": daily,

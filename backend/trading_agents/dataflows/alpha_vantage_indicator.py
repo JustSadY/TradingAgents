@@ -5,7 +5,7 @@ from .alpha_vantage_common import _make_api_request
 
 _logger = logging.getLogger(__name__)
 
-def get_indicator(
+async def get_indicator(
     symbol: str,
     indicator: str,
     curr_date: str,
@@ -47,7 +47,7 @@ def get_indicator(
         series_type = required_series_type
 
     try:
-        data = _fetch_alpha_vantage_indicator_data(indicator, symbol, interval, time_period, series_type)
+        data = await _fetch_alpha_vantage_indicator_data(indicator, symbol, interval, time_period, series_type)
         return _parse_alpha_vantage_response(indicator, symbol, data, before, curr_date_dt)
     except Exception as e:
         _logger.warning("Alpha Vantage indicator error for %s: %s", indicator, e)
@@ -62,12 +62,12 @@ def _get_vwma_description(symbol: str) -> str:
         "Tips: Watch for skewed results from volume spikes; use in combination with other volume analyses."
     )
 
-def _fetch_alpha_vantage_indicator_data(
+async def _fetch_alpha_vantage_indicator_data(
     indicator: str, symbol: str, interval: str, time_period: int, series_type: str
 ) -> str:
     """Helper to route to the correct Alpha Vantage endpoint."""
     if indicator == "close_50_sma":
-        return _make_api_request(
+        return await _make_api_request(
             "SMA",
             {
                 "symbol": symbol,
@@ -78,7 +78,7 @@ def _fetch_alpha_vantage_indicator_data(
             },
         )
     if indicator == "close_200_sma":
-        return _make_api_request(
+        return await _make_api_request(
             "SMA",
             {
                 "symbol": symbol,
@@ -89,7 +89,7 @@ def _fetch_alpha_vantage_indicator_data(
             },
         )
     if indicator == "close_10_ema":
-        return _make_api_request(
+        return await _make_api_request(
             "EMA",
             {
                 "symbol": symbol,
@@ -100,11 +100,11 @@ def _fetch_alpha_vantage_indicator_data(
             },
         )
     if indicator in ("macd", "macds", "macdh"):
-        return _make_api_request(
+        return await _make_api_request(
             "MACD", {"symbol": symbol, "interval": interval, "series_type": series_type, "datatype": "csv"}
         )
     if indicator == "rsi":
-        return _make_api_request(
+        return await _make_api_request(
             "RSI",
             {
                 "symbol": symbol,
@@ -115,7 +115,7 @@ def _fetch_alpha_vantage_indicator_data(
             },
         )
     if indicator in ("boll", "boll_ub", "boll_lb"):
-        return _make_api_request(
+        return await _make_api_request(
             "BBANDS",
             {
                 "symbol": symbol,
@@ -126,7 +126,7 @@ def _fetch_alpha_vantage_indicator_data(
             },
         )
     if indicator == "atr":
-        return _make_api_request(
+        return await _make_api_request(
             "ATR", {"symbol": symbol, "interval": interval, "time_period": str(time_period), "datatype": "csv"}
         )
     raise ValueError(f"Indicator {indicator} not implemented yet.")

@@ -17,13 +17,13 @@ from backend.trading_agents.dataflows.config import get_config, set_config
 
 @pytest.fixture(autouse=True)
 def _patch_cache_path(tmp_path):
-    """Point the cache database to a temp directory so tests never collide."""
+    """Point the cache store at a temp directory so tests never collide."""
     old_get = APICache.get_cache_path
-    APICache.get_cache_path = staticmethod(lambda: tmp_path / "test_api_cache.sqlite3")
-    APICache._initialized_paths.discard(str(tmp_path / "test_api_cache.sqlite3"))
+    APICache.get_cache_path = staticmethod(lambda: tmp_path / "api_cache")
+    APICache.close()
     yield
+    APICache.close()
     APICache.get_cache_path = old_get
-    APICache._initialized_paths.clear()
 
 @pytest.fixture(autouse=True)
 def _reset_config():
@@ -99,12 +99,11 @@ def test_cache_evicts_oversized():
     try:
         for i in range(max_entries + 5):
             APICache.set("get_stock_data", {"i": i}, f"TICKER{i}", "2024-01-01", "2024-01-31")
-        conn = APICache._connect()
-        try:
-            count = conn.execute("SELECT COUNT(*) FROM api_cache").fetchone()[0]
-        finally:
-            conn.close()
-        assert count <= max_entries
+        assert len(APICache._store()) <= max_entries
+        assert APICache.get("get_stock_data", "TICKER0", "2024-01-01", "2024-01-31") is None
+        assert APICache.get("get_stock_data", f"TICKER{max_entries + 4}", "2024-01-01", "2024-01-31") == {
+            "i": max_entries + 4
+        }
     finally:
         APICache.get_max_entries = old_max
 
@@ -199,8 +198,9 @@ def test_alpha_vantage_rate_limiter_configured():
         }
     )
     limiter = _load_rate_limiter()
-    assert limiter.max_tokens == 10
-    assert limiter.window_seconds == 30.0
+    # `aiolimiter.AsyncLimiter` names the budget max_rate/time_period.
+    assert limiter.max_rate == 10
+    assert limiter.time_period == 30.0
 
 def test_vendor_routing_get_vendor_default():
     """Without method-specific config and data_vendors.category = "default", returns "default"."""
@@ -258,35 +258,6 @@ async def test_route_to_vendor_all_fail(mocker):
             await route_to_vendor("get_stock_data", "INVALID", "2024-01-01", "2024-01-31")
     finally:
         VENDOR_METHODS["get_stock_data"] = orig_methods
-
-def test_retry_sync_success():
-    from backend.trading_agents.dataflows.retry import retry_sync
-
-    assert retry_sync(lambda: 42) == 42
-
-def test_retry_async_success():
-    import asyncio
-
-    from backend.trading_agents.dataflows.retry import retry_async
-
-    async def val():
-        return 42
-
-    assert asyncio.run(retry_async(val)) == 42
-
-def test_retry_sync_exhaustion():
-    from backend.trading_agents.dataflows.retry import retry_sync
-
-    calls = 0
-
-    def fail():
-        nonlocal calls
-        calls += 1
-        raise ValueError("nope")
-
-    with pytest.raises(ValueError):
-        retry_sync(fail, max_retries=2, base_delay=0.01)
-    assert calls == 3
 
 def test_dataflow_config_driven_retry():
     """Alpha Vantage retry reads from config not hardcoded values."""

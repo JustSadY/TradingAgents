@@ -11,7 +11,7 @@ import type { TokenUsageDay } from './tokenUsageDay';
 export interface TokenUsageRead {
   breakdown: TokenUsageBreakdown[];
   daily: TokenUsageDay[];
-  total_cost_usd: number;
+  total_cost_usd: number | null;
   total_tokens: number;
   total_tokens_in: number;
   total_tokens_out: number;

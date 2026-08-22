@@ -44,11 +44,11 @@ def _filter_reports_by_date(result, curr_date: str, *, frequency: str = "quarter
     return json.dumps(parsed) if was_str else parsed
 
 
-def get_fundamentals(ticker: str, curr_date: str = None) -> str:
+async def get_fundamentals(ticker: str, curr_date: str = None) -> str:
     params = {
         "symbol": ticker,
     }
-    result = _make_api_request("OVERVIEW", params)
+    result = await _make_api_request("OVERVIEW", params)
 
     today = datetime.now(UTC).strftime("%Y-%m-%d")
     if curr_date and curr_date != today:
@@ -60,17 +60,17 @@ def get_fundamentals(ticker: str, curr_date: str = None) -> str:
         return warning + (result if isinstance(result, str) else json.dumps(result))
     return result
 
-def get_balance_sheet(ticker: str, freq: str = "quarterly", curr_date: str = None):
+async def get_balance_sheet(ticker: str, freq: str = "quarterly", curr_date: str = None):
     _ = freq
-    result = _make_api_request("BALANCE_SHEET", {"symbol": ticker})
+    result = await _make_api_request("BALANCE_SHEET", {"symbol": ticker})
     return _filter_reports_by_date(result, curr_date, frequency=freq)
 
-def get_cashflow(ticker: str, freq: str = "quarterly", curr_date: str = None):
+async def get_cashflow(ticker: str, freq: str = "quarterly", curr_date: str = None):
     _ = freq
-    result = _make_api_request("CASH_FLOW", {"symbol": ticker})
+    result = await _make_api_request("CASH_FLOW", {"symbol": ticker})
     return _filter_reports_by_date(result, curr_date, frequency=freq)
 
-def get_income_statement(ticker: str, freq: str = "quarterly", curr_date: str = None):
+async def get_income_statement(ticker: str, freq: str = "quarterly", curr_date: str = None):
     _ = freq
-    result = _make_api_request("INCOME_STATEMENT", {"symbol": ticker})
+    result = await _make_api_request("INCOME_STATEMENT", {"symbol": ticker})
     return _filter_reports_by_date(result, curr_date, frequency=freq)

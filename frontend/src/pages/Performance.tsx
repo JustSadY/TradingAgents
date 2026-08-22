@@ -489,7 +489,7 @@ export default function Performance() {
                 { label: 'Total Tokens', value: tokenUsage.total_tokens.toLocaleString(), icon: <Zap size={13} />, color: 'text-amber-400' },
                 { label: 'Input Tokens', value: tokenUsage.total_tokens_in.toLocaleString(), icon: <TrendingUp size={13} />, color: 'text-sky-400' },
                 { label: 'Output Tokens', value: tokenUsage.total_tokens_out.toLocaleString(), icon: <TrendingDown size={13} />, color: 'text-violet-400' },
-                { label: 'Est. Cost (USD)', value: `$${tokenUsage.total_cost_usd.toFixed(4)}`, icon: <DollarSign size={13} />, color: 'text-emerald-400' },
+                { label: 'Est. Cost (USD)', value: tokenUsage.total_cost_usd == null ? '—' : `$${tokenUsage.total_cost_usd.toFixed(4)}`, icon: <DollarSign size={13} />, color: 'text-emerald-400' },
               ].map(k => (
                 <div key={k.label} className="bg-white/[0.02] border border-white/[0.04] rounded-xl p-3 flex items-center gap-2.5">
                   <div className="text-amber-400 shrink-0">{k.icon}</div>

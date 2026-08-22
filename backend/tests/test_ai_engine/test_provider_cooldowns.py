@@ -27,8 +27,8 @@ from backend.trading_agents.dataflows.stocktwits import (
 @pytest.fixture(autouse=True)
 def _reset_provider_state(tmp_path):
     old_get_path = APICache.get_cache_path
-    APICache.get_cache_path = staticmethod(lambda: tmp_path / "test_api_cache.sqlite3")
-    APICache._initialized_paths.discard(str(tmp_path / "test_api_cache.sqlite3"))
+    APICache.get_cache_path = staticmethod(lambda: tmp_path / "api_cache")
+    APICache.close()
     dataflow_config._config = None
     dataflow_config.initialize_config()
     reset_yfinance_ticker_cooldowns()
@@ -36,8 +36,8 @@ def _reset_provider_state(tmp_path):
     yield
     reset_yfinance_ticker_cooldowns()
     reset_stocktwits_cooldown()
+    APICache.close()
     APICache.get_cache_path = old_get_path
-    APICache._initialized_paths.clear()
 
 def _http_error(code: int) -> HTTPError:
     return HTTPError("https://api.stocktwits.com/test", code, "test error", hdrs=None, fp=None)

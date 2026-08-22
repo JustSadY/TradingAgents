@@ -219,6 +219,5 @@ async def test_token_usage_breakdown_reports_an_unpriced_model(monkeypatch):
     assert result["breakdown"][0]["pricing_source"] == "unknown"
     assert result["breakdown"][0]["pricing_is_fallback"] is True
     assert result["breakdown"][0]["estimated_cost_usd"] is None
-    # Tokens still count; only the money is unknown.
     assert result["total_tokens"] == 150
-    assert result["total_cost_usd"] == 0.0
+    assert result["total_cost_usd"] is None

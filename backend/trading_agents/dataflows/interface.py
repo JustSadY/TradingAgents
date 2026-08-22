@@ -268,7 +268,10 @@ async def route_to_vendor(method: str, *args, **kwargs):
 
         try:
             if inspect.iscoroutinefunction(impl_func):
-                val = await impl_func(*args, **kwargs)
+                val = await asyncio.wait_for(
+                    impl_func(*args, **kwargs),
+                    timeout=_VENDOR_CALL_TIMEOUT,
+                )
             else:
                 val = await asyncio.wait_for(
                     asyncio.to_thread(impl_func, *args, **kwargs),
