@@ -1,10 +1,10 @@
 import React from 'react'
 import { BarChart2 } from 'lucide-react'
 import { useTranslation } from '../../contexts/LanguageContext'
-import { 
-  ResponsiveContainer, ComposedChart, CartesianGrid, XAxis, YAxis, Tooltip, 
-  Bar, Cell, Line, ReferenceLine, AreaChart, Area, LineChart 
+import {
+  ComposedChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar, Cell, Line, ReferenceLine, AreaChart, Area, LineChart
 } from 'recharts'
+import { ResponsiveChart } from '../ui/ResponsiveChart'
 
 const ALLOCATION_COLORS = ['#8b5cf6', '#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#14b8a6', '#6366f1']
 
@@ -34,7 +34,7 @@ export const CustomIndicatorPane: React.FC<CustomIndicatorPaneProps> = ({
         <div className="glass-panel rounded-2xl p-4">
           <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">{t('chart.rsi_pane')}</h4>
           <div className="h-40 w-full">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveChart width="100%" height="100%">
               <LineChart data={candles}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" vertical={false} />
                 <XAxis dataKey="time" hide />
@@ -47,7 +47,7 @@ export const CustomIndicatorPane: React.FC<CustomIndicatorPaneProps> = ({
                 <ReferenceLine y={30} stroke="#10b981" strokeDasharray="3 3" opacity={0.5} />
                 <Line type="monotone" dataKey="rsi" stroke="#3b82f6" dot={false} strokeWidth={2} isAnimationActive={false} />
               </LineChart>
-            </ResponsiveContainer>
+            </ResponsiveChart>
           </div>
         </div>
       )}
@@ -56,7 +56,7 @@ export const CustomIndicatorPane: React.FC<CustomIndicatorPaneProps> = ({
         <div className="glass-panel rounded-2xl p-4">
           <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">MACD (12, 26, 9)</h4>
           <div className="h-40 w-full">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveChart width="100%" height="100%">
               <ComposedChart data={candles}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" vertical={false} />
                 <XAxis dataKey="time" hide />
@@ -73,7 +73,7 @@ export const CustomIndicatorPane: React.FC<CustomIndicatorPaneProps> = ({
                 <Line type="monotone" dataKey="macd_line" stroke="#f59e0b" dot={false} strokeWidth={1.5} isAnimationActive={false} />
                 <Line type="monotone" dataKey="macd_signal" stroke="#3b82f6" dot={false} strokeWidth={1.5} isAnimationActive={false} />
               </ComposedChart>
-            </ResponsiveContainer>
+            </ResponsiveChart>
           </div>
         </div>
       )}
@@ -82,7 +82,7 @@ export const CustomIndicatorPane: React.FC<CustomIndicatorPaneProps> = ({
         <div className="glass-panel rounded-2xl p-4">
           <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">{t('chart.sentiment_pane')}</h4>
           <div className="h-40 w-full">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveChart width="100%" height="100%">
               <AreaChart data={sentimentChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" vertical={false} />
                 <XAxis dataKey="time" hide />
@@ -106,7 +106,7 @@ export const CustomIndicatorPane: React.FC<CustomIndicatorPaneProps> = ({
                   </linearGradient>
                 </defs>
               </AreaChart>
-            </ResponsiveContainer>
+            </ResponsiveChart>
           </div>
         </div>
       )}
@@ -118,7 +118,7 @@ export const CustomIndicatorPane: React.FC<CustomIndicatorPaneProps> = ({
             <span className="text-[9px] font-mono text-slate-600 truncate max-w-[50%]">{ci.formula}</span>
           </div>
           <div className="h-40 w-full">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveChart width="100%" height="100%">
               <LineChart data={ci.data}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" vertical={false} />
                 <XAxis dataKey="time" hide />
@@ -129,7 +129,7 @@ export const CustomIndicatorPane: React.FC<CustomIndicatorPaneProps> = ({
                 />
                 <Line type="monotone" dataKey="value" stroke={ALLOCATION_COLORS[i % ALLOCATION_COLORS.length]} dot={false} strokeWidth={2} isAnimationActive={false} />
               </LineChart>
-            </ResponsiveContainer>
+            </ResponsiveChart>
           </div>
         </div>
       ))}
@@ -143,7 +143,7 @@ export const CustomIndicatorPane: React.FC<CustomIndicatorPaneProps> = ({
             <span className="text-[9px] font-mono text-slate-500">{userIndicatorLabel}</span>
           </div>
           <div className="h-40 w-full">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveChart width="100%" height="100%">
               <LineChart data={userIndicatorData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" vertical={false} />
                 <XAxis dataKey="time" hide />
@@ -154,7 +154,7 @@ export const CustomIndicatorPane: React.FC<CustomIndicatorPaneProps> = ({
                 />
                 <Line type="monotone" dataKey="value" stroke="#8b5cf6" dot={false} strokeWidth={2} isAnimationActive={false} />
               </LineChart>
-            </ResponsiveContainer>
+            </ResponsiveChart>
           </div>
         </div>
       )}

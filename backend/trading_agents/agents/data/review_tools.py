@@ -25,6 +25,7 @@ async def get_past_performance_data(ticker: str, curr_date: str | None = None) -
 
     try:
         from backend.core.database import AsyncSessionLocal
+        from backend.core.rls_context import set_user_background_context
         from backend.repositories.analysis import list_historical_analyses
         from backend.trading_agents.agents.data.chart_tools import active_run_context
 
@@ -37,6 +38,9 @@ async def get_past_performance_data(ticker: str, curr_date: str | None = None) -
         scope_user = type("_RunUser", (), {"id": run_user_id, "is_admin": False})()
 
         async with AsyncSessionLocal() as db:
+            # The ORM filter alone is not enough: row-level security also needs
+            # the tenant context, or the query returns nothing at all.
+            await set_user_background_context(db, run_user_id)
             past_analyses = await list_historical_analyses(
                 db, user=scope_user, ticker=ticker, before_trade_date=curr_date, limit=1
             )

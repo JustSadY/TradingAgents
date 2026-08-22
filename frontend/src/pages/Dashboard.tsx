@@ -6,8 +6,9 @@ import { Activity, Sparkles, Loader2, RefreshCw, Newspaper } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import {
-  ResponsiveContainer, PieChart, Pie, Cell, Legend, Tooltip
+  PieChart, Pie, Cell, Legend, Tooltip
 } from 'recharts'
+import { ResponsiveChart } from '../components/ui/ResponsiveChart'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { useNewsFeed } from '../hooks/useNewsFeed'
 import { PortfolioOverview } from '../components/dashboard/PortfolioOverview'
@@ -134,7 +135,7 @@ export default function Dashboard() {
           <h3 className="text-xs font-bold text-white uppercase tracking-widest mb-6">{t('dashboard.asset_allocation')}</h3>
           <div className="h-64 w-full">
             <ErrorBoundary name="Allocation Chart">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveChart width="100%" height="100%">
                 <PieChart>
                     <Pie
                     data={allocationData}
@@ -154,7 +155,7 @@ export default function Dashboard() {
                     />
                     <Legend verticalAlign="middle" align="right" layout="vertical" iconType="circle" />
                 </PieChart>
-                </ResponsiveContainer>
+                </ResponsiveChart>
             </ErrorBoundary>
           </div>
         </div>

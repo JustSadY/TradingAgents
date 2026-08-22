@@ -3,6 +3,7 @@ import { screen, waitFor } from '@testing-library/react'
 import { renderWithQuery } from '../../test/renderWithQuery'
 import userEvent from '@testing-library/user-event'
 import { CurrencyProvider, useCurrency, CURRENCIES } from '../CurrencyContext'
+import { AuthProvider } from '../AuthContext'
 import type { ReactNode } from 'react'
 
 const mockFxRates = vi.hoisted((): Record<string, number | null> => ({
@@ -48,16 +49,26 @@ function TestConsumer() {
 }
 
 function renderWithCurrency(children: ReactNode) {
-  return renderWithQuery(<CurrencyProvider>{children}</CurrencyProvider>)
+  // The FX query is only enabled for a signed-in user, so seed the access token
+  // AuthContext reads (sessionStorage — never localStorage) before mounting.
+  const payload = { sub: 'testuser', role: 'user', exp: Math.floor(Date.now() / 1000) + 3600 }
+  sessionStorage.setItem('ta_access', `header.${btoa(JSON.stringify(payload))}.signature`)
+  return renderWithQuery(
+    <AuthProvider>
+      <CurrencyProvider>{children}</CurrencyProvider>
+    </AuthProvider>
+  )
 }
 
 beforeEach(() => {
   localStorage.clear()
+  sessionStorage.clear()
   vi.clearAllMocks()
 })
 
 afterEach(() => {
   localStorage.clear()
+  sessionStorage.clear()
 })
 
 describe('CurrencyContext', () => {

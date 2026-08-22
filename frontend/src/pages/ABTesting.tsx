@@ -1,9 +1,9 @@
 import { useAnalysisGetAbComparison } from '../api/generated/analysis/analysis'
 import { GitCompare, Loader2, DollarSign, Clock, Award, Zap, BarChart2, TrendingUp } from 'lucide-react'
 import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
-  Tooltip, Legend, CartesianGrid
+  BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid
 } from 'recharts'
+import { ResponsiveChart } from '../components/ui/ResponsiveChart'
 import { useTranslation } from '../contexts/LanguageContext'
 
 interface ABMetric {
@@ -148,7 +148,7 @@ export default function ABTesting() {
         <div className="glass-panel rounded-2xl p-5 space-y-4">
           <h4 className="text-xs font-bold text-violet-400 uppercase tracking-widest">{t('ab_testing.cost_comparison')}</h4>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveChart width="100%" height="100%">
               <BarChart data={data}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" />
                 <XAxis dataKey="preset_name" stroke="#9ca3af" tick={{ fontSize: 9 }} tickLine={false} />
@@ -157,7 +157,7 @@ export default function ABTesting() {
                 <Legend wrapperStyle={{ fontSize: 10 }} />
                 <Bar name="Avg Cost (USD)" dataKey="avg_cost_usd" fill="#10b981" radius={[4, 4, 0, 0]} />
               </BarChart>
-            </ResponsiveContainer>
+            </ResponsiveChart>
           </div>
         </div>
 
@@ -165,7 +165,7 @@ export default function ABTesting() {
         <div className="glass-panel rounded-2xl p-5 space-y-4">
           <h4 className="text-xs font-bold text-violet-400 uppercase tracking-widest">{t('ab_testing.speed_comparison')}</h4>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveChart width="100%" height="100%">
               <BarChart data={data}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" />
                 <XAxis dataKey="preset_name" stroke="#9ca3af" tick={{ fontSize: 9 }} tickLine={false} />
@@ -174,7 +174,7 @@ export default function ABTesting() {
                 <Legend wrapperStyle={{ fontSize: 10 }} />
                 <Bar name="Avg Duration (seconds)" dataKey="avg_duration" fill="#6366f1" radius={[4, 4, 0, 0]} />
               </BarChart>
-            </ResponsiveContainer>
+            </ResponsiveChart>
           </div>
         </div>
 
@@ -182,7 +182,7 @@ export default function ABTesting() {
         <div className="glass-panel rounded-2xl p-5 space-y-4">
           <h4 className="text-xs font-bold text-amber-400 uppercase tracking-widest">{t('ab_testing.alpha_comparison')}</h4>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveChart width="100%" height="100%">
               <BarChart data={data}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" />
                 <XAxis dataKey="preset_name" stroke="#9ca3af" tick={{ fontSize: 9 }} tickLine={false} />
@@ -191,7 +191,7 @@ export default function ABTesting() {
                 <Legend wrapperStyle={{ fontSize: 10 }} />
                 <Bar name="Avg Realized Alpha (%)" dataKey="avg_alpha_last_50" fill="#3b82f6" radius={[4, 4, 0, 0]} />
               </BarChart>
-            </ResponsiveContainer>
+            </ResponsiveChart>
           </div>
         </div>
 
@@ -199,7 +199,7 @@ export default function ABTesting() {
         <div className="glass-panel rounded-2xl p-5 space-y-4">
           <h4 className="text-xs font-bold text-amber-400 uppercase tracking-widest">{t('ab_testing.win_rate_comparison')}</h4>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveChart width="100%" height="100%">
               <BarChart data={data}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" />
                 <XAxis dataKey="preset_name" stroke="#9ca3af" tick={{ fontSize: 9 }} tickLine={false} />
@@ -208,7 +208,7 @@ export default function ABTesting() {
                 <Legend wrapperStyle={{ fontSize: 10 }} />
                 <Bar name="Win Rate Last 50 (%)" dataKey="win_rate_last_50" fill="#f59e0b" radius={[4, 4, 0, 0]} />
               </BarChart>
-            </ResponsiveContainer>
+            </ResponsiveChart>
           </div>
         </div>
       </div>

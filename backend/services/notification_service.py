@@ -39,9 +39,13 @@ async def _log_delivery(
     """Write a delivery record. Opens its own session to avoid conflicts."""
     try:
         from backend.core.database import AsyncSessionLocal
+        from backend.core.rls_context import set_user_background_context
         from backend.models.webhook_delivery import WebhookDelivery
 
         async with AsyncSessionLocal() as db:
+            # Row-level security rejects the insert outright without this, and
+            # the surrounding except swallows it — no delivery is ever recorded.
+            await set_user_background_context(db, user_id)
             db.add(
                 WebhookDelivery(
                     user_id=user_id,

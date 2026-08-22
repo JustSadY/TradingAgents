@@ -204,7 +204,13 @@ function RunTab() {
           final_decision: a.final_decision || '',
         })
         setDetail(a)
-      }).catch(e => console.error('Failed to load latest analysis', e))
+      }).catch(e => {
+        // 404 is the documented "this account has no completed analysis yet"
+        // answer, not a failure. Logging it made every fresh account open the
+        // page to a console error.
+        if ((e as { response?: { status?: number } })?.response?.status === 404) return
+        console.error('Failed to load latest analysis', e)
+      })
     }
   }, [])
 

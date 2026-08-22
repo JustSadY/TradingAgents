@@ -6,6 +6,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.database import AsyncSessionLocal
+from backend.core.rls_context import set_user_background_context
 from backend.models.portfolio_analysis import MultiTickerAnalysis
 from backend.models.settings import AppSettings
 
@@ -115,6 +116,11 @@ async def run_portfolio_analysis(
             async with AsyncSessionLocal() as t_db:
                 import uuid
 
+                if user is not None:
+                    # Each ticker gets its own session, so each one also needs
+                    # the owner's tenant context before it touches any
+                    # user-scoped table.
+                    await set_user_background_context(t_db, user.id)
                 ticker_task_id = str(uuid.uuid4())
                 emitter = AnalysisEmitter(ticker_task_id)
                 _, row = await run_individual_analysis(

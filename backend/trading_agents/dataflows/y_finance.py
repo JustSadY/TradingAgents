@@ -48,16 +48,25 @@ def get_yfin_data_online(
     end_date: Annotated[str, "End date in yyyy-mm-dd format"],
 ):
     datetime.strptime(start_date, "%Y-%m-%d")
-    datetime.strptime(end_date, "%Y-%m-%d")
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+    # Yahoo treats `end` as exclusive while every caller — and the Alpha Vantage
+    # implementation of the same vendor method — means it inclusively. Without
+    # the extra day the trade date's own bar is missing from every indicator,
+    # and a single-day request (start == end) returns nothing at all, which
+    # yfinance reports as "possibly delisted".
+    exclusive_end = (end_dt + timedelta(days=1)).strftime("%Y-%m-%d")
     ticker = yf.Ticker(symbol.upper())
     data = yf_retry(
-        lambda: ticker.history(start=start_date, end=end_date, raise_errors=True),
+        lambda: ticker.history(start=start_date, end=exclusive_end, raise_errors=True),
         ticker=symbol,
     )
     if data.empty:
         return f"No data found for symbol '{symbol}' between {start_date} and {end_date}"
     if data.index.tz is not None:
         data.index = data.index.tz_localize(None)
+    data = data[data.index < end_dt + timedelta(days=1)]
+    if data.empty:
+        return f"No data found for symbol '{symbol}' between {start_date} and {end_date}"
     numeric_columns = ["Open", "High", "Low", "Close", "Adj Close"]
     for col in numeric_columns:
         if col in data.columns:

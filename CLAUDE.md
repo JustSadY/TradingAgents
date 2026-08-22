@@ -131,6 +131,24 @@ policy, as `20260818_0027` (`optimization_runs`) does — otherwise the table is
 readable across tenants despite having a `user_id`, and ordinary tests on
 SQLite will not notice.
 
+A migration that *rewrites* existing policies needs table ownership, which the
+runtime role deliberately does not have. Those revisions only apply through the
+deploy's `MIGRATION_DATABASE_URL` (see `deploy/update.sh`); a development
+instance pointed at a role-split database cannot self-upgrade past them.
+
+### Every session opened outside a request needs an RLS context
+
+`AsyncSessionLocal()` starts with no `app.*` settings, and the tenant policy
+denies everything in that state — reads come back empty and writes raise
+`InsufficientPrivilegeError`. Any background/agent/worker session must call
+`set_user_background_context` (owner known) or open
+`trusted_background_session` with an audited capability (cross-tenant or
+ownerless rows) before touching a `user_id` table. SQLite has no RLS, so the
+whole test suite passes while the same code fails in production. Caches and
+other best-effort persistence should additionally swallow their own failures:
+an analyst whose report is already written must not lose it to a failed cache
+write.
+
 ### LangGraph checkpoints
 
 LangGraph checkpoints require PostgreSQL. `backend/trading_agents/graph/checkpointer.py` uses `PostgresSaver` / `AsyncPostgresSaver`; the old SQLite checkpoint fallback and file-import path are gone.

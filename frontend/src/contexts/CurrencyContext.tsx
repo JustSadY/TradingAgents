@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
 import { useMarketGetFxRates } from '../api/generated/market/market'
+import { useAuth } from './AuthContext'
 
 const STORAGE_KEY = 'ta_currency'
 
@@ -36,12 +37,20 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   const [currency, _setCurrency] = useState<Currency>(
     () => (localStorage.getItem(STORAGE_KEY) as Currency) || 'USD'
   )
-  const ratesQuery = useMarketGetFxRates()
+  // `/api/market/fx-rates` requires a signed-in user with a page grant. This
+  // provider wraps the whole app including the login screen, so an ungated
+  // query fired on every visit to /login and answered 401 — noise in the
+  // console, and a 401 that made the axios interceptor start a refresh of its
+  // own while the session bootstrap was still running.
+  const { isAuthenticated } = useAuth()
+  const ratesQuery = useMarketGetFxRates({ query: { enabled: isAuthenticated } })
   // Fall back to USD-only so a failed FX fetch renders unconverted USD rather
   // than multiplying by an undefined rate.
   const rates = (ratesQuery.data ?? { USD: 1 }) as Record<string, number | null>
-  const loadingRates = ratesQuery.isFetching
-  const fetchRates = useCallback(() => { ratesQuery.refetch() }, [ratesQuery])
+  const loadingRates = isAuthenticated && ratesQuery.isFetching
+  const fetchRates = useCallback(() => {
+    if (isAuthenticated) ratesQuery.refetch()
+  }, [isAuthenticated, ratesQuery])
 
   const setCurrency = useCallback((c: Currency) => {
     localStorage.setItem(STORAGE_KEY, c)

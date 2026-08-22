@@ -3,7 +3,10 @@ import { useAnalysisGetPerformance, useAnalysisListAnalysis, useAnalysisGetPerfo
 import { useTradingGetPortfolioStats } from '../api/generated/trading/trading'
 import { useAnalyticsGetTokenUsage } from '../api/generated/analytics/analytics'
 import { BarChart2, TrendingUp, TrendingDown, Target, Search, Activity, Trophy, Skull, ShieldAlert, Zap, DollarSign } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts'
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, Cell, PieChart, Pie, Legend
+} from 'recharts'
+import { ResponsiveChart } from '../components/ui/ResponsiveChart'
 import { useTranslation } from '../contexts/LanguageContext'
 import { signalTone, TONE_TEXT_CLASS } from '../utils/signalTone'
 
@@ -195,7 +198,7 @@ export default function Performance() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="glass-panel rounded-2xl p-5">
                 <h3 className="text-xs font-display font-semibold text-slate-200 mb-4">{t('performance.chart_win_rate_title')}</h3>
-                <ResponsiveContainer width="100%" height={200}>
+                <ResponsiveChart width="100%" height={200}>
                   <BarChart data={bySignalData}>
                     <XAxis dataKey="signal" stroke="#6b7280" tick={{ fontSize: 9 }} tickLine={false} />
                     <YAxis stroke="#6b7280" tick={{ fontSize: 9 }} domain={[0, 100]} tickLine={false} />
@@ -206,11 +209,11 @@ export default function Performance() {
                       ))}
                     </Bar>
                   </BarChart>
-                </ResponsiveContainer>
+                </ResponsiveChart>
               </div>
               <div className="glass-panel rounded-2xl p-5">
                 <h3 className="text-xs font-display font-semibold text-slate-200 mb-4">{t('performance.chart_avg_return_title')}</h3>
-                <ResponsiveContainer width="100%" height={200}>
+                <ResponsiveChart width="100%" height={200}>
                   <BarChart data={bySignalData}>
                     <XAxis dataKey="signal" stroke="#6b7280" tick={{ fontSize: 9 }} tickLine={false} />
                     <YAxis stroke="#6b7280" tick={{ fontSize: 9 }} tickLine={false} />
@@ -221,7 +224,7 @@ export default function Performance() {
                       ))}
                     </Bar>
                   </BarChart>
-                </ResponsiveContainer>
+                </ResponsiveChart>
               </div>
             </div>
           )}
@@ -356,7 +359,7 @@ export default function Performance() {
                 <div>
                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">{t('performance.cost_by_provider')}</p>
                   <div className="h-44">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveChart width="100%" height="100%">
                       <PieChart>
                         <Pie
                           data={tokenUsage.breakdown.map(b => ({ name: b.provider, value: b.estimated_cost_usd }))}
@@ -376,7 +379,7 @@ export default function Performance() {
                         />
                         <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} />
                       </PieChart>
-                    </ResponsiveContainer>
+                    </ResponsiveChart>
                   </div>
                 </div>
               )}
@@ -386,7 +389,7 @@ export default function Performance() {
                 <div>
                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">{t('performance.daily_token_usage')}</p>
                   <div className="h-44">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveChart width="100%" height="100%">
                       <BarChart data={tokenUsage.daily} barCategoryGap="30%">
                         <XAxis dataKey="day" tick={{ fontSize: 8, fill: '#64748b' }} tickLine={false} axisLine={false}
                           tickFormatter={d => d.slice(5)} interval="preserveStartEnd" />
@@ -399,7 +402,7 @@ export default function Performance() {
                         <Bar dataKey="tokens_in" fill="#38bdf8" stackId="a" radius={[0, 0, 0, 0]} />
                         <Bar dataKey="tokens_out" fill="#8b5cf6" stackId="a" radius={[3, 3, 0, 0]} />
                       </BarChart>
-                    </ResponsiveContainer>
+                    </ResponsiveChart>
                   </div>
                 </div>
               )}

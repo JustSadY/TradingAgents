@@ -139,7 +139,10 @@ async def get_vision_chart_analysis(
         base64_image = base64.b64encode(buf.read()).decode("utf-8")
 
         llm = ctx["graph"].thinking_llm
-        model_name = getattr(llm, "model_name", getattr(llm, "model", "")).lower()
+        # A client may expose `model_name` and leave it None (the failover
+        # wrapper does), so fall through on a falsy value rather than only on a
+        # missing attribute — `None.lower()` used to abort the whole tool.
+        model_name = str(getattr(llm, "model_name", None) or getattr(llm, "model", None) or "").lower()
 
         non_multimodal = ["nemotron", "llama-3", "mixtral", "deepseek-v3", "o1-preview", "o1-mini"]
         if any(nm in model_name for nm in non_multimodal) and "vision" not in model_name:

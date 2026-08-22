@@ -154,7 +154,7 @@ class DatabaseLogHandler(logging.Handler):
         return None
 
     async def _worker(self):
-        from backend.core.database import AsyncSessionLocal
+        from backend.core.rls_context import BackgroundCapability, trusted_background_session
         from backend.models.log import SystemLog
 
         batch: list[dict] = []
@@ -165,7 +165,11 @@ class DatabaseLogHandler(logging.Handler):
             items = batch.copy()
             batch.clear()
             try:
-                async with AsyncSessionLocal() as db:
+                # A batch mixes records from several tenants with records that
+                # belong to none, so no single tenant context can insert it.
+                # Row-level security rejects an unscoped session outright, which
+                # silently emptied the System Logs page on PostgreSQL.
+                async with trusted_background_session(BackgroundCapability.SYSTEM_LOGGING) as db:
                     for entry in items:
                         db.add(
                             SystemLog(

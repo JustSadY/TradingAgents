@@ -32,9 +32,14 @@ async def get_portfolio_context(user_id: int | None, *, as_of: str | None = None
             return ""
     try:
         from backend.core.database import AsyncSessionLocal
+        from backend.core.rls_context import set_user_background_context
         from backend.repositories.portfolio import get_simulation_portfolio
 
         async with AsyncSessionLocal() as db:
+            # Without a tenant context PostgreSQL row-level security hides the
+            # owner's own portfolio, and the decision agents silently size
+            # against no account state at all.
+            await set_user_background_context(db, user_id)
             portfolio = await get_simulation_portfolio(db, user_id=user_id)
             if not portfolio:
                 return ""

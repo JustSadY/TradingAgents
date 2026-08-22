@@ -4,7 +4,10 @@ import {
   Play, BarChart2, TrendingUp, TrendingDown, Target, Search,
   Landmark, AlertCircle, Sparkles, Loader2
 } from 'lucide-react'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import {
+  AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid
+} from 'recharts'
+import { ResponsiveChart } from '../components/ui/ResponsiveChart'
 import { useTranslation } from '../contexts/LanguageContext'
 import OptimizationPanel from '../components/backtest/OptimizationPanel'
 
@@ -236,7 +239,7 @@ export default function Backtest() {
           <div className="glass-panel rounded-2xl p-5 space-y-4">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">{t('backtest.curve_title')}</h3>
             <div className="h-72 w-full">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveChart width="100%" height="100%">
                 <AreaChart data={results.equity_curve}>
                   <defs>
                     <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
@@ -250,7 +253,7 @@ export default function Backtest() {
                   <Tooltip contentStyle={{ background: '#111827', borderColor: 'rgba(255,255,255,0.06)', borderRadius: 12, fontSize: 10 }} labelStyle={{ color: '#fff', fontWeight: 'bold' }} />
                   <Area type="monotone" dataKey="value" stroke="#8b5cf6" strokeWidth={2} fillOpacity={1} fill="url(#colorValue)" name="Account Value" />
                 </AreaChart>
-              </ResponsiveContainer>
+              </ResponsiveChart>
             </div>
           </div>
 

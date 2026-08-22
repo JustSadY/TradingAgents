@@ -2,6 +2,13 @@ from __future__ import annotations
 
 from starlette.middleware.base import BaseHTTPMiddleware
 
+# `frontend/index.html` links the Inter/Outfit/JetBrains Mono webfonts. Google
+# serves the @font-face stylesheet from one host and the font files it points
+# at from another, so both have to be allowed or the browser blocks the
+# stylesheet outright and the app renders in the fallback system font.
+_GOOGLE_FONTS_CSS = "https://fonts.googleapis.com"
+_GOOGLE_FONTS_FILES = "https://fonts.gstatic.com"
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, *, production: bool = False):
@@ -17,8 +24,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault(
             "Content-Security-Policy",
             "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; "
-            "img-src 'self' data: https:; font-src 'self' data:; "
-            "style-src 'self' 'unsafe-inline'; script-src 'self'; "
+            f"img-src 'self' data: https:; font-src 'self' data: {_GOOGLE_FONTS_FILES}; "
+            f"style-src 'self' 'unsafe-inline' {_GOOGLE_FONTS_CSS}; script-src 'self'; "
             "connect-src 'self' ws: wss: https:",
         )
         if self.production and request.url.scheme == "https":

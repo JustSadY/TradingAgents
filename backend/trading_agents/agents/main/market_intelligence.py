@@ -75,13 +75,27 @@ def _group_report_keys(analyst_keys: list[str] | set[str]) -> tuple[str, ...]:
 
 
 def _fb_analyst(report_key: str):
+    """Per-analyst fallback report for a node that raised.
+
+    Only the exception *kind* reaches the report, for the same reason
+    ``market_intelligence_failure_update`` keeps its text generic: reports are
+    user-visible and can be published through a share link, while exceptions
+    carry request metadata — a database error arrives here carrying the whole
+    failing statement, its bound parameters, and the report text inside them.
+    ``guard_node`` has already logged the full exception for whoever is
+    debugging.
+    """
+
     def fb(state, exc):
         from langchain_core.messages import AIMessage
 
         analyst = report_key.replace("_report", "").title()
         return {
             "messages": [AIMessage(content="")],
-            report_key: f"{analyst} analysis unavailable (agent error: {exc}).",
+            report_key: (
+                f"⚠️ {analyst} analysis unavailable: this analyst failed to run "
+                f"({type(exc).__name__}). No conclusion was inferred."
+            ),
         }
 
     return fb

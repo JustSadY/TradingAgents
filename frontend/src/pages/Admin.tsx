@@ -35,7 +35,10 @@ import { ErrorBoundary } from '../components/ErrorBoundary'
 import Settings from './Settings'
 import ToolSettingsPanel from '../components/settings/ToolSettingsPanel'
 import { useMeta } from '../hooks/useMeta'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, Cell
+} from 'recharts'
+import { ResponsiveChart } from '../components/ui/ResponsiveChart'
 
 interface UserRecord {
   id: number
@@ -893,7 +896,7 @@ export default function Admin() {
                   <div>
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">{t('admin.runs_by_status')}</p>
                     <div className="h-36">
-                      <ResponsiveContainer width="100%" height="100%">
+                      <ResponsiveChart width="100%" height="100%">
                         <BarChart data={Object.entries(sysMetrics.analysis_runs).map(([k, v]) => ({ status: k, count: v }))} barCategoryGap="40%">
                           <XAxis dataKey="status" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} />
                           <YAxis tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={false} />
@@ -904,7 +907,7 @@ export default function Admin() {
                             ))}
                           </Bar>
                         </BarChart>
-                      </ResponsiveContainer>
+                      </ResponsiveChart>
                     </div>
                   </div>
                 )}

@@ -23,15 +23,34 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
 from backend.core.database import AsyncSessionLocal
+from backend.core.rls_context import set_user_background_context
 
 _logger = logging.getLogger(__name__)
 
 _CACHE_STALE_DAYS = 7
+
+@asynccontextmanager
+async def _cache_session(user_id: int):
+    """Open a cache session already scoped to the run's owner.
+
+    PostgreSQL row-level security evaluates every statement against the
+    ``app.*`` settings of the current transaction. A session opened without a
+    context therefore turns each lookup into a silent miss and each insert into
+    an ``InsufficientPrivilegeError`` that fails the whole analyst node. Tests
+    build SQLite from ORM metadata and have no RLS, which is why this only ever
+    surfaced against PostgreSQL.
+    """
+
+    async with AsyncSessionLocal() as db:
+        await set_user_background_context(db, user_id)
+        yield db
+
 
 def _usable_report(value: object) -> str | None:
     """Return a non-blank report, or ``None`` for an invalid cache entry.
@@ -148,6 +167,28 @@ async def check_analyst_cache(
     *,
     fallback_to_stale: bool = True,
 ) -> str | None:
+    """Look the report up, treating any lookup failure as a cache miss.
+
+    A miss costs an LLM call; a raised exception costs the analyst its report,
+    because the node reports the exception in place of one.
+    """
+
+    try:
+        return await _lookup_analyst_cache(
+            analyst_key, ticker, data_hash, fallback_to_stale=fallback_to_stale
+        )
+    except Exception as exc:  # noqa: BLE001 — caching is an optimisation, not the result
+        _logger.warning("Failed to read the %s cache for %s: %s", analyst_key, ticker, exc)
+        return None
+
+
+async def _lookup_analyst_cache(
+    analyst_key: str,
+    ticker: str,
+    data_hash: str,
+    *,
+    fallback_to_stale: bool = True,
+) -> str | None:
     """Return the cached report text if a matching entry exists.
 
     When *fallback_to_stale* is ``True`` (default) and no exact hash match is
@@ -159,6 +200,10 @@ async def check_analyst_cache(
     from backend.models.news_cache import AnalystReportCache, NewsAnalysisCache
 
     user_id = _current_user_id()
+    if user_id is None:
+        # An ownerless run has no tenant to scope the cache to, and rows with a
+        # NULL owner are unreachable under the tenant policy anyway.
+        return None
     trade_date = _current_trade_date()
     temporal_mode = _current_temporal_mode()
     if temporal_mode == "historical":
@@ -168,9 +213,9 @@ async def check_analyst_cache(
         fallback_to_stale = False
 
     def _user_filter(col):
-        return col.is_(None) if user_id is None else col == user_id
+        return col == user_id
 
-    async with AsyncSessionLocal() as db:
+    async with _cache_session(user_id) as db:
         if analyst_key == "news":
             stmt = (
                 select(NewsAnalysisCache)
@@ -268,20 +313,55 @@ async def check_analyst_cache(
 
 async def store_analyst_cache(analyst_key: str, ticker: str, data_hash: str, report_text: str) -> None:
     """Persist a new cache entry so future runs with the same data can skip
-    the LLM call."""
-    from backend.models.news_cache import AnalystReportCache, NewsAnalysisCache
+    the LLM call.
 
+    Memoisation only: the report has already been produced by the time this
+    runs, so a persistence failure is logged and swallowed. Letting it
+    propagate failed the analyst node *after* a good report existed, and the
+    user get the raised database error as the report body.
+    """
     report = _usable_report(report_text)
     if report is None:
         _logger.warning("Not caching blank %s report for %s.", analyst_key, ticker)
         return
 
     user_id = _current_user_id()
+    if user_id is None:
+        _logger.debug("Skipping %s cache write for %s: the run has no owner.", analyst_key, ticker)
+        return
     trade_date = _current_trade_date()
     temporal_mode = _current_temporal_mode()
     config_fingerprint = _compute_config_fingerprint(analyst_key)
 
-    async with AsyncSessionLocal() as db:
+    try:
+        await _write_cache_entry(
+            analyst_key,
+            ticker,
+            data_hash,
+            report,
+            user_id=user_id,
+            trade_date=trade_date,
+            temporal_mode=temporal_mode,
+            config_fingerprint=config_fingerprint,
+        )
+    except Exception as exc:  # noqa: BLE001 — caching is an optimisation, not the result
+        _logger.warning("Failed to cache the %s report for %s: %s", analyst_key, ticker, exc)
+
+
+async def _write_cache_entry(
+    analyst_key: str,
+    ticker: str,
+    data_hash: str,
+    report: str,
+    *,
+    user_id: int,
+    trade_date: str | None,
+    temporal_mode: str,
+    config_fingerprint: str,
+) -> None:
+    from backend.models.news_cache import AnalystReportCache, NewsAnalysisCache
+
+    async with _cache_session(user_id) as db:
         if analyst_key == "news":
             entry = NewsAnalysisCache(
                 user_id=user_id,

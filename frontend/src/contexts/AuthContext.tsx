@@ -43,6 +43,7 @@ function activateUserScope(username: string) {
 }
 
 let _onForceLogout: (() => void) | null = null
+let _onSessionRestored: ((token: string) => boolean) | null = null
 
 /**
  * Generation counter for the current authentication attempt.
@@ -57,6 +58,46 @@ let _onForceLogout: (() => void) | null = null
  * in a second time worked only because by then both calls had settled.
  */
 let _authEpoch = 0
+
+/**
+ * The one in-flight `/auth/refresh` call, shared by every caller.
+ *
+ * Refresh tokens rotate, so two concurrent calls presenting the same cookie
+ * make the server issue two live tokens while only one can be the current one
+ * — and the browser keeps whichever `Set-Cookie` arrived last. When that was
+ * the superseded one, the next refresh looked like a replay and the server
+ * revoked the whole session, which is what made a second tab (or simply a
+ * page load whose first API call 401'd while the bootstrap refresh was still
+ * in flight) bounce back to the login screen. Bootstrap and the 401 retry
+ * queue therefore share a single promise instead of each firing their own.
+ */
+let _refreshPromise: Promise<string> | null = null
+
+function refreshAccessToken(): Promise<string> {
+  if (_refreshPromise) return _refreshPromise
+  const startEpoch = _authEpoch
+  _refreshPromise = axios
+    .post('/auth/refresh')
+    .then(res => {
+      const token = res.data?.access_token
+      if (typeof token !== 'string') throw new Error('No access token returned')
+      // A logout or a completed login during the round trip means this result
+      // belongs to an auth generation that no longer exists.
+      if (startEpoch !== _authEpoch) throw new Error('Session changed during refresh')
+      // Establish the restored session once, centrally. The fallback covers a
+      // refresh that resolves before the provider has registered its setter.
+      if (_onSessionRestored) {
+        if (!_onSessionRestored(token)) throw new Error('Refreshed token is not usable')
+      } else {
+        setAccessToken(token)
+      }
+      return token
+    })
+    .finally(() => {
+      _refreshPromise = null
+    })
+  return _refreshPromise
+}
 
 interface JwtPayload {
   sub: string
@@ -132,12 +173,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccessToken(null)
 
       // Restore a server-side session using the HttpOnly refresh cookie.
-      const res = await axios.post('/auth/refresh')
-      const token = res.data?.access_token
-      if (epoch !== _authEpoch) return
-      if (typeof token !== 'string' || !applyAccessToken(token)) {
-        clearLocalAuthState()
-      }
+      // `refreshAccessToken` applies the token itself, so a second caller
+      // (StrictMode's repeated effect, or a 401 from a query that raced this
+      // bootstrap) reuses the same round trip rather than rotating again.
+      await refreshAccessToken()
     } catch {
       // A failed restore says nothing about a session established after this
       // attempt started, so it must not tear one down.
@@ -186,9 +225,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     // Invalidate every in-flight init/refresh and TanStack request before the
     // next auth scope can mount queries using the same generated query keys.
+    // Bumping the epoch is enough: a refresh already in flight resolves into
+    // the epoch check in `refreshAccessToken` and is discarded there.
     _authEpoch += 1
-    _queue.forEach(({ reject }) => reject(new Error('Session ended')))
-    _queue = []
     clearLocalAuthState()
     // The server call is intentionally best-effort after local invalidation.
     void axios.post('/auth/logout').catch(() => {})
@@ -196,10 +235,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     _onForceLogout = clearLocalAuthState
+    _onSessionRestored = applyAccessToken
     return () => {
       if (_onForceLogout === clearLocalAuthState) _onForceLogout = null
+      if (_onSessionRestored === applyAccessToken) _onSessionRestored = null
     }
-  }, [clearLocalAuthState])
+  }, [clearLocalAuthState, applyAccessToken])
 
   const value = {
     user,
@@ -229,9 +270,6 @@ axios.interceptors.request.use(cfg => {
   return cfg
 })
 
-let _refreshing = false
-let _queue: Array<{ resolve: (token: string) => void; reject: (err: unknown) => void }> = []
-
 axios.interceptors.response.use(
   res => res,
   async err => {
@@ -252,38 +290,16 @@ axios.interceptors.response.use(
     original._retried = true
     original.headers = original.headers || {}
 
-    if (_refreshing) {
-      return new Promise((resolve, reject) => {
-        _queue.push({
-          resolve: (token: string) => {
-            original.headers.Authorization = `Bearer ${token}`
-            resolve(axios(original))
-          },
-          reject,
-        })
-      })
-    }
-
-    _refreshing = true
-    const refreshEpoch = _authEpoch
     try {
-      const res = await axios.post('/auth/refresh')
-      const newToken = res.data?.access_token
-      if (refreshEpoch !== _authEpoch) throw new Error('Session changed during refresh')
-      if (typeof newToken !== 'string') throw new Error('No access token returned')
-      setAccessToken(newToken)
-      _queue.forEach(({ resolve }) => resolve(newToken))
-      _queue = []
+      // Concurrent 401s all await the same round trip and then replay
+      // themselves with the token it produced.
+      const newToken = await refreshAccessToken()
       original.headers.Authorization = `Bearer ${newToken}`
       return axios(original)
-    } catch (refreshErr) {
-      _queue.forEach(({ reject }) => reject(refreshErr))
-      _queue = []
+    } catch {
       setAccessToken(null)
       _onForceLogout?.()
       throw err
-    } finally {
-      _refreshing = false
     }
   },
 )

@@ -108,6 +108,28 @@ class PineconeMemoryStore:
             _logger.warning("Pinecone query failed (namespace=%s): %s", namespace, exc)
             return []
 
+    @staticmethod
+    def _hit_field(hit: Any, *names: str) -> Any:
+        """First present value among *names* on a hit, dict or model alike.
+
+        The hosted-search wire format names these ``_id``/``_score``, but the
+        SDK model renames them (``_id`` is a private attribute in Python) and
+        exposes ``id``/``score`` instead. Reading only the wire names raised
+        AttributeError, and because memory is best-effort the whole query was
+        swallowed into an empty result — agent memory silently retrieved
+        nothing.
+        """
+
+        for name in names:
+            if isinstance(hit, dict):
+                if name in hit:
+                    return hit[name]
+            else:
+                value = getattr(hit, name, None)
+                if value is not None:
+                    return value
+        return None
+
     def _search_hosted(self, index, namespace, text, top_k, metadata_filter) -> list[MemoryHit]:
         query: dict[str, Any] = {"inputs": {"text": text}, "top_k": top_k}
         if metadata_filter:
@@ -117,8 +139,8 @@ class PineconeMemoryStore:
         out = []
         for h in hits:
             fields = h.get("fields", {}) if isinstance(h, dict) else getattr(h, "fields", {})
-            hid = h.get("_id") if isinstance(h, dict) else h._id
-            score = h.get("_score") if isinstance(h, dict) else h._score
+            hid = self._hit_field(h, "_id", "id", "id_")
+            score = self._hit_field(h, "_score", "score", "score_")
             text_val = fields.pop("text", "") if isinstance(fields, dict) else ""
             out.append(MemoryHit(id=hid, score=float(score or 0.0), text=text_val, metadata=dict(fields)))
         return out

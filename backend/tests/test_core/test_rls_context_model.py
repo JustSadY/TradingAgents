@@ -13,6 +13,7 @@ def test_background_capabilities_are_auditable_allowlist():
     assert {item.value for item in BackgroundCapability} == {
         "alert_checker", "alert_outbox", "performance_backfill", "position_monitor",
         "maintenance_cleanup", "startup_seed", "startup_cleanup", "cron_bootstrap", "alert_recovery",
+        "system_logging",
     }
 
 

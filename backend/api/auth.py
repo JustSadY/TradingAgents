@@ -142,7 +142,8 @@ async def refresh(
         _clear_refresh_cookie(response)
         raise HTTPException(status_code=401, detail=exc.detail) from None
 
-    _set_refresh_cookie(response, rotated_refresh_token)
+    if rotated_refresh_token is not None:
+        _set_refresh_cookie(response, rotated_refresh_token)
     return TokenResponse(
         access_token=create_access_token(
             user.username,

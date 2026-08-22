@@ -54,6 +54,8 @@ Login returns a short-lived access token and sets the refresh token in the HttpO
 
 Refresh-session creation, row locking, rotation, replay detection and revocation belong to the auth session service/repository layer rather than the router.
 
+A session holds exactly one live refresh token. Rotation happens only for the token the session currently considers current; a token presented again inside the grace window (a second tab, or a duplicated request) is answered with a fresh access token and **no** `Set-Cookie`, so concurrent callers cannot leave the browser holding a superseded token that the next refresh would reject as a replay. The browser-side counterpart is that bootstrap and the 401 retry path share a single in-flight `/auth/refresh` promise.
+
 Provider/API secrets stored in the application database use Fernet encryption. Runtime plaintext credential fallback is not supported.
 
 ## Database and migrations

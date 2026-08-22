@@ -79,7 +79,13 @@ async def _persist_revocation(db: AsyncSession, session, now: datetime) -> None:
     await db.commit()
 
 
-async def rotate_refresh_session(db: AsyncSession, raw_token: str) -> tuple[User, str]:
+async def rotate_refresh_session(db: AsyncSession, raw_token: str) -> tuple[User, str | None]:
+    """Exchange a refresh token, returning ``(user, rotated_token_or_None)``.
+
+    ``None`` means the presented token was already superseded inside the grace
+    window and the caller must leave the existing refresh cookie alone.
+    """
+
     payload, session_id, token_id = _decode_refresh(raw_token)
     await set_refresh_access_context(db, session_id=session_id)
     session = await get_refresh_session_for_update(db, session_id)
@@ -108,6 +114,17 @@ async def rotate_refresh_session(db: AsyncSession, raw_token: str) -> tuple[User
     if not user or not user.is_active or payload.get("ver", 0) != user.token_version:
         await _persist_revocation(db, session, now)
         raise AuthSessionError("Refresh token has been revoked")
+
+    if not valid_current:
+        # Grace-window presentation: another tab (or a duplicated request from
+        # this one) already rotated this exact token. Rotating a second time
+        # would put two live refresh tokens into circulation while only one can
+        # be `current`, and the browser keeps whichever Set-Cookie arrived last.
+        # Whenever that was the loser, the *next* refresh looked like a replay
+        # and revoked the whole session — the "log in two or three times" and
+        # "a new tab bounces me to /login" reports. Issuing only a new access
+        # token here keeps exactly one live refresh token per session.
+        return user, None
 
     rotated_token_id = new_token_id()
     session.previous_jti_hash = session.current_jti_hash

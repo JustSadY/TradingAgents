@@ -43,6 +43,7 @@ class BackgroundCapability(StrEnum):
     STARTUP_CLEANUP = "startup_cleanup"
     CRON_BOOTSTRAP = "cron_bootstrap"
     ALERT_RECOVERY = "alert_recovery"
+    SYSTEM_LOGGING = "system_logging"
 
 
 _CONTEXT_KEYS = (

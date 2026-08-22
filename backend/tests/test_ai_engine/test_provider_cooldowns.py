@@ -202,16 +202,51 @@ def test_direct_yfinance_stock_data_uses_typed_history_errors(monkeypatch):
 
     assert "# Stock data for AAPL" in result
     assert "2024-01-08" in result
+    # `end_date` is inclusive for callers — the trade date's own bar has to be
+    # in the result, and start == end has to return that one day. Yahoo's `end`
+    # is exclusive, so the request carries the day after.
     assert calls == [
         (
             "AAPL",
             {
                 "start": "2024-01-01",
-                "end": "2024-01-10",
+                "end": "2024-01-11",
                 "raise_errors": True,
             },
         )
     ]
+
+
+def test_direct_yfinance_stock_data_keeps_the_end_date_bar_and_nothing_later(monkeypatch):
+    import backend.trading_agents.dataflows.y_finance as y_finance
+
+    # The widened request can return the following session too; only the
+    # inclusive window may reach the caller.
+    index = pd.DatetimeIndex(["2024-01-10", "2024-01-11"], name="Date")
+    history = pd.DataFrame(
+        {
+            "Open": [100.0, 101.0],
+            "High": [102.0, 103.0],
+            "Low": [99.0, 100.0],
+            "Close": [101.0, 102.0],
+            "Volume": [1000, 1200],
+        },
+        index=index,
+    )
+
+    class _Ticker:
+        def __init__(self, symbol: str):
+            self.symbol = symbol
+
+        def history(self, **_kwargs):
+            return history
+
+    monkeypatch.setattr(y_finance.yf, "Ticker", _Ticker)
+
+    single_day = y_finance.get_yfin_data_online("AAPL", "2024-01-10", "2024-01-10")
+
+    assert "2024-01-10" in single_day
+    assert "2024-01-11" not in single_day
 
 @pytest.mark.asyncio
 async def test_unavailable_yfinance_ticker_falls_through_to_next_vendor():
