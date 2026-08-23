@@ -81,3 +81,49 @@ class TestDirectionalExitLevels:
         stop, target = _directional_exit_levels("short", 100.0, 105.0, 90.0)
         assert stop == 105.0
         assert target == 90.0
+
+
+class TestTargetAllocationRecovery:
+    """A Buy whose model omitted ``position_size_pct``.
+
+    The field is the sole sizing input, so an omission used to skip the order
+    with a message about the allocation being "missing or invalid" — which
+    reads as a portfolio problem rather than as the model having left out one
+    number it was asked for. ``suggested_capital`` states the same intent in a
+    different unit, and for an opening position the two are the same quantity.
+    """
+
+    @staticmethod
+    def _row(**decision):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(portfolio_decision_json=dict(decision))
+
+    def test_an_opening_position_is_sized_from_suggested_capital(self):
+        from backend.services.trading_orchestrator import _target_notional_from_suggested_capital
+
+        row = self._row(rating="Buy", position_size_pct=None, suggested_capital=70_000.0)
+
+        assert _target_notional_from_suggested_capital(row, ticker="NVDA", existing_notional=0.0) == 70_000.0
+
+    def test_an_existing_position_is_never_resized_from_suggested_capital(self):
+        """It is this order's notional, not the total to hold afterwards."""
+        from backend.services.trading_orchestrator import _target_notional_from_suggested_capital
+
+        row = self._row(rating="Buy", position_size_pct=None, suggested_capital=70_000.0)
+
+        assert _target_notional_from_suggested_capital(row, ticker="NVDA", existing_notional=1_000.0) is None
+
+    def test_no_recovery_without_a_usable_capital_figure(self):
+        from backend.services.trading_orchestrator import _target_notional_from_suggested_capital
+
+        for value in (None, 0.0, "n/a"):
+            row = self._row(rating="Buy", position_size_pct=None, suggested_capital=value)
+            assert _target_notional_from_suggested_capital(row, ticker="NVDA", existing_notional=0.0) is None
+
+    def test_a_present_percentage_still_wins(self):
+        from backend.services.trading_orchestrator import _pm_target_notional
+
+        row = self._row(rating="Buy", position_size_pct=12.5, suggested_capital=70_000.0)
+
+        assert _pm_target_notional(row, portfolio_equity=200_000.0) == 25_000.0

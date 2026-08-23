@@ -162,6 +162,32 @@ def _pm_suggested_order_notional(row) -> float | None:
     return max(0.0, value) if value is not None else None
 
 
+def _target_notional_from_suggested_capital(row, *, ticker: str, existing_notional: float) -> float | None:
+    """Recover a target allocation from ``suggested_capital`` when it is safe to.
+
+    ``position_size_pct`` is the total allocation *after* the trade, while
+    ``suggested_capital`` is the notional of this one order — different
+    quantities that coincide only when nothing is held yet. Converting outside
+    that case would turn an add into a reset, so this returns ``None`` instead.
+
+    A model that omits the percentage but states the capital has still said what
+    it wants; refusing the trade over the unit it chose loses the user a trade
+    the analysis recommended.
+    """
+    if existing_notional > 0:
+        return None
+    suggested = _pm_suggested_order_notional(row)
+    if suggested is None or suggested <= 0:
+        return None
+    _logger.warning(
+        "Auto-order for %s has no position_size_pct; sizing the opening position from "
+        "suggested_capital=%.2f instead. Hard risk caps still apply.",
+        ticker,
+        suggested,
+    )
+    return suggested
+
+
 async def _allocation_snapshot(db, *, portfolio) -> dict | None:
     """Read a side-effect-free current-equity snapshot for target allocation."""
     from backend.services.mock_trading_service import get_portfolio_with_live_prices
@@ -730,12 +756,6 @@ async def place_signal_order(
                 include_skip_result=include_skip_result,
             )
 
-        if "position_size_pct" not in pm_decision:
-            return _skipped_order(
-                reason_code="target_allocation_missing",
-                message="A new position needs a final target allocation.",
-                include_skip_result=include_skip_result,
-            )
         allocation_snapshot = broker_snapshot or await _allocation_snapshot(db, portfolio=portfolio)
         if allocation_snapshot is None:
             return _skipped_order(
@@ -744,11 +764,10 @@ async def place_signal_order(
                 include_skip_result=include_skip_result,
             )
         total_equity = _safe_float(allocation_snapshot.get("total_value"))
-        target_notional = _pm_target_notional(row, portfolio_equity=total_equity or 0.0)
-        if target_notional is None:
+        if total_equity is None or total_equity <= 0:
             return _skipped_order(
-                reason_code="target_allocation_missing",
-                message="The final target allocation is missing or invalid.",
+                reason_code="portfolio_equity_unavailable",
+                message="Current portfolio equity was unavailable, so the target allocation was not traded.",
                 include_skip_result=include_skip_result,
             )
         existing_notional = (
@@ -756,6 +775,27 @@ async def place_signal_order(
             if holding is not None and getattr(holding, "side", None) == "long"
             else 0.0
         )
+        target_notional = _pm_target_notional(row, portfolio_equity=total_equity)
+        if target_notional is None:
+            target_notional = _target_notional_from_suggested_capital(
+                row, ticker=ticker, existing_notional=existing_notional
+            )
+        if target_notional is None:
+            _logger.warning(
+                "Auto-order for %s skipped: the accepted decision carries no position_size_pct "
+                "(rating=%s, suggested_capital=%s). The model omitted the sole sizing input.",
+                ticker,
+                pm_decision.get("rating"),
+                pm_decision.get("suggested_capital"),
+            )
+            return _skipped_order(
+                reason_code="target_allocation_missing",
+                message=(
+                    "The analysis recommended a trade but gave no target allocation, "
+                    "so there was nothing to size the order from."
+                ),
+                include_skip_result=include_skip_result,
+            )
         target_addition = max(0.0, target_notional - existing_notional)
         if target_addition <= 0:
             return _skipped_order(
@@ -820,12 +860,6 @@ async def place_signal_order(
                 include_skip_result=include_skip_result,
             )
         if intent == "reduce_long":
-            if "position_size_pct" not in pm_decision:
-                return _skipped_order(
-                    reason_code="target_allocation_missing",
-                    message="Underweight needs a final target allocation before an order can be sent.",
-                    include_skip_result=include_skip_result,
-                )
             allocation_snapshot = broker_snapshot or await _allocation_snapshot(db, portfolio=portfolio)
             if allocation_snapshot is None:
                 return _skipped_order(
@@ -834,11 +868,25 @@ async def place_signal_order(
                     include_skip_result=include_skip_result,
                 )
             total_equity = _safe_float(allocation_snapshot.get("total_value"))
-            target_notional = _pm_target_notional(row, portfolio_equity=total_equity or 0.0)
+            if total_equity is None or total_equity <= 0:
+                return _skipped_order(
+                    reason_code="portfolio_equity_unavailable",
+                    message="Current portfolio equity was unavailable, so the target allocation was not traded.",
+                    include_skip_result=include_skip_result,
+                )
+            # suggested_capital cannot stand in here: it is this order's
+            # notional, while a reduction needs the target to remain *held*.
+            target_notional = _pm_target_notional(row, portfolio_equity=total_equity)
             if target_notional is None:
+                _logger.warning(
+                    "Auto-order for %s skipped: Underweight carries no position_size_pct.", ticker
+                )
                 return _skipped_order(
                     reason_code="target_allocation_missing",
-                    message="The final target allocation is missing or invalid.",
+                    message=(
+                        "The analysis recommended reducing the position but gave no target "
+                        "allocation, so there was nothing to size the reduction against."
+                    ),
                     include_skip_result=include_skip_result,
                 )
             current_notional = price * quantity

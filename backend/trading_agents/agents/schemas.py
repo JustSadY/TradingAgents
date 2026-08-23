@@ -1109,6 +1109,26 @@ class PortfolioDecision(BaseModel):
         description="Optional recommended holding period, e.g. '3-6 months'.",
     )
 
+    @model_validator(mode="after")
+    def _orders_must_carry_a_target_allocation(self):
+        """Reject a directional call the execution engine could not size.
+
+        The field description already says null is valid only for Hold, but a
+        description is not a constraint: a model that omits it produces a
+        schema-valid decision that the orchestrator then skips hours later with
+        a message about the allocation rather than about the omission. Raising
+        here routes it into the structured-output repair retry instead, which
+        re-prompts with this error.
+        """
+        if self.rating is not PortfolioRating.HOLD and self.position_size_pct is None:
+            raise ValueError(
+                f"position_size_pct is required for {self.rating.value} and may only be null for Hold: "
+                "it is the sole sizing input, so omitting it cancels the trade being recommended. "
+                "Use the intended total post-trade allocation as a percentage of portfolio equity, "
+                "or 0 for a full exit."
+            )
+        return self
+
 def render_pm_decision(decision: PortfolioDecision, output_language: str | None = None) -> str:
     labels = report_texts(
         (

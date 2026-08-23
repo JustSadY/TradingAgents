@@ -6,6 +6,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from pydantic import ValidationError
 
 from backend.trading_agents.agents.schemas import (
     PortfolioDecision,
@@ -251,3 +252,41 @@ async def test_portfolio_manager_excludes_live_portfolio_for_same_day_time_trave
 
     assert "PORTFOLIO CONTEXT EXCLUDED" in captured["prompt"]
     assert "mutable current portfolio must not influence" in captured["prompt"]
+
+
+class TestSizingIsRequiredForAnOrder:
+    """``position_size_pct`` is the sole sizing input the engine has.
+
+    Its description already said null is valid only for Hold, but a
+    description is not a constraint. A model that omitted it produced a
+    schema-valid Buy that the orchestrator then skipped hours later, so the
+    user saw a recommendation that never became an order. Raising here routes
+    the omission into the structured-output repair retry instead.
+    """
+
+    @staticmethod
+    def _decision(**overrides):
+        from backend.trading_agents.agents.schemas import PortfolioDecision
+
+        return PortfolioDecision(
+            **{
+                "executive_summary": "summary",
+                "investment_thesis": "thesis",
+                "confidence_score": 0.7,
+                **overrides,
+            }
+        )
+
+    def test_hold_may_omit_the_allocation(self):
+        from backend.trading_agents.agents.schemas import PortfolioRating
+
+        assert self._decision(rating=PortfolioRating.HOLD).position_size_pct is None
+
+    @pytest.mark.parametrize("rating", ["Buy", "Overweight", "Underweight", "Sell"])
+    def test_every_directional_rating_must_carry_an_allocation(self, rating):
+        with pytest.raises(ValidationError, match="position_size_pct is required"):
+            self._decision(rating=rating, suggested_capital=70_000.0)
+
+    @pytest.mark.parametrize(("rating", "pct"), [("Buy", 12.5), ("Sell", 0.0), ("Underweight", 3.0)])
+    def test_a_stated_allocation_is_accepted(self, rating, pct):
+        assert self._decision(rating=rating, position_size_pct=pct).position_size_pct == pct

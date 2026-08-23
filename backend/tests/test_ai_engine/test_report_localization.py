@@ -30,6 +30,7 @@ def test_structured_renderers_localize_turkish_scaffolding_and_actions():
             rating=PortfolioRating.OVERWEIGHT,
             executive_summary="Yükseliş senaryosu baskın.",
             investment_thesis="Büyüme ve talep görünümü güçlü.",
+            position_size_pct=8.0,
         ),
         "Turkish",
     )

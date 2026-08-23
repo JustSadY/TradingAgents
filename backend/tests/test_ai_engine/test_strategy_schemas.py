@@ -86,6 +86,8 @@ def _decision(rating: PortfolioRating, confidence: float) -> PortfolioDecision:
         executive_summary="Use a measured tactical response while respecting hard risk controls.",
         investment_thesis="The conclusion is grounded in the current independent evidence set.",
         confidence_score=confidence,
+        # Only Hold may omit this; these fixtures cover directional ratings too.
+        position_size_pct=None if rating is PortfolioRating.HOLD else 5.0,
     )
 
 
