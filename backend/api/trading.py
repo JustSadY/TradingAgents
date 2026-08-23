@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -15,6 +16,8 @@ from backend.schemas.trading import (
     JournalNoteResponse,
     OrderResponse,
     PerformanceResponse,
+    PortfolioOptimizeRequest,
+    PortfolioOptimizeResponse,
     PortfolioResponse,
     PortfolioStatsResponse,
     RebalanceResponse,
@@ -185,6 +188,29 @@ async def rebalance_portfolio(
     from backend.services.portfolio_rebalance_service import get_rebalance_suggestions
 
     return await get_rebalance_suggestions(db, _)
+
+@router.post("/portfolio/optimize", response_model=PortfolioOptimizeResponse)
+@limiter.limit("10/hour")
+async def optimize_portfolio(
+    request: Request,
+    req: PortfolioOptimizeRequest,
+    _: User = Depends(require_page("portfolio")),
+):
+    from backend.services.portfolio_optimizer_service import OptimizerError, optimize_weights_async
+
+    for ticker in req.tickers:
+        safe_ticker_component(ticker)
+
+    try:
+        return await optimize_weights_async(
+            req.tickers,
+            datetime.now(UTC).strftime("%Y-%m-%d"),
+            objective=req.objective,
+            total_value=req.total_value,
+            risk_aversion=req.risk_aversion,
+        )
+    except OptimizerError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
 class JournalNoteRequest(BaseModel):
     note: str = Field(..., max_length=2000)

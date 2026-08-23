@@ -30,7 +30,6 @@ const SECTION_ICONS: Record<string, SectionDef['icon']> = {
   portfolio_decision: Scale,
   final_decision: Scale,
   investment_plan: BookOpen,
-  judge_decision: Scale,
   market_report: TrendingUp,
   fundamentals_report: BookOpen,
   news_report: FileText,

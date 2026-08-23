@@ -373,10 +373,6 @@ _ANALYSTS_BY_KEY = {a.key: a for a in ANALYSTS}
 
 def list_analysts() -> list[AnalystInfo]:
     return list(ANALYSTS)
-
-def get_analyst(key: str) -> AnalystInfo | None:
-    return _ANALYSTS_BY_KEY.get(key)
-
 def label_for(key: str) -> str:
     info = _ANALYSTS_BY_KEY.get(key)
     return info.label if info else key.title()

@@ -76,6 +76,7 @@ describe('AuthContext', () => {
     // and wipe the new session, sending them back to the login screen.
     let rejectSlowBootstrap: (reason: Error) => void = () => {}
     const slowBootstrap = new Promise((_resolve, reject) => { rejectSlowBootstrap = reject })
+    slowBootstrap.catch(() => {})
 
     vi.mocked(axios.post).mockImplementation((url: string) => {
       if (url === '/auth/refresh') return slowBootstrap as Promise<never>

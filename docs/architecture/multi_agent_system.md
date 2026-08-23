@@ -35,7 +35,7 @@ stateDiagram-v2
     Validation --> [*]
 ```
 
-`RiskPanel` is one graph node. It makes one LLM call and asks that call to return aggressive, conservative, and neutral perspectives in a structured transcript. Those perspectives are evidence inside the node; they are not independent LangGraph nodes.
+The Risk Debate node (`create_risk_debate_node`) is one graph node. It makes one LLM call and asks that call to return aggressive, conservative, and neutral perspectives in a structured transcript. Those perspectives are evidence inside the node; they are not independent LangGraph nodes.
 
 The exact graph node names and conditional routing live in `backend/trading_agents/graph/`; this document describes the responsibility boundaries rather than duplicating every implementation detail.
 

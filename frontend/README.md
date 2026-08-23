@@ -9,7 +9,9 @@ A modern, high-fidelity investment decision-making dashboard built with **React 
 *   **Responsive Glassmorphic UI:** Styled with a premium, sleek dark mode theme using custom Tailwind utility classes, backdrop filters, and subtle hover animations.
 *   **Real-Time WebSocket Streams:** Subscribes to backend multi-agent progress event channels to stream live node executions (e.g. tracking when the Bull/Bear Researchers start debating) and chunk-by-chunk markdown report generation.
 *   **Dual-Language Localization (i18n):** Supports fully integrated translation toggling between **English** and **Turkish**, persisted locally via `localStorage` (located in [src/i18n/](src/i18n)).
-*   **Interactive Financial Charts:** Renders candlestick price charts, technical analysis overlays (MACD, RSI, Moving Averages), and mock trading portfolio returns using **Recharts**.
+*   **Interactive Financial Charts:** Renders candlestick price charts, technical analysis overlays (MACD, RSI, Moving Averages), and mock trading portfolio returns using **Recharts** and **lightweight-charts**.
+*   **Generated API Client:** `src/api/generated/` is produced by **orval** from the backend's OpenAPI schema (`npm run generate:openapi`) and consumed through **TanStack Query**. It is build output — regenerate it rather than editing it.
+*   **Shared Table & Form Layer:** Data tables run on **MUI X DataGrid** behind the `AppDataGrid` wrapper, and tool/agent settings forms are generated from JSON Schema by **@rjsf**.
 *   **Developer Proxy Configuration:** Vite dev-server configures transparent reverse proxy routes (`/api`, `/auth`, `/ws`) to map API calls directly to the local FastAPI port (`8000`) without CORS headaches.
 
 ---
@@ -26,10 +28,12 @@ frontend/
 │   │   │                   # framing, streamed-report assembly, sessionStorage
 │   │   │                   # persistence, and the run state machine
 │   │   └── runMachine.ts   # XState machine owning idle/running/stopping/done/failed
+│   ├── api/                # Generated orval client, axios mutator, TanStack Query setup
 │   ├── assets/             # Images, theme illustrations, and local SVGs
 │   ├── components/         # Reusable structural layout elements
 │   │   ├── Layout.tsx      # Sidebar navigation, header, language toggle, and auth wrapper
-│   │   └── UpdateBanner.tsx# Alert panel notifying the user of available app updates
+│   │   ├── UpdateBanner.tsx# Alert panel notifying the user of available app updates
+│   │   └── ui/             # AppDataGrid (MUI X), AppPrimitives, AppSchemaForm, ResponsiveChart
 │   ├── contexts/           # React context providers (AuthContext, ThemeContext, SettingsContext)
 │   ├── hooks/              # Custom hooks (WebSocket connectors, API queries, local storage states)
 │   ├── i18n/               # Multi-language translation dictionaries (admin, alerts, chart, analysis, etc.)
@@ -44,12 +48,17 @@ frontend/
 │   │   ├── Admin.tsx       # User management and RBAC access control panel (Admin only)
 │   │   ├── Logs.tsx        # System logs browser (Admin has full logs; User has scoped logs)
 │   │   └── Settings.tsx    # LLM API keys config, scheduler times, and system updates
+│   ├── report/             # reportSections.ts — the single registry of report
+│   │                       # sections, their labels, share and export ordering
+│   ├── test/               # Vitest setup, render helpers, shared fixtures
+│   ├── theme/              # appTheme.ts — the MUI theme
 │   ├── utils/              # Helper utilities (date formatters, local storage helper, etc.)
 │   ├── App.tsx             # Route definitions, route guarding, and translation wrapper
+│   ├── index.css           # `@import "tailwindcss"` — Tailwind 4 needs no JS config file
 │   └── main.tsx            # Entry point mounting App to the browser DOM
 ├── index.html              # Core HTML entry template
-├── tailwind.config.js      # Custom theme color configurations
-└── vite.config.ts          # Vite build config & proxy setups
+├── orval.config.ts         # Generated-client configuration
+└── vite.config.ts          # Vite build config, Tailwind plugin & proxy setups
 ```
 
 ---

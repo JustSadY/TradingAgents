@@ -34,16 +34,6 @@ class OptimizationRequest(BaseModel):
 
         self.start_date, self.end_date = validate_date_range(self.start_date, self.end_date, max_days=3650)
         return self
-
-
-class OptimizationTrialRead(BaseModel):
-    number: int
-    params: dict
-    value: float | None = None
-    metrics: dict = Field(default_factory=dict)
-    state: str
-
-
 class OptimizationRunRead(BaseModel):
     id: int
     ticker: str

@@ -12,17 +12,25 @@ import type { ConsensusReportStats } from './consensusReportStats';
 
 export interface BacktestResponse {
   alpha_pct?: number | null;
+  annual_return?: number | null;
+  annual_volatility?: number | null;
   assumptions?: string[];
   benchmark?: BacktestBenchmark | null;
+  calmar_ratio?: number | null;
   consensus_report_stats?: ConsensusReportStats | null;
   equity_curve?: BacktestEquityPoint[];
   final_value: number;
   initial_capital: number;
   max_drawdown: number;
+  omega_ratio?: number | null;
   sharpe_ratio: number;
   slippage_bps: number;
+  sortino_ratio?: number | null;
+  stability?: number | null;
+  tail_ratio?: number | null;
   total_return: number;
   trades?: BacktestTradeRecord[];
   trades_count: number;
+  value_at_risk?: number | null;
   win_rate: number;
 }

@@ -33,7 +33,6 @@ dependencies = [
     "psycopg[binary,pool]>=3.2.0",
     "pinecone>=5.0.0",
     "alpaca-py>=0.43.5,<1.0",
-    "pandas-ta-classic>=0.6.52,<1.0",
     "pandas>=2.3.0",
     "numpy>=2.0.0",
     "yfinance>=0.2.63",
@@ -51,6 +50,9 @@ dependencies = [
     "cachetools>=5.5,<7.0",
     "arch>=8.0,<9.0",
     "optuna>=4.0,<5.0",
+    "ta-lib>=0.7.1,<1.0",
+    "empyrical-reloaded>=0.5.12,<1.0",
+    "pyportfolioopt>=1.6.0,<2.0",
 ]
 
 [dependency-groups]
@@ -61,14 +63,6 @@ dev = [
     "pytest-asyncio>=0.25.0",
     "pytest-cov>=6.0.0",
     "pytest-mock>=3.14.0",
-]
-research = [
-    "openbb>=4.7.2,<5.0",
-    "TA-Lib>=0.7.1,<1.0",
-    "vectorbt>=1.1.0,<2.0",
-    "empyrical-reloaded>=0.5.12,<1.0",
-    "quantstats>=0.0.81,<1.0",
-    "pyportfolioopt>=1.6.0,<2.0",
 ]
 observability = [
     "opentelemetry-sdk>=1.44.0,<2.0",

@@ -34,20 +34,6 @@ describe('buildExportSections', () => {
     expect(sections.map(section => section.key)).toEqual(['bull_history', 'bear_history'])
   })
 
-  it('suppresses a legacy judge-decision mirror but retains a distinct decision', () => {
-    const mirrored = buildExportSections(analysisWith({
-      investment_plan: '**Recommendation**: Buy\n\n**Rationale**: Strong setup',
-      judge_decision: ' **Recommendation**: Buy\n**Rationale**: Strong setup ',
-    }))
-    const distinct = buildExportSections(analysisWith({
-      investment_plan: 'Recommendation: Buy',
-      judge_decision: 'Recommendation: Hold',
-    }))
-
-    expect(mirrored.map(section => section.key)).toEqual(['investment_plan'])
-    expect(distinct.map(section => section.key)).toEqual(['investment_plan', 'judge_decision'])
-  })
-
   it('formats structured debate turns for a future JSON transcript', () => {
     const sections = buildExportSections(analysisWith({
       risk_debate_history: [

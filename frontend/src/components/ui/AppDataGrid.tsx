@@ -117,26 +117,12 @@ export function AppDataGrid<R extends GridValidRowModel>({
   )
 }
 
-export function formatDate(value: string | number | Date | null | undefined, locale?: string): string {
-  if (value == null || value === '') return '—'
-  const date = value instanceof Date ? value : new Date(value)
-  if (Number.isNaN(date.getTime())) return String(value)
-  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
-}
 
 export function formatMoney(value: number | null | undefined, currency = 'USD', locale?: string): string {
   if (value == null || Number.isNaN(value)) return '—'
   return new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 2 }).format(value)
 }
 
-export function formatCount(value: number | null | undefined, locale?: string): string {
-  if (value == null || Number.isNaN(value)) return '—'
-  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value)
-}
 
-export function formatPercent(value: number | null | undefined, locale?: string): string {
-  if (value == null || Number.isNaN(value)) return '—'
-  return new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 2 }).format(value)
-}
 
 export default AppDataGrid

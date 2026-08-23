@@ -121,7 +121,6 @@ async def get_shared_report(token: str, db: AsyncSession = Depends(get_db)):
         "bear_history": analysis.bear_history,
         "investment_debate_history": analysis.investment_debate_history,
         "risk_debate_history": analysis.risk_debate_history,
-        "judge_decision": analysis.judge_decision or "",
         "portfolio_decision": analysis.portfolio_decision_json,
         "chart_annotations": analysis.chart_annotations,
         "risk_metrics": analysis.risk_metrics,

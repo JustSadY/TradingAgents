@@ -78,12 +78,15 @@ Eight additional resilience features build on the foundation above:
 
 ### 4.2 Circuit breaker
 - **Config:** `circuit_breaker_threshold` (default 3), `circuit_breaker_cooldown` (default 60s)
-- **Mechanism:** Module-level `_circuit_state` dict tracks consecutive failures per node (keyed by `{kind}:{name}`)
+- **Mechanism:** `agents/runtime/circuit_breaker.py` tracks consecutive failures
+  per node (keyed by `{kind}:{name}` under a `circuit:` prefix). State is shared
+  through Redis when `REDIS_URL` is set, so one worker's observation opens the
+  circuit for all of them, and falls back to process memory when it is not.
   - **Closed** → normal operation; failures increment a counter
   - **Open** → after threshold failures, skip directly to fallback without retrying
   - **Half-open** → after cooldown, allow one try; success resets to closed
 - Emits `circuit_open` / `circuit_tripped` log events and `NODE_CIRCUIT_OPEN` Prometheus counter
-- **Source:** `resilience.py:guard_node`
+- **Source:** `agents/runtime/circuit_breaker.py`, `resilience.py:guard_node`
 
 ### 4.3 Provider/model fallback chain
 - **Config:** `fallback_llm_chain` — an ordered list of `{"provider": ..., "model": ...}` entries.
@@ -98,14 +101,17 @@ Eight additional resilience features build on the foundation above:
 - `failed_agents` lists the names of every agent that fell back
 - **Source:** `resilience.py:_run_report_card`, `orchestrator.py`, `models/analysis.py`
 
-### 4.5 Whole-run retry / dead-letter
-- **Config:** `_ANALYSIS_RETRY_MAX = 1` (module-level constant in `analysis_service.py`)
-- **Mechanism:** On unhandled exception in `run_analysis_task`, `_maybe_retry_analysis` checks `task_store.get_meta(task_id).retry_count`; if under max, increments and re-dispatches (inline `asyncio.create_task` or arq job). After max retries, logged as dead-letter.
-- Re-uses the existing `task_store` metadata + `dispatch_analysis` pipeline
+### 4.5 A failed run is not re-dispatched
+- **Mechanism:** `_maybe_retry_analysis` returns `False` unconditionally, so an
+  unhandled exception in `run_analysis_task` ends the run. The task is cleared
+  from the registry immediately, which is what stops a page refresh or a second
+  tab from restarting or re-attaching to a failed run.
+- Node retry (§3) is the only retry layer; there is deliberately no
+  analysis-level retry loop above it.
 - **Source:** `analysis_service.py:_maybe_retry_analysis`
 
 ### 4.6 Error taxonomy & Prometheus metrics
-- **Function:** `classify_error(exc)` returns `"auth" | "quota" | "timeout" | "transient" | "bug"`
+- **Function:** `classify_error(exc)` returns `"auth" | "quota" | "timeout" | "provider_degraded" | "transient" | "bug"`
 - **New counters:**
   - `NODE_ERRORS_BY_TYPE` — labels `node, kind, error_type`
   - `TOOL_ERRORS` — labels `tool_name, error_type`
@@ -123,7 +129,7 @@ Eight additional resilience features build on the foundation above:
 
 ### 4.8 Stall/heartbeat detection
 - **Config:** `stall_timeout_seconds` (default 120)
-- **Mechanism:** `_heartbeat_monitor` async task runs alongside graph propagation; emits a heartbeat `progress` event every 30s. Monitors `last_event_time` in `_stream_observer`; if no node event for `stall_timeout_seconds`, emits a `stall_warning` WS event and logs a warning.
+- **Mechanism:** `analysis/orchestrator.py:_heartbeat_monitor` runs alongside graph propagation; emits a heartbeat `progress` event every 30s. Monitors `last_event_at` / `activity_tracker.last_activity_at`, updated by `_stream_observer` and by `resilience._touch_activity`; if no node event for `stall_timeout_seconds`, emits a `stall_warning` WS event and logs a warning.
 - The heartbeat task is cancelled when propagation completes normally.
 - **Source:** `orchestrator.py:_heartbeat_monitor`
 

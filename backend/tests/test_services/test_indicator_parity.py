@@ -1,6 +1,6 @@
 """Behavioral guardrails around the package-backed indicator implementation.
 
-Exact numerical parity with pandas-ta-classic belongs in
+Exact numerical parity with TA-Lib belongs in
 ``test_indicator_package_parity.py``.  These tests intentionally cover only
 application-level invariants that remain ours: index alignment, warm-up
 behavior as exposed by the package, rolling VWAP semantics, and no look-ahead.

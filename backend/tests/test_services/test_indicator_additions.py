@@ -1,22 +1,22 @@
 """The standard indicators added beside the original six.
 
 RSI, MACD, EMA, ADX, ATR and rolling VWAP already had wrappers; SMA, Bollinger
-Bands, the stochastic, CCI, MFI, Williams %R and OBV did not, so the custom
-formula language and every caller could only reach a third of what the
-production indicator engine provides.
+Bands, the stochastic, CCI, MFI and Williams %R did not, so the custom formula
+language and every caller could only reach a third of what the production
+indicator engine provides.
 
-Numerical parity with pandas-ta-classic is asserted here for the same reason
+Numerical parity with TA-Lib is asserted here for the same reason
 ``test_indicator_package_parity.py`` asserts it for the originals: these are
-thin adapters, and the only thing that can silently break them is a column-name
-or parameter-order change in the package.
+thin adapters, and the only thing that can silently break them is a
+parameter-order change in the package.
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pandas_ta_classic as ta
 import pytest
+import talib
 
 from backend.services.indicator_service import (
     calculate_bbands,
@@ -27,6 +27,10 @@ from backend.services.indicator_service import (
     calculate_willr,
     evaluate_formula_safely,
 )
+
+
+def _array(series: pd.Series) -> np.ndarray:
+    return np.ascontiguousarray(series.to_numpy(dtype="float64"))
 
 
 @pytest.fixture
@@ -50,48 +54,57 @@ class TestPackageParity:
         close = ohlcv["Close"].astype(float)
         pd.testing.assert_series_equal(
             calculate_sma(close, 20),
-            pd.Series(ta.sma(close, length=20, talib=False), index=ohlcv.index, dtype="float64", name="SMA_20"),
+            pd.Series(talib.SMA(_array(close), timeperiod=20), index=ohlcv.index, dtype="float64", name="SMA_20"),
         )
 
     def test_bollinger_bands_match_the_package(self, ohlcv):
         close = ohlcv["Close"].astype(float)
-        direct = ta.bbands(close, length=20, std=2.0, talib=False)
+        direct_upper, direct_middle, direct_lower = talib.BBANDS(
+            _array(close), timeperiod=20, nbdevup=2.0, nbdevdn=2.0, matype=talib.MA_Type.SMA
+        )
         lower, middle, upper = calculate_bbands(close, 20)
 
-        for produced, prefix in ((lower, "BBL_"), (middle, "BBM_"), (upper, "BBU_")):
-            column = next(c for c in direct.columns if str(c).startswith(prefix))
+        for produced, direct, name in (
+            (lower, direct_lower, "BBL_20_2.0"),
+            (middle, direct_middle, "BBM_20_2.0"),
+            (upper, direct_upper, "BBU_20_2.0"),
+        ):
             pd.testing.assert_series_equal(
                 produced,
-                pd.Series(direct[column], index=ohlcv.index, dtype="float64", name=column),
+                pd.Series(direct, index=ohlcv.index, dtype="float64", name=name),
             )
 
     def test_stochastic_matches_the_package(self, ohlcv):
-        direct = ta.stoch(
-            ohlcv["High"].astype(float),
-            ohlcv["Low"].astype(float),
-            ohlcv["Close"].astype(float),
-            k=14,
-            d=3,
-            smooth_k=3,
-            talib=False,
+        direct_k, direct_d = talib.STOCH(
+            _array(ohlcv["High"]),
+            _array(ohlcv["Low"]),
+            _array(ohlcv["Close"]),
+            fastk_period=14,
+            slowk_period=3,
+            slowk_matype=talib.MA_Type.SMA,
+            slowd_period=3,
+            slowd_matype=talib.MA_Type.SMA,
         )
         k_line, d_line = calculate_stoch(ohlcv)
 
-        for produced, prefix in ((k_line, "STOCHk_"), (d_line, "STOCHd_")):
-            column = next(c for c in direct.columns if str(c).startswith(prefix))
+        for produced, direct, name in (
+            (k_line, direct_k, "STOCHk_14_3_3"),
+            (d_line, direct_d, "STOCHd_14_3_3"),
+        ):
             pd.testing.assert_series_equal(
                 produced,
-                pd.Series(direct[column], index=ohlcv.index, dtype="float64", name=column),
+                pd.Series(direct, index=ohlcv.index, dtype="float64", name=name),
             )
 
     def test_single_series_indicators_match_the_package(self, ohlcv):
         high, low = ohlcv["High"].astype(float), ohlcv["Low"].astype(float)
         close, volume = ohlcv["Close"].astype(float), ohlcv["Volume"].astype(float)
 
+        high_a, low_a, close_a, volume_a = (_array(s) for s in (high, low, close, volume))
         cases = [
-            (calculate_cci(ohlcv, 20), ta.cci(high, low, close, length=20, talib=False), "CCI_20"),
-            (calculate_mfi(ohlcv, 14), ta.mfi(high, low, close, volume, length=14, talib=False), "MFI_14"),
-            (calculate_willr(ohlcv, 14), ta.willr(high, low, close, length=14, talib=False), "WILLR_14"),
+            (calculate_cci(ohlcv, 20), talib.CCI(high_a, low_a, close_a, timeperiod=20), "CCI_20"),
+            (calculate_mfi(ohlcv, 14), talib.MFI(high_a, low_a, close_a, volume_a, timeperiod=14), "MFI_14"),
+            (calculate_willr(ohlcv, 14), talib.WILLR(high_a, low_a, close_a, timeperiod=14), "WILLR_14"),
         ]
         for produced, expected, name in cases:
             pd.testing.assert_series_equal(

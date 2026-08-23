@@ -29,7 +29,6 @@ export const EXPECTED_EXPORT_ORDER = [
   'bear_history',
   'investment_debate_history',
   'risk_debate_history',
-  'judge_decision',
 ] as const
 
 export const EXPECTED_EXPORT_LABELS: Record<'en' | 'tr', Record<string, string>> = {
@@ -58,7 +57,6 @@ export const EXPECTED_EXPORT_LABELS: Record<'en' | 'tr', Record<string, string>>
     bear_history: 'Bear Arguments',
     investment_debate_history: 'Investment Debate',
     risk_debate_history: 'Risk Debate',
-    judge_decision: 'Judge Decision',
   },
   tr: {
     final_decision: 'Nihai Karar (Portfolio Manager)',
@@ -85,6 +83,5 @@ export const EXPECTED_EXPORT_LABELS: Record<'en' | 'tr', Record<string, string>>
     bear_history: 'Ayı Argümanları',
     investment_debate_history: 'Yatırım Tartışması',
     risk_debate_history: 'Risk Tartışması',
-    judge_decision: 'Hakem Kararı',
   },
 }

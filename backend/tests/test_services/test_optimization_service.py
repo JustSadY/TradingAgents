@@ -31,6 +31,7 @@ def _backtest_result(**overrides):
         "win_rate": 55.0,
         "trades_count": 12,
         "final_value": 110_000.0,
+        "calmar_ratio": 2.0,
     }
     base.update(overrides)
     return base
@@ -57,8 +58,8 @@ class TestScoring:
     def test_each_objective_reads_its_metric(self, objective, expected):
         assert _score(objective, _backtest_result()) == pytest.approx(expected)
 
-    def test_calmar_falls_back_to_raw_return_without_a_drawdown(self):
-        assert _score("calmar", _backtest_result(max_drawdown=0.0)) == pytest.approx(10.0)
+    def test_calmar_falls_back_to_raw_return_without_a_ratio(self):
+        assert _score("calmar", _backtest_result(calmar_ratio=None)) == pytest.approx(10.0)
 
     def test_a_failed_backtest_has_no_score(self):
         assert _score("sharpe_ratio", {"error": "no data"}) is None

@@ -24,6 +24,7 @@ TradingAgents consists of:
 - LangGraph multi-agent analysis engine under `backend/trading_agents/`.
 - Optional Redis + `arq` worker for out-of-process analyses.
 - GARCH-family volatility forecasting (`arch`) and Optuna strategy-parameter search.
+- TA-Lib technical indicators, `empyrical` risk statistics, and PyPortfolioOpt advisory weights.
 - Authenticated WebSocket progress streaming.
 - Encrypted user/provider credentials stored in PostgreSQL.
 - RBAC, per-user settings, tool permissions, scheduling, alerts, paper trading, and optional broker execution.
@@ -63,6 +64,8 @@ The deterministic **Decision Stability Controller is the final graph stage**. Wh
 Do not describe the Portfolio Manager as the unconditional final execution authority, and do not reintroduce the retired Trader agent as a live decision source.
 
 Portfolio rebalancing sits outside this graph. `portfolio_rebalance_planner` computes actions, quantities, issues, and health scores in exact decimal arithmetic; the model writes summaries/rationales rather than authoritative numeric execution values.
+
+`portfolio_optimizer_service` (PyPortfolioOpt, behind `POST /api/trading/portfolio/optimize`) is advisory only. It proposes mean-variance weights; it does not feed the rebalance planner and is not an execution path.
 
 ---
 
@@ -229,6 +232,32 @@ Three mechanisms can repeat a failed LLM call:
 `retry_call` is the application retry authority. Keep provider SDK retries disabled by default so node retry × SDK retry × failover does not multiply attempts unexpectedly. There is deliberately no analysis-level retry loop.
 
 Node circuit-breaker state is shared through Redis when `REDIS_URL` is configured and falls back to process memory if Redis is unavailable.
+
+---
+
+## Quantitative packages
+
+Three packages own calculations that used to be hand-written or optional:
+
+| Package | Owns |
+| --- | --- |
+| TA-Lib | every standard indicator in `services/indicator_service.py`; `pandas-ta-classic` is gone |
+| `empyrical` | the risk-adjusted statistics in `backtest_service._risk_metrics` |
+| PyPortfolioOpt | advisory mean-variance weights in `portfolio_optimizer_service` |
+
+There is no `research` dependency group and no `research_integrations` module; an
+optional group nothing imported was indistinguishable from dead code.
+
+Money, quantity and risk-execution values stay in exact `Decimal` arithmetic.
+The empyrical statistics are ratios rather than money, so they are floats — and
+a ratio that resolves to NaN or infinity is reported as absent rather than
+serialised as a number. Do not move the Decimal money metrics onto a float
+library to make them uniform.
+
+TA-Lib returns arrays, not frames whose column names encode their parameters,
+so each wrapper names its own output and guards its own minimum input length.
+`calculate_vwap` stays hand-computed: TA-Lib has no VWMA and its
+session-anchored VWAP has different semantics.
 
 ---
 

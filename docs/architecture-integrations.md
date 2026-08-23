@@ -34,36 +34,38 @@ is still allowed, but it does not create another transport retry authority.
 Alpaca paper/live execution uses `alpaca-py`. The hand-written HTTP broker
 implementation and package-detection fallback are removed.
 
-## Standard technical indicators: pandas-ta-classic only
+## Standard technical indicators: TA-Lib only
 
-`pandas-ta-classic` provides SMA, EMA, RSI, MACD, ADX, ATR, Bollinger Bands,
-the stochastic oscillator, CCI, MFI, Williams %R, OBV and rolling
-volume-weighted price. The application still owns product-specific formula
-sandboxing and custom chart-pattern algorithms; unused standalone
-Ichimoku/Fibonacci display helpers were removed rather than kept as a second
-indicator surface.
+TA-Lib provides SMA, EMA, RSI, MACD, ADX, ATR, Bollinger Bands, the stochastic
+oscillator, CCI, MFI and Williams %R. The application still owns
+product-specific formula sandboxing and custom chart-pattern algorithms; unused
+standalone Ichimoku/Fibonacci display helpers were removed rather than kept as
+a second indicator surface.
 
-Every wrapper in `services/indicator_service.py` passes `talib=False` and reads
-its result columns by prefix, because pandas-ta embeds parameters in column
-names (`BBU_20_2.0`, `STOCHk_14_3_3`, `CCI_20_0.015`) and the constant in that
-suffix is not always the one that was passed in.
+Every wrapper in `services/indicator_service.py` returns a named Series over
+the caller's index, and guards its own minimum input length so a short frame
+yields NaN instead of an exception from the C library.
 
-All of them except OBV are also exposed to the sandboxed custom-formula
-language as `NAME(period)` symbols; multi-series indicators get one symbol per
-line (`BBL`/`BBM`/`BBU`, `STOCHK`/`STOCHD`). OBV is cumulative and takes no
-period, so it has no formula symbol. The AI formula assistant's DSL prompt in
+All of them are also exposed to the sandboxed custom-formula language as
+`NAME(period)` symbols; multi-series indicators get one symbol per line
+(`BBL`/`BBM`/`BBU`, `STOCHK`/`STOCHD`). The AI formula assistant's DSL prompt in
 `services/formula_assist_service.py` lists the same set — it must be updated
 whenever a symbol is added, or the assistant will keep hand-rolling an
 approximation of an indicator that now exists.
 
-### Why not TA-Lib
+### TA-Lib is the indicator engine
 
-TA-Lib stays in the `research` dependency group as a parity oracle rather than
-the production engine. It is a C library, so promoting it would add a native
-build step to the Docker image and the Linux installer, and it would buy no
-additional coverage: `pandas-ta-classic` already implements every standard
-indicator this project exposes. Parity checks against TA-Lib run through
-`backend.services.research_integrations.talib_standard_indicators`.
+`services/indicator_service.py` calls TA-Lib directly; `pandas-ta-classic` has
+been removed. TA-Lib is a C library, but the published wheels bundle it, so
+neither the Docker image nor the Linux installer needs a native build step.
+
+TA-Lib returns plain arrays rather than frames whose column names encode the
+parameters that produced them, so the wrappers name their own output and the
+prefix-matching helper that used to recover those columns is gone.
+
+TA-Lib has no VWMA, and its session-anchored VWAP has a different contract from
+this application's `period` semantics, so `calculate_vwap` still computes the
+rolling volume-weighted typical price itself.
 
 ## Conditional volatility: arch
 
@@ -133,32 +135,55 @@ Both memory backends remain supported:
 Alembic owns pgvector extension/table creation; request-time memory operations
 do not perform schema DDL.
 
-## Research/reference packages
+## Quantitative packages
 
-Research and validation dependencies are isolated from the production runtime:
+There is no `research` dependency group and no `research_integrations` adapter
+module. Three packages were promoted to real dependencies and the rest were
+dropped, because an optional group nothing imported was indistinguishable from
+dead code.
 
-```bash
-cd backend
-uv sync --group research
-```
+| Package | Role |
+| --- | --- |
+| TA-Lib | the standard-indicator engine (see above) |
+| empyrical-reloaded | risk-adjusted backtest statistics |
+| PyPortfolioOpt | advisory mean-variance portfolio weights |
 
-The group contains OpenBB, TA-Lib, vectorbt, empyrical-reloaded, QuantStats and
-PyPortfolioOpt. `backend.services.research_integrations` is the stable adapter
-surface for those packages.
+OpenBB, vectorbt and QuantStats were removed. OpenBB would be a second data
+path beside the tool system that already owns per-user vendor credentials and
+their RLS scoping. vectorbt is vectorized, so it cannot express the intrabar
+stop-loss/take-profit exits `backtest_service` already implements. QuantStats
+is mostly an HTML tearsheet generator, and this application has its own UI.
 
-OpenBB is a research-data pilot, not a silent production data fallback.
-QuantStats/empyrical are cross-validation oracles. PyPortfolioOpt remains a
-research optimizer while actionable portfolio sizing stays deterministic in the
-application.
+### empyrical-reloaded
+
+`_compute_metrics` keeps its five money metrics in exact Decimal arithmetic.
+The risk-adjusted statistics beside them — Sortino, Calmar, Omega, tail ratio,
+VaR, annual return/volatility and stability — are ratios rather than money, so
+empyrical computes them on floats. A ratio that comes back NaN or infinite,
+which a flat equity curve produces, is reported as absent rather than
+serialised as a number.
+
+The optimizer's `calmar` objective reads empyrical's Calmar ratio. It
+previously divided total return by max drawdown, which is not that ratio.
+
+### PyPortfolioOpt
+
+`services/portfolio_optimizer_service.py` computes mean-variance weights behind
+`POST /api/trading/portfolio/optimize`, using Ledoit-Wolf shrinkage so the
+covariance stays invertible on short lookbacks. It refuses fewer than two
+tickers, more than thirty, and fewer than sixty overlapping trading days rather
+than returning a plausible-looking weight vector built on too little data.
+
+This is advisory only. `portfolio_rebalance_planner` remains the deterministic
+authority for actionable sizing, in exact decimal arithmetic, and the optimizer
+does not feed it.
 
 ### vectorbt vs NautilusTrader
 
-`vectorbt` is the current research/reference backtester because this project
-needs fast vectorized strategy validation without replacing its execution
-engine. NautilusTrader is not added now: adopting it would make sense only if
-the project explicitly decides that backtest and live execution must share one
-event-driven execution model. Until that requirement exists, adding Nautilus
-would duplicate Alpaca/execution semantics and increase maintenance.
+Neither is used. Adopting an event-driven execution model shared between
+backtest and live trading would duplicate the existing Alpaca/execution
+semantics; until the project explicitly decides it wants that, both add
+maintenance without removing any.
 
 ## PostgreSQL RLS
 

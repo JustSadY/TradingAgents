@@ -136,7 +136,7 @@ GET /api/settings/llm-catalog
 
 Registered providers include OpenAI, Anthropic Claude, Google Gemini, and NVIDIA NIM/OpenAI-compatible models. Provider-specific reasoning controls are mapped by the runtime client layer rather than hardcoded into graph nodes.
 
-Token pricing is resolved by `backend/core/model_pricing.py` from the pinned LiteLLM catalog plus explicit overrides/fallback estimates when required.
+Token pricing is resolved by `backend/core/model_pricing.py` from the pinned LiteLLM catalog alone. There is no override table and no default rate: a model the catalog does not price resolves to `source="unknown"` and the UI shows no cost rather than a guess.
 
 ---
 

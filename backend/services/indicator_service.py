@@ -2,20 +2,15 @@ import ast
 import logging
 import re
 
+import numpy as np
 import pandas as pd
+import talib
 
 _logger = logging.getLogger(__name__)
 
 
-def _ta():
-    """Load the sole standard-indicator engine."""
-    try:
-        import pandas_ta_classic as ta
-    except ImportError as exc:
-        raise RuntimeError(
-            "pandas-ta-classic is required for technical indicators. Sync backend dependencies before calculating indicators."
-        ) from exc
-    return ta
+def _values(series: pd.Series) -> np.ndarray:
+    return np.ascontiguousarray(series.to_numpy(dtype="float64"))
 
 
 def _series(value, index: pd.Index, name: str) -> pd.Series:
@@ -24,16 +19,30 @@ def _series(value, index: pd.Index, name: str) -> pd.Series:
     return pd.Series(value, index=index, dtype="float64", name=name)
 
 
+def _nan(index: pd.Index, name: str) -> pd.Series:
+    return pd.Series(float("nan"), index=index, name=name, dtype="float64")
+
+
+def _hlcv(df: pd.DataFrame) -> tuple[np.ndarray, ...]:
+    return tuple(
+        _values(df[column].astype(float)) for column in ("High", "Low", "Close", "Volume") if column in df
+    )
+
+
 def calculate_ema(prices: pd.Series, span: int = 20) -> pd.Series:
-    """Compute EMA with pandas-ta-classic."""
     prices = prices.astype(float)
-    return _series(_ta().ema(prices, length=span, talib=False), prices.index, f"EMA_{span}")
+    name = f"EMA_{span}"
+    if len(prices) < span:
+        return _nan(prices.index, name)
+    return _series(talib.EMA(_values(prices), timeperiod=span), prices.index, name)
 
 
 def calculate_rsi(prices: pd.Series, period: int = 14) -> pd.Series:
-    """Compute RSI with pandas-ta-classic."""
     prices = prices.astype(float)
-    return _series(_ta().rsi(prices, length=period, talib=False), prices.index, f"RSI_{period}")
+    name = f"RSI_{period}"
+    if len(prices) <= period:
+        return _nan(prices.index, name)
+    return _series(talib.RSI(_values(prices), timeperiod=period), prices.index, name)
 
 
 def calculate_macd(
@@ -42,82 +51,55 @@ def calculate_macd(
     slow: int = 26,
     signal: int = 9,
 ) -> tuple[pd.Series, pd.Series]:
-    """Compute MACD and signal line with pandas-ta-classic."""
     prices = prices.astype(float)
-    result = _ta().macd(prices, fast=fast, slow=slow, signal=signal, talib=False)
-    if result is None or result.empty:
-        empty = pd.Series(float("nan"), index=prices.index, dtype="float64")
-        return empty.copy(), empty.copy()
-
-    macd_col = next((c for c in result.columns if str(c).startswith("MACD_")), None)
-    signal_col = next((c for c in result.columns if str(c).startswith("MACDs_")), None)
-    if macd_col is None or signal_col is None:
-        raise RuntimeError(f"Unexpected pandas-ta-classic MACD columns: {list(result.columns)}")
+    macd_name = f"MACD_{fast}_{slow}_{signal}"
+    signal_name = f"MACDs_{fast}_{slow}_{signal}"
+    if len(prices) < slow + signal:
+        return _nan(prices.index, macd_name), _nan(prices.index, signal_name)
+    macd, macd_signal, _ = talib.MACD(
+        _values(prices), fastperiod=fast, slowperiod=slow, signalperiod=signal
+    )
     return (
-        _series(result[macd_col], prices.index, str(macd_col)),
-        _series(result[signal_col], prices.index, str(signal_col)),
+        _series(macd, prices.index, macd_name),
+        _series(macd_signal, prices.index, signal_name),
     )
 
 
 def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Compute ADX with pandas-ta-classic."""
-    result = _ta().adx(
-        df["High"].astype(float),
-        df["Low"].astype(float),
-        df["Close"].astype(float),
-        length=period,
-    )
-    if result is None or result.empty:
-        return pd.Series(float("nan"), index=df.index, dtype="float64", name=f"ADX_{period}")
-    column = f"ADX_{period}"
-    if column not in result:
-        column = next((c for c in result.columns if str(c).startswith("ADX_")), None)
-    if column is None:
-        raise RuntimeError(f"Unexpected pandas-ta-classic ADX columns: {list(result.columns)}")
-    return _series(result[column], df.index, str(column))
+    name = f"ADX_{period}"
+    if len(df) < period * 2:
+        return _nan(df.index, name)
+    high, low, close = _hlcv(df)[:3]
+    return _series(talib.ADX(high, low, close, timeperiod=period), df.index, name)
 
 
 def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Compute ATR with pandas-ta-classic."""
-    result = _ta().atr(
-        df["High"].astype(float),
-        df["Low"].astype(float),
-        df["Close"].astype(float),
-        length=period,
-        talib=False,
-    )
-    return _series(result, df.index, f"ATR_{period}")
+    name = f"ATR_{period}"
+    if len(df) <= period:
+        return _nan(df.index, name)
+    high, low, close = _hlcv(df)[:3]
+    return _series(talib.ATR(high, low, close, timeperiod=period), df.index, name)
 
 
 def calculate_vwap(df: pd.DataFrame, period: int = 20) -> pd.Series:
-    """Compute rolling volume-weighted typical price with pandas-ta-classic.
+    """Rolling volume-weighted typical price.
 
-    ``vwma`` preserves this application's historical ``period`` semantics;
-    pandas-ta's session-anchored ``vwap`` has a different contract.
+    TA-Lib has no VWMA, and its session-anchored VWAP has a different contract
+    from this application's ``period`` semantics.
     """
-    typical_price = (df["High"].astype(float) + df["Low"].astype(float) + df["Close"].astype(float)) / 3.0
-    result = _ta().vwma(typical_price, df["Volume"].astype(float), length=period)
-    return _series(result, df.index, f"VWAP_{period}")
-
-
-def _frame_column(result, prefix: str, indicator: str):
-    """Return the column of ``result`` whose name starts with ``prefix``.
-
-    pandas-ta embeds its parameters in column names (``BBU_20_2.0``,
-    ``STOCHk_14_3_3``, ``CCI_20_0.015``), and the constant in that suffix is not
-    always the one that was passed in. Matching on the prefix keeps these
-    wrappers working when a caller changes a period.
-    """
-    column = next((c for c in result.columns if str(c).startswith(prefix)), None)
-    if column is None:
-        raise RuntimeError(f"Unexpected pandas-ta-classic {indicator} columns: {list(result.columns)}")
-    return column
+    typical = (df["High"].astype(float) + df["Low"].astype(float) + df["Close"].astype(float)) / 3.0
+    volume = df["Volume"].astype(float)
+    weighted = (typical * volume).rolling(window=period).sum()
+    total = volume.rolling(window=period).sum()
+    return _series(weighted / total.where(total != 0), df.index, f"VWAP_{period}")
 
 
 def calculate_sma(prices: pd.Series, period: int = 20) -> pd.Series:
-    """Compute SMA with pandas-ta-classic."""
     prices = prices.astype(float)
-    return _series(_ta().sma(prices, length=period, talib=False), prices.index, f"SMA_{period}")
+    name = f"SMA_{period}"
+    if len(prices) < period:
+        return _nan(prices.index, name)
+    return _series(talib.SMA(_values(prices), timeperiod=period), prices.index, name)
 
 
 def calculate_bbands(
@@ -125,20 +107,18 @@ def calculate_bbands(
     period: int = 20,
     std: float = 2.0,
 ) -> tuple[pd.Series, pd.Series, pd.Series]:
-    """Compute Bollinger Bands as ``(lower, middle, upper)``."""
+    """Bollinger Bands as ``(lower, middle, upper)``."""
     prices = prices.astype(float)
-    result = _ta().bbands(prices, length=period, std=std, talib=False)
-    if result is None or result.empty:
-        empty = pd.Series(float("nan"), index=prices.index, dtype="float64")
-        return empty.copy(), empty.copy(), empty.copy()
-
-    lower = _frame_column(result, "BBL_", "BBANDS")
-    middle = _frame_column(result, "BBM_", "BBANDS")
-    upper = _frame_column(result, "BBU_", "BBANDS")
+    names = (f"BBL_{period}_{std}", f"BBM_{period}_{std}", f"BBU_{period}_{std}")
+    if len(prices) < period:
+        return tuple(_nan(prices.index, name) for name in names)
+    upper, middle, lower = talib.BBANDS(
+        _values(prices), timeperiod=period, nbdevup=std, nbdevdn=std, matype=talib.MA_Type.SMA
+    )
     return (
-        _series(result[lower], prices.index, str(lower)),
-        _series(result[middle], prices.index, str(middle)),
-        _series(result[upper], prices.index, str(upper)),
+        _series(lower, prices.index, names[0]),
+        _series(middle, prices.index, names[1]),
+        _series(upper, prices.index, names[2]),
     )
 
 
@@ -148,63 +128,46 @@ def calculate_stoch(
     d: int = 3,
     smooth_k: int = 3,
 ) -> tuple[pd.Series, pd.Series]:
-    """Compute the stochastic oscillator as ``(%K, %D)``."""
-    result = _ta().stoch(
-        df["High"].astype(float),
-        df["Low"].astype(float),
-        df["Close"].astype(float),
-        k=k,
-        d=d,
-        smooth_k=smooth_k,
-        talib=False,
+    """Stochastic oscillator as ``(%K, %D)``."""
+    names = (f"STOCHk_{k}_{d}_{smooth_k}", f"STOCHd_{k}_{d}_{smooth_k}")
+    if len(df) < k + smooth_k + d:
+        return tuple(_nan(df.index, name) for name in names)
+    high, low, close = _hlcv(df)[:3]
+    slowk, slowd = talib.STOCH(
+        high,
+        low,
+        close,
+        fastk_period=k,
+        slowk_period=smooth_k,
+        slowk_matype=talib.MA_Type.SMA,
+        slowd_period=d,
+        slowd_matype=talib.MA_Type.SMA,
     )
-    if result is None or result.empty:
-        empty = pd.Series(float("nan"), index=df.index, dtype="float64")
-        return empty.copy(), empty.copy()
-
-    k_col = _frame_column(result, "STOCHk_", "STOCH")
-    d_col = _frame_column(result, "STOCHd_", "STOCH")
-    return (
-        _series(result[k_col], df.index, str(k_col)),
-        _series(result[d_col], df.index, str(d_col)),
-    )
+    return _series(slowk, df.index, names[0]), _series(slowd, df.index, names[1])
 
 
 def calculate_cci(df: pd.DataFrame, period: int = 20) -> pd.Series:
-    """Compute the Commodity Channel Index with pandas-ta-classic."""
-    result = _ta().cci(
-        df["High"].astype(float),
-        df["Low"].astype(float),
-        df["Close"].astype(float),
-        length=period,
-        talib=False,
-    )
-    return _series(result, df.index, f"CCI_{period}")
+    name = f"CCI_{period}"
+    if len(df) < period:
+        return _nan(df.index, name)
+    high, low, close = _hlcv(df)[:3]
+    return _series(talib.CCI(high, low, close, timeperiod=period), df.index, name)
 
 
 def calculate_mfi(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Compute the Money Flow Index with pandas-ta-classic."""
-    result = _ta().mfi(
-        df["High"].astype(float),
-        df["Low"].astype(float),
-        df["Close"].astype(float),
-        df["Volume"].astype(float),
-        length=period,
-        talib=False,
-    )
-    return _series(result, df.index, f"MFI_{period}")
+    name = f"MFI_{period}"
+    if len(df) <= period:
+        return _nan(df.index, name)
+    high, low, close, volume = _hlcv(df)
+    return _series(talib.MFI(high, low, close, volume, timeperiod=period), df.index, name)
 
 
 def calculate_willr(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Compute Williams %R with pandas-ta-classic."""
-    result = _ta().willr(
-        df["High"].astype(float),
-        df["Low"].astype(float),
-        df["Close"].astype(float),
-        length=period,
-        talib=False,
-    )
-    return _series(result, df.index, f"WILLR_{period}")
+    name = f"WILLR_{period}"
+    if len(df) < period:
+        return _nan(df.index, name)
+    high, low, close = _hlcv(df)[:3]
+    return _series(talib.WILLR(high, low, close, timeperiod=period), df.index, name)
 
 
 _FORMULA_FUNCS: dict = {

@@ -18,10 +18,7 @@ import {
   type SelectChangeEvent,
   Skeleton,
   type SkeletonProps,
-  Snackbar,
   Switch,
-  Tab,
-  Tabs,
   Tooltip,
   type TooltipProps,
 } from '@mui/material'
@@ -96,39 +93,6 @@ export function AppSwitch({ checked, onChange, label, disabled, name }: AppSwitc
   return label ? <FormControlLabel control={control} label={label} /> : control
 }
 
-export interface AppTabItem {
-  value: string
-  label: ReactNode
-  disabled?: boolean
-}
-
-export function AppTabs({ value, items, onChange }: { value: string; items: AppTabItem[]; onChange: (value: string) => void }) {
-  return (
-    <Tabs value={value} onChange={(_event, next: string) => onChange(next)} variant="scrollable" scrollButtons="auto">
-      {items.map(item => <Tab key={item.value} value={item.value} label={item.label} disabled={item.disabled} />)}
-    </Tabs>
-  )
-}
-
-export interface AppDialogProps {
-  open: boolean
-  title?: ReactNode
-  children: ReactNode
-  actions?: ReactNode
-  onClose: () => void
-  maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
-}
-
-export function AppDialog({ open, title, children, actions, onClose, maxWidth = 'sm' }: AppDialogProps) {
-  return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth={maxWidth} aria-labelledby={title ? 'app-dialog-title' : undefined}>
-      {title && <DialogTitle id="app-dialog-title">{title}</DialogTitle>}
-      <DialogContent>{children}</DialogContent>
-      {actions && <DialogActions>{actions}</DialogActions>}
-    </Dialog>
-  )
-}
-
 export interface AppConfirmDialogProps {
   open: boolean
   title: ReactNode
@@ -174,33 +138,6 @@ export function AppSkeleton(props: SkeletonProps) {
 
 export function AppAlert(props: AlertProps) {
   return <Alert variant="outlined" {...props} />
-}
-
-export interface AppSnackbarProps {
-  open: boolean
-  message: ReactNode
-  title?: ReactNode
-  severity?: AlertProps['severity']
-  autoHideDuration?: number | null
-  onClose: () => void
-  bottomOffset?: number
-}
-
-export function AppSnackbar({ open, message, title, severity = 'info', autoHideDuration = 4000, onClose, bottomOffset = 24 }: AppSnackbarProps) {
-  return (
-    <Snackbar
-      open={open}
-      autoHideDuration={autoHideDuration}
-      onClose={onClose}
-      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      sx={{ bottom: { xs: bottomOffset, sm: bottomOffset } }}
-    >
-      <Alert severity={severity} variant="filled" onClose={onClose} sx={{ width: '100%', minWidth: { sm: 320 }, backdropFilter: 'blur(16px)' }}>
-        {title && <strong style={{ display: 'block' }}>{title}</strong>}
-        {message}
-      </Alert>
-    </Snackbar>
-  )
 }
 
 export function SecretField(props: Omit<OutlinedTextFieldProps, 'type' | 'variant'>) {

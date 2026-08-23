@@ -77,7 +77,6 @@ SECTION_LABELS: dict[str, str] = {
     "bear_history": "Bear Arguments",
     "investment_debate_history": "Debate",
     "risk_debate_history": _RISK_DEBATE,
-    "judge_decision": "Judge Decision",
 }
 SIGNALS: list[dict] = [
     {"value": "Buy", "label": "Buy", "tone": "positive"},
@@ -204,7 +203,6 @@ SECTIONS: list[dict] = [
         "icon": "MessageSquare",
     },
     {"key": "risk_debate_history", "label": "Risk Debate", "category": "debate", "order": 24, "icon": "ShieldAlert"},
-    {"key": "judge_decision", "label": "Judge Decision", "category": "decision", "order": 25, "icon": "Gavel"},
     {"key": "final_decision", "label": "Final Decision", "category": "decision", "order": 26, "icon": "CheckCircle"},
 ]
 

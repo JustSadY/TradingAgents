@@ -428,13 +428,12 @@ export function HistoryTab({
                       ] as [string, string][]).filter(entry => !!entry[1]).map(([k, v]) => (
                         <ReportCard key={k} label={readableSectionLabel(sectionLabels, k)} content={v} />
                       ))}
-                      {(detail.bull_history || detail.bear_history || detail.judge_decision) && (
+                      {Boolean(detail.bull_history || detail.bear_history) && (
                         <div className="border-t border-white/[0.04] pt-3 mt-4">
                           <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">{t('analysis.debate_records')}</h4>
                           <div className="space-y-2">
                             {detail.bull_history ? <ReportCard label="Bull" content={detail.bull_history as string} /> : null}
                             {detail.bear_history ? <ReportCard label="Bear" content={detail.bear_history as string} /> : null}
-                            {detail.judge_decision && <ReportCard label="Judge" content={detail.judge_decision} />}
                           </div>
                         </div>
                       )}

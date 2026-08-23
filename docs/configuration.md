@@ -12,6 +12,31 @@ TradingAgents configuration is split in two:
 
 ---
 
+## 🚦 0. Deployment mode: `ENVIRONMENT`
+
+```ini
+# development (default) | production
+ENVIRONMENT=production
+```
+
+This single value changes five behaviours, so a deployment left on the default
+runs as a development instance no matter how it was installed:
+
+| Behaviour | `development` | `production` |
+| --- | --- | --- |
+| Schema | startup runs `alembic upgrade head` itself | startup **verifies** the schema is already at head and refuses to serve otherwise |
+| RLS role | checked, failures logged | strict: the runtime role must be non-owner, `NOSUPERUSER`, `NOBYPASSRLS` (also forced by `RLS_STRICT_MODE`) |
+| Refresh cookie | issued without `Secure` | issued with `Secure` |
+| HSTS | not sent | `Strict-Transport-Security` sent on HTTPS responses |
+| Secrets | shipped defaults are usable | boot fails unless `DATABASE_URL` is PostgreSQL/asyncpg and `SECRET_KEY` / `ENCRYPTION_KEY` are set |
+
+Set `ENVIRONMENT=production` on any internet-facing instance. It is required
+where the database uses a migrator/runtime role split: the runtime role cannot
+run DDL, so a development-mode startup crashes on the first DDL-bearing
+revision instead of deferring to the deploy's `MIGRATION_DATABASE_URL`.
+
+---
+
 ## 🔑 1. Security & Authentication Configuration
 
 These settings control API encryption, password hashing, and CORS access:

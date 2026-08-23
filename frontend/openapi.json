@@ -1849,6 +1849,28 @@
             ],
             "title": "Alpha Pct"
           },
+          "annual_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annual Return"
+          },
+          "annual_volatility": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annual Volatility"
+          },
           "assumptions": {
             "items": {
               "type": "string"
@@ -1865,6 +1887,17 @@
                 "type": "null"
               }
             ]
+          },
+          "calmar_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calmar Ratio"
           },
           "consensus_report_stats": {
             "anyOf": [
@@ -1895,6 +1928,17 @@
             "title": "Max Drawdown",
             "type": "number"
           },
+          "omega_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Omega Ratio"
+          },
           "sharpe_ratio": {
             "title": "Sharpe Ratio",
             "type": "number"
@@ -1902,6 +1946,39 @@
           "slippage_bps": {
             "title": "Slippage Bps",
             "type": "number"
+          },
+          "sortino_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sortino Ratio"
+          },
+          "stability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stability"
+          },
+          "tail_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tail Ratio"
           },
           "total_return": {
             "title": "Total Return",
@@ -1917,6 +1994,17 @@
           "trades_count": {
             "title": "Trades Count",
             "type": "integer"
+          },
+          "value_at_risk": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value At Risk"
           },
           "win_rate": {
             "title": "Win Rate",
@@ -4422,6 +4510,123 @@
         "title": "PersonaUpdate",
         "type": "object"
       },
+      "PortfolioOptimizeRequest": {
+        "properties": {
+          "objective": {
+            "default": "max_sharpe",
+            "pattern": "^(max_sharpe|min_volatility|max_quadratic_utility)$",
+            "title": "Objective",
+            "type": "string"
+          },
+          "risk_aversion": {
+            "default": 1.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 100.0,
+            "title": "Risk Aversion",
+            "type": "number"
+          },
+          "tickers": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30,
+            "minItems": 2,
+            "title": "Tickers",
+            "type": "array"
+          },
+          "total_value": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Value"
+          }
+        },
+        "required": [
+          "tickers"
+        ],
+        "title": "PortfolioOptimizeRequest",
+        "type": "object"
+      },
+      "PortfolioOptimizeResponse": {
+        "properties": {
+          "allocation": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allocation"
+          },
+          "annual_volatility": {
+            "title": "Annual Volatility",
+            "type": "number"
+          },
+          "expected_annual_return": {
+            "title": "Expected Annual Return",
+            "type": "number"
+          },
+          "leftover_cash": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leftover Cash"
+          },
+          "objective": {
+            "title": "Objective",
+            "type": "string"
+          },
+          "observations": {
+            "title": "Observations",
+            "type": "integer"
+          },
+          "sharpe_ratio": {
+            "title": "Sharpe Ratio",
+            "type": "number"
+          },
+          "tickers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tickers",
+            "type": "array"
+          },
+          "weights": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Weights",
+            "type": "object"
+          }
+        },
+        "required": [
+          "objective",
+          "tickers",
+          "observations",
+          "weights",
+          "expected_annual_return",
+          "annual_volatility",
+          "sharpe_ratio"
+        ],
+        "title": "PortfolioOptimizeResponse",
+        "type": "object"
+      },
       "PortfolioRead": {
         "properties": {
           "broker": {
@@ -6892,17 +7097,6 @@
               }
             ],
             "title": "Investment Plan"
-          },
-          "judge_decision": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Judge Decision"
           },
           "llm_model": {
             "anyOf": [
@@ -13452,6 +13646,52 @@
           }
         ],
         "summary": "Get Portfolio Stats",
+        "tags": [
+          "trading"
+        ]
+      }
+    },
+    "/api/trading/portfolio/optimize": {
+      "post": {
+        "operationId": "trading_optimize_portfolio",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortfolioOptimizeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioOptimizeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Optimize Portfolio",
         "tags": [
           "trading"
         ]

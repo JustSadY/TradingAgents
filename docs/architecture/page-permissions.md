@@ -57,6 +57,6 @@ CREATE TABLE user_page_permissions (
 
 `Layout.tsx` fetches `/api/users/me/permissions` on mount and filters the sidebar nav to only show allowed pages. The preferences link and admin link are always shown (filtered by role in the admin/owner case).
 
-`RequireAdmin` component in `App.tsx` redirects non-admin/non-owner users away from `/admin`.
+`App.tsx` guards the `/admin` route inline on the `isAdmin` flag from `useAuth()`, redirecting non-admin/non-owner users to `/dashboard`.
 
 Backend `require_page(key)` dependency provides authoritative server-side enforcement.

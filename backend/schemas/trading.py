@@ -98,6 +98,14 @@ class BacktestResponse(BaseModel):
     win_rate: float
     max_drawdown: float
     sharpe_ratio: float
+    sortino_ratio: float | None = None
+    calmar_ratio: float | None = None
+    omega_ratio: float | None = None
+    tail_ratio: float | None = None
+    value_at_risk: float | None = None
+    annual_return: float | None = None
+    annual_volatility: float | None = None
+    stability: float | None = None
     trades_count: int
     trades: list[BacktestTradeRecord] = Field(default_factory=list)
     equity_curve: list[BacktestEquityPoint] = Field(default_factory=list)
@@ -189,3 +197,22 @@ class JournalNoteReadResponse(BaseModel):
 class JournalDebriefResponse(BaseModel):
     order_id: int
     ai_debrief: str
+
+
+class PortfolioOptimizeRequest(BaseModel):
+    tickers: list[str] = Field(..., min_length=2, max_length=30)
+    objective: str = Field(default="max_sharpe", pattern="^(max_sharpe|min_volatility|max_quadratic_utility)$")
+    total_value: float | None = Field(default=None, gt=0)
+    risk_aversion: float = Field(default=1.0, gt=0, le=100)
+
+
+class PortfolioOptimizeResponse(BaseModel):
+    objective: str
+    tickers: list[str]
+    observations: int
+    weights: dict[str, float]
+    expected_annual_return: float
+    annual_volatility: float
+    sharpe_ratio: float
+    allocation: dict[str, int] | None = None
+    leftover_cash: float | None = None

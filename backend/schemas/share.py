@@ -35,7 +35,6 @@ class SharedReportResponse(BaseModel):
     bear_history: Any = None
     investment_debate_history: Any = None
     risk_debate_history: Any = None
-    judge_decision: str | None = None
     portfolio_decision: dict[str, Any] | None = None
     chart_annotations: Any = None
     risk_metrics: Any = None

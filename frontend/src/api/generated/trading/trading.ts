@@ -36,6 +36,8 @@ import type {
   JournalNoteRequest,
   JournalNoteResponse,
   OrderResponse,
+  PortfolioOptimizeRequest,
+  PortfolioOptimizeResponse,
   PortfolioResponse,
   PortfolioStatsResponse,
   RebalanceResponse,
@@ -785,6 +787,70 @@ export function useTradingGetPortfolioStats<TData = Awaited<ReturnType<typeof tr
 
 
 /**
+ * @summary Optimize Portfolio
+ */
+export const tradingOptimizePortfolio = (
+    portfolioOptimizeRequest: PortfolioOptimizeRequest,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<PortfolioOptimizeResponse>(
+      {url: `/api/trading/portfolio/optimize`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: portfolioOptimizeRequest, signal
+    },
+      options);
+    }
+
+
+
+
+export const getTradingOptimizePortfolioMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof tradingOptimizePortfolio>>, TError,{data: PortfolioOptimizeRequest}, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof tradingOptimizePortfolio>>, TError,{data: PortfolioOptimizeRequest}, TContext> => {
+
+const mutationKey = ['tradingOptimizePortfolio'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof tradingOptimizePortfolio>>, {data: PortfolioOptimizeRequest}> = (props) => {
+          const {data} = props ?? {};
+
+          return  tradingOptimizePortfolio(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TradingOptimizePortfolioMutationResult = NonNullable<Awaited<ReturnType<typeof tradingOptimizePortfolio>>>
+    export type TradingOptimizePortfolioMutationBody = PortfolioOptimizeRequest
+    export type TradingOptimizePortfolioMutationError = HTTPValidationError
+
+    /**
+ * @summary Optimize Portfolio
+ */
+export const useTradingOptimizePortfolio = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof tradingOptimizePortfolio>>, TError,{data: PortfolioOptimizeRequest}, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof tradingOptimizePortfolio>>,
+        TError,
+        {data: PortfolioOptimizeRequest},
+        TContext
+      > => {
+      return useMutation(getTradingOptimizePortfolioMutationOptions(options), queryClient);
+    }
+    /**
  * @summary Rebalance Portfolio
  */
 export const tradingRebalancePortfolio = (

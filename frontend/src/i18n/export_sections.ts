@@ -31,7 +31,6 @@ const exportSections = {
     'export.section.bear_history': 'Bear Arguments',
     'export.section.investment_debate_history': 'Investment Debate',
     'export.section.risk_debate_history': 'Risk Debate',
-    'export.section.judge_decision': 'Judge Decision',
   },
   tr: {
     'export.section.final_decision': 'Nihai Karar (Portfolio Manager)',
@@ -58,7 +57,6 @@ const exportSections = {
     'export.section.bear_history': 'Ayı Argümanları',
     'export.section.investment_debate_history': 'Yatırım Tartışması',
     'export.section.risk_debate_history': 'Risk Tartışması',
-    'export.section.judge_decision': 'Hakem Kararı',
   },
 }
 

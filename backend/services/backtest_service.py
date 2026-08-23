@@ -4,6 +4,8 @@ import logging
 import math
 from decimal import Decimal, InvalidOperation
 
+import empyrical
+import numpy as np
 import pandas as pd
 
 from backend.repositories.backtest import list_consensus_analyses
@@ -19,6 +21,17 @@ _DEFAULT_SLIPPAGE_BPS = Decimal("5.0")
 _SHORT_BORROW_APR = Decimal("0.03")
 _MONEY_QUANTUM = Decimal("0.0001")
 _ZERO = Decimal("0")
+_RISK_METRIC_KEYS = (
+    "sortino_ratio",
+    "calmar_ratio",
+    "omega_ratio",
+    "tail_ratio",
+    "value_at_risk",
+    "annual_return",
+    "annual_volatility",
+    "stability",
+)
+
 
 def _decimal(value) -> Decimal:
     """Convert an external numeric value to a finite Decimal exactly once."""
@@ -30,13 +43,16 @@ def _decimal(value) -> Decimal:
         raise ValueError(f"Expected a finite numeric value, got {value!r}")
     return result
 
+
 def _money(value: Decimal) -> Decimal:
     """Keep simulated fees at the same precision as the paper broker."""
     return value.quantize(_MONEY_QUANTUM)
 
+
 def _apply_slippage_decimal(price: Decimal, action: str, slippage_bps: Decimal) -> Decimal:
     factor = slippage_bps / Decimal(10_000)
     return price * (Decimal(1) + factor) if action == "BUY" else price * (Decimal(1) - factor)
+
 
 def _trade_pnl_decimal(
     side: str,
@@ -51,6 +67,7 @@ def _trade_pnl_decimal(
     entry_commission = _money(entry_price * size * rate)
     exit_commission = _money(exit_price * size * rate)
     return gross - entry_commission - exit_commission - financing_cost
+
 
 def _close_position_decimal(
     side: str,
@@ -90,6 +107,7 @@ def _close_position_decimal(
         "reason": reason,
     }
     return cash_delta, trade
+
 
 # The tunable inputs of each rule-based strategy, and the bounds a search is
 # allowed to explore. Declared here rather than in the optimizer so the
@@ -163,6 +181,7 @@ def _prepare_data(data: pd.DataFrame, strategy_type: str, params: dict | None = 
         data["rsi"] = calculate_rsi(close_series, period=resolved["rsi_period"])
     return data
 
+
 def _generate_signal(
     data: pd.DataFrame,
     row,
@@ -222,6 +241,7 @@ def _generate_signal(
 
     return signal, rec_stop_loss, rec_take_profit
 
+
 def _normalise_exit_levels(
     side: str,
     entry_price: Decimal | float,
@@ -254,6 +274,7 @@ def _normalise_exit_levels(
         valid_target = target if target is not None and target > entry_price else entry_price * Decimal("1.10")
     return valid_stop, valid_target
 
+
 def _exit_reason_and_price(
     side: str,
     open_price: Decimal,
@@ -278,6 +299,7 @@ def _exit_reason_and_price(
     if holding_days >= _MAX_HOLDING_DAYS:
         return "MAX_HOLDING_DAYS", close_price
     return None, close_price
+
 
 def _compute_metrics(daily_values: list[Decimal], trades: list[dict], initial_capital: Decimal) -> dict:
     """Summary performance stats using exact money/equity values.
@@ -323,7 +345,43 @@ def _compute_metrics(daily_values: list[Decimal], trades: list[dict], initial_ca
         "win_rate": round(win_rate * 100, 2),
         "max_drawdown": round(float(max_dd * Decimal(100)), 2),
         "sharpe_ratio": round(sharpe_ratio, 2),
+        **_risk_metrics(daily_returns),
     }
+
+
+def _finite(value) -> float | None:
+    """Report a metric only when it is a real number."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return round(number, 4) if math.isfinite(number) else None
+
+
+def _risk_metrics(daily_returns: list[Decimal]) -> dict:
+    """Risk-adjusted statistics beside the exact-decimal money metrics.
+
+    These are ratios rather than money, so they are computed on floats by
+    empyrical; the equity, P&L and drawdown figures above stay Decimal.
+    """
+    if len(daily_returns) < 2:
+        return dict.fromkeys(_RISK_METRIC_KEYS)
+
+    returns = np.asarray([float(r) for r in daily_returns], dtype="float64")
+    # A flat or degenerate curve divides by zero inside several of these; the
+    # result is filtered by _finite, so the warning is noise.
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return {
+            "sortino_ratio": _finite(empyrical.sortino_ratio(returns)),
+            "calmar_ratio": _finite(empyrical.calmar_ratio(returns)),
+            "omega_ratio": _finite(empyrical.omega_ratio(returns)),
+            "tail_ratio": _finite(empyrical.tail_ratio(returns)),
+            "value_at_risk": _finite(empyrical.value_at_risk(returns)),
+            "annual_return": _finite(empyrical.annual_return(returns)),
+            "annual_volatility": _finite(empyrical.annual_volatility(returns)),
+            "stability": _finite(empyrical.stability_of_timeseries(returns)),
+        }
+
 
 async def _benchmark_return(
     benchmark_ticker: str | None,
@@ -369,6 +427,7 @@ async def _benchmark_return(
         _logger.warning("Benchmark fetch failed for %s: %s", benchmark_ticker, exc)
         return None
 
+
 async def _load_consensus_analyses(
     db, ticker: str, start_date: str, end_date: str, user
 ) -> tuple[dict, dict[str, int]]:
@@ -409,6 +468,7 @@ async def _load_consensus_analyses(
         analyses_map[row.trade_date] = row
     stats["used"] = len(analyses_map)
     return analyses_map, stats
+
 
 async def run_backtest_simulation(
     db,
@@ -480,9 +540,7 @@ async def run_backtest_simulation(
             if position_side is not None:
                 holding_days += 1
                 if position_side == "short":
-                    daily_borrow_cost = _money(
-                        entry_price * position_size * _SHORT_BORROW_APR / Decimal(252)
-                    )
+                    daily_borrow_cost = _money(entry_price * position_size * _SHORT_BORROW_APR / Decimal(252))
                     cash -= daily_borrow_cost
                     short_financing_cost += daily_borrow_cost
                 exit_reason, exit_price = _exit_reason_and_price(

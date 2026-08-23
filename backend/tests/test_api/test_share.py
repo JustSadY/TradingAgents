@@ -30,7 +30,6 @@ async def test_shared_report_exposes_only_canonical_report_fields(monkeypatch) -
         "agent_qa_report",
         "investment_plan",
         "final_decision",
-        "judge_decision",
         "llm_provider",
         "llm_model",
     )

@@ -132,11 +132,11 @@ def _score(objective: str, result: dict) -> float | None:
         elif objective == "win_rate":
             value = float(result["win_rate"])
         elif objective == "calmar":
-            drawdown = abs(float(result.get("max_drawdown") or 0.0))
-            total_return = float(result["total_return"])
-            # A run with no drawdown has no risk-adjusted meaning here; fall
-            # back to the raw return rather than dividing by zero.
-            value = total_return / drawdown if drawdown > 1e-9 else total_return
+            # The backtest reports empyrical's Calmar ratio; a run whose
+            # drawdown was zero has no risk-adjusted meaning, so fall back to
+            # the raw return rather than rejecting the trial.
+            ratio = result.get("calmar_ratio")
+            value = float(ratio) if ratio is not None else float(result["total_return"])
         else:
             raise OptimizationError(f"Unknown objective '{objective}'.")
     except (KeyError, TypeError, ValueError):
@@ -211,7 +211,16 @@ async def optimize_strategy(
             return None, {}
         metrics = {
             key: result.get(key)
-            for key in ("total_return", "sharpe_ratio", "max_drawdown", "win_rate", "trades_count", "final_value")
+            for key in (
+                "total_return",
+                "sharpe_ratio",
+                "max_drawdown",
+                "win_rate",
+                "trades_count",
+                "final_value",
+                "sortino_ratio",
+                "calmar_ratio",
+            )
         }
         if result.get("error"):
             metrics["error"] = result["error"]

@@ -115,7 +115,7 @@ The general metadata catalog `/api/meta` is user-aware:
 
 ### 3. Context Construction & Execution
 1.  **Context Construction:**
-    In [analysis_service.py](../backend/services/analysis_service.py), when starting a run, the system queries settings and generates the thread context:
+    In [analysis_service.py](../../backend/services/analysis_service.py), when starting a run, the system queries settings and generates the thread context:
     ```python
     context = await build_global_runtime_context(db, user_id)
     ```
@@ -125,22 +125,22 @@ The general metadata catalog `/api/meta` is user-aware:
     config = {"configurable": {"runtime_tool_context": context}}
     ```
 3.  **Active Tool Filtering:**
-    Inside [trading_graph.py](../backend/trading_agents/graph/trading_graph.py), the `_filter_tools_for_analyst` utility checks `can_use` and enablement states, removing disabled tools.
+    Inside [trading_graph.py](../../backend/trading_agents/graph/trading_graph.py), the `_filter_tools_for_analyst` utility checks `can_use` and enablement states, removing disabled tools.
 4.  **Agent Bindings:**
-    Inside [analyst_node_factory.py](../backend/trading_agents/agents/runtime/analyst_node_factory.py), the analyst node retrieves the configuration context and binds parameters before execution.
+    Inside [analyst_node_factory.py](../../backend/trading_agents/agents/runtime/analyst_node_factory.py), the analyst node retrieves the configuration context and binds parameters before execution.
 
 ---
 
 ## 🎨 Frontend Dynamic Form Building
 
-The frontend avoids hardcoding setting inputs. [ToolSettingsPanel.tsx](../frontend/src/components/settings/ToolSettingsPanel.tsx) maps schemas automatically:
+The frontend avoids hardcoding setting inputs. [ToolSettingsPanel.tsx](../../frontend/src/components/settings/ToolSettingsPanel.tsx) maps schemas automatically:
 
 *   **Boolean:** Renders as a custom slide switch.
 *   **Number:** Renders as a dual slider-input widget using schema `min`, `max`, and `step` properties.
 *   **Select:** Generates a dropdown select box utilizing localized i18n label values.
 *   **String / Textarea / Secret:** Formats into text inputs, larger textareas, or masked password fields.
 *   **String List:** Parses comma-separated values into a clean Javascript array.
-*   **Localization (i18n):** All names, descriptions, and dropdown choices look up translated strings dynamically from [tools.ts](../frontend/src/i18n/tools.ts).
+*   **Localization (i18n):** All names, descriptions, and dropdown choices look up translated strings dynamically from [tools.ts](../../frontend/src/i18n/tools.ts).
 
 ---
 
@@ -198,7 +198,7 @@ from .builtin import my_custom_tool
 ```
 
 ### 3. Add Frontend Translations
-Open [frontend/src/i18n/tools.ts](../frontend/src/i18n/tools.ts) and add values under English (`en`) and Turkish (`tr`) dictionaries:
+Open [frontend/src/i18n/tools.ts](../../frontend/src/i18n/tools.ts) and add values under English (`en`) and Turkish (`tr`) dictionaries:
 ```typescript
 'tools.my_custom_tool.label': 'My Custom Tool',
 'tools.my_custom_tool.description': 'Calculates lookback-based security metrics.',

@@ -256,7 +256,7 @@ logic:
 ### F. Safe Dynamic Indicator Engine & Evaluation Blueprint
 Allows both analysts and users to write dynamic mathematical expressions (e.g. `(Close - SMA(20)) / STD(20)`) evaluated safely in the backend.
 
-1. **Backend Evaluation Core:** Located in [indicator_service.py](../backend/services/indicator_service.py), it parses formula syntax, replaces `NAME(n)` calls with computed pandas series, and runs a sandboxed `pandas.eval`. The available functions live in the **`_FORMULA_FUNCS` dict (single source)** — currently `SMA`, `EMA`, `STD`, `RSI`, `ATR`, `ADX`, `MAX` (highest High), `MIN` (lowest Low), `VWAP` (rolling), `VOLSMA` (Volume average), and `SHIFT` (Close n bars ago). To add a function, add one entry there; the formula box and the AI assistant pick it up (update the assistant's `_SYSTEM_PROMPT` so the LLM knows about it):
+1. **Backend Evaluation Core:** Located in [indicator_service.py](../backend/services/indicator_service.py), it parses formula syntax, replaces `NAME(n)` calls with computed pandas series, and runs a sandboxed `pandas.eval`. The available functions live in the **`_FORMULA_FUNCS` dict (single source)** — currently `SMA`, `EMA`, `STD`, `RSI`, `ATR`, `ADX`, `CCI`, `MFI`, `WILLR`, `BBL`/`BBM`/`BBU` (Bollinger bands), `STOCHK`/`STOCHD` (stochastic lines), `MAX` (highest High), `MIN` (lowest Low), `VWAP` (rolling), `VOLSMA` (Volume average), and `SHIFT` (Close n bars ago). To add a function, add one entry there; the formula box and the AI assistant pick it up (update the assistant's `_SYSTEM_PROMPT` so the LLM knows about it):
    ```python
    def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
        # Parsed tokens like SMA(10) get pre-calculated and mapped to SMA_10 in local_dict

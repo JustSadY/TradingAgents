@@ -140,12 +140,12 @@ describe('shared report section registry', () => {
   it('renders exactly the sections marked shareable, in registry order', () => {
     const shareable = REPORT_SECTIONS.filter(section => section.shareable).map(s => s.key)
 
-    expect(shareable.slice(0, 6)).toEqual([
+    expect(shareable.slice(0, 5)).toEqual([
       'portfolio_decision', 'final_decision', 'investment_plan',
-      'judge_decision', 'market_report', 'fundamentals_report',
+      'market_report', 'fundamentals_report',
     ])
     expect(shareable.at(-1)).toBe('risk_metrics')
-    expect(shareable).toHaveLength(26)
+    expect(shareable).toHaveLength(25)
   })
 
   it('gives every shareable section a label key and a category', () => {

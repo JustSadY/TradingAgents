@@ -25,7 +25,6 @@ export interface SharedReportResponse {
   insider_report?: string | null;
   investment_debate_history?: unknown;
   investment_plan?: string | null;
-  judge_decision?: string | null;
   llm_model?: string | null;
   llm_provider?: string | null;
   macro_report?: string | null;

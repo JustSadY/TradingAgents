@@ -64,19 +64,13 @@ function printableContent(value: unknown): string {
   }).filter(Boolean).join('\n\n')
 }
 
-function normalizedContent(content: string): string {
-  return content.replace(/\s+/g, ' ').trim()
-}
-
 /**
  * Select the report sections once for every export format.
  *
  * A completed investment debate has three representations in older results:
  * individual bull/bear histories and a combined chronological history. The
  * combined history is authoritative because it preserves turn order, so it
- * replaces the two individual copies whenever present. Likewise, the research
- * manager writes the same plan to both `investment_plan` and `judge_decision`;
- * the latter is retained only when it differs after whitespace normalisation.
+ * replaces the two individual copies whenever present.
  */
 export function buildExportSections(analysis: AnalysisResultRead): ExportSection[] {
   const record = analysis as unknown as AnalysisRecord
@@ -84,7 +78,6 @@ export function buildExportSections(analysis: AnalysisResultRead): ExportSection
     SECTION_ORDER.map(key => [key, printableContent(record[key])])
   ) as Record<string, string>
   const hasCombinedInvestmentDebate = Boolean(contentByKey.investment_debate_history)
-  const investmentPlan = contentByKey.investment_plan
 
   return SECTION_ORDER.flatMap(key => {
     const content = contentByKey[key]
@@ -92,13 +85,6 @@ export function buildExportSections(analysis: AnalysisResultRead): ExportSection
 
     // Avoid a three-way replay of the same Bull/Bear turns in PDF/Markdown.
     if (hasCombinedInvestmentDebate && (key === 'bull_history' || key === 'bear_history')) return []
-
-    // `judge_decision` is a legacy mirror of the Research Manager plan.
-    if (
-      key === 'judge_decision' &&
-      investmentPlan &&
-      normalizedContent(content) === normalizedContent(investmentPlan)
-    ) return []
 
     return [{ key, content }]
   })
