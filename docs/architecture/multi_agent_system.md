@@ -27,8 +27,8 @@ stateDiagram-v2
         Audit --> ResearchManager
     }
 
-    ResearchManager --> RiskPanel
-    RiskPanel --> StrategyReconciler
+    ResearchManager --> RiskDebate
+    RiskDebate --> StrategyReconciler
     StrategyReconciler --> PortfolioManager
     PortfolioManager --> StabilityController
     StabilityController --> Validation

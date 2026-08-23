@@ -241,6 +241,7 @@ async def test_user_owned_arq_and_cron_use_tenant_scope_not_system(seeded, monke
     import backend.services.analysis_queue as analysis_queue
     import backend.services.analysis_service as analysis_service
     import backend.worker as worker
+    from backend.services import cron_service
     from backend.services.cron_service import CronService
 
     seen: dict[str, object] = {}
@@ -275,6 +276,11 @@ async def test_user_owned_arq_and_cron_use_tenant_scope_not_system(seeded, monke
     dispatch = AsyncMock()
     monkeypatch.setattr(analysis_queue, "dispatch_analysis", dispatch)
     monkeypatch.setattr(analysis_service, "register_queued_task", AsyncMock())
+    # The scan deliberately skips a closed market, which would otherwise make
+    # this assertion fail every weekend and every exchange holiday. What is
+    # under test here is the tenant scope of the rows it touches, not the
+    # calendar.
+    monkeypatch.setattr(cron_service, "market_closed_reason", lambda *_args, **_kwargs: None)
     cron = CronService()
     await cron._run_user_watchlist_scan_once(seeded.a)
     assert dispatch.await_count == 1

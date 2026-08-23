@@ -377,6 +377,49 @@ class TestProxyAwareRateLimiting:
         assert limiter_module._client_ip(self._request("10.0.0.2", "198.51.100.9, 10.0.0.3")) == "198.51.100.9"
         assert limiter_module._client_ip(self._request("10.0.0.2", "not-an-ip")) == "10.0.0.2"
 
+    def test_an_untrusted_proxy_is_reported_once_per_peer(self, monkeypatch, caplog):
+        """Otherwise the only symptom is a burst of 429s that reads as an attack."""
+        import logging
+
+        from backend.core import limiter as limiter_module
+
+        monkeypatch.setattr(
+            limiter_module,
+            "get_settings",
+            lambda: SimpleNamespace(TRUST_PROXY_HEADERS=False, TRUSTED_PROXY_CIDRS=""),
+        )
+        monkeypatch.setattr(limiter_module, "_WARNED_PROXY_PEERS", set())
+
+        with caplog.at_level(logging.WARNING, logger=limiter_module.__name__):
+            for _ in range(3):
+                limiter_module._client_ip(self._request("10.0.0.57", "203.0.113.9"))
+            limiter_module._client_ip(self._request("10.0.0.58", "203.0.113.9"))
+
+        warnings = [r.getMessage() for r in caplog.records if "rate-limit bucket" in r.getMessage()]
+
+        # Three requests through one proxy warn once; a second proxy warns again.
+        assert len(warnings) == 2
+        assert "10.0.0.57" in warnings[0]
+        assert "10.0.0.58" in warnings[1]
+        assert "TRUST_PROXY_HEADERS is false" in warnings[0]
+
+    def test_no_proxy_warning_without_a_forwarded_header(self, monkeypatch, caplog):
+        import logging
+
+        from backend.core import limiter as limiter_module
+
+        monkeypatch.setattr(
+            limiter_module,
+            "get_settings",
+            lambda: SimpleNamespace(TRUST_PROXY_HEADERS=False, TRUSTED_PROXY_CIDRS=""),
+        )
+        monkeypatch.setattr(limiter_module, "_WARNED_PROXY_PEERS", set())
+
+        with caplog.at_level(logging.WARNING, logger=limiter_module.__name__):
+            assert limiter_module._client_ip(self._request("198.51.100.20")) == "198.51.100.20"
+
+        assert not [r for r in caplog.records if "rate-limit bucket" in r.getMessage()]
+
     def test_forwarded_header_cannot_be_forged_through_an_untrusted_peer(self, monkeypatch):
         from backend.core import limiter as limiter_module
 

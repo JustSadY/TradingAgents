@@ -158,6 +158,29 @@ fi
 if ! asuser git -C "$PROJECT_ROOT" reset --hard "$TO" >>"$LOG" 2>&1; then
     rollback "Could not switch live checkout to target revision"
 fi
+
+# install.sh forces these on a fresh install, but an instance installed before
+# that — or one whose .env was preserved — keeps whatever it had. Left on the
+# ENVIRONMENT=development default the app tries to run `alembic upgrade` itself
+# with the runtime role, which cannot do DDL in the role-split topology, so it
+# crashes on the first DDL-bearing revision; the refresh cookie also loses
+# Secure and HSTS is not sent. Re-assert them on every update, before restart.
+ENV_FILE="$PROJECT_ROOT/.env"
+if [ -f "$ENV_FILE" ]; then
+    for pair in "ENVIRONMENT=production" "RLS_STRICT_MODE=true"; do
+        key="${pair%%=*}"
+        if grep -q "^$key=" "$ENV_FILE"; then
+            current="$(grep -m1 "^$key=" "$ENV_FILE")"
+            if [ "$current" != "$pair" ]; then
+                sed -i "s|^$key=.*|$pair|" "$ENV_FILE"
+                log "Corrected $key in .env (was: $current)"
+            fi
+        else
+            printf "\n%s\n" "$pair" >> "$ENV_FILE"
+            log "Added $pair to .env"
+        fi
+    done
+fi
 if [ -f "$DIST_ARCHIVE" ]; then
     rm -rf "$PROJECT_ROOT/frontend/dist"
     mkdir -p "$PROJECT_ROOT/frontend/dist"

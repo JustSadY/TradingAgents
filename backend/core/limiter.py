@@ -1,3 +1,4 @@
+import logging
 from functools import lru_cache
 from ipaddress import ip_address, ip_network
 
@@ -6,6 +7,11 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from backend.core.config import get_settings
+
+_logger = logging.getLogger(__name__)
+
+#: Peers already warned about, so a misconfiguration logs once, not per request.
+_WARNED_PROXY_PEERS: set[str] = set()
 
 
 @lru_cache(maxsize=32)
@@ -69,12 +75,45 @@ def _client_ip(request: Request) -> str:
     settings = get_settings()
     peer = get_remote_address(request)
     raw_cidrs = getattr(settings, "TRUSTED_PROXY_CIDRS", "") or ""
+    forwarded = request.headers.get("x-forwarded-for")
+
     if settings.TRUST_PROXY_HEADERS and _is_trusted_proxy(peer, raw_cidrs):
-        forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
             client_ip = _forwarded_client_ip(forwarded)
             if client_ip:
                 return client_ip
+    elif forwarded:
+        _warn_untrusted_proxy(peer, settings.TRUST_PROXY_HEADERS, raw_cidrs)
+
     return peer
+
+def _warn_untrusted_proxy(peer: str, trust_enabled: bool, raw_cidrs: str) -> None:
+    """Say once that every caller is sharing one rate-limit bucket.
+
+    A proxy in front of the app makes ``request.client.host`` the proxy's
+    address for every request, so one user exhausting a limit locks out all of
+    them. The symptom is a burst of identical 429s from one IP, which reads as
+    an attack rather than as a configuration gap, so name the gap explicitly.
+    """
+    if peer in _WARNED_PROXY_PEERS:
+        return
+    _WARNED_PROXY_PEERS.add(peer)
+
+    if not trust_enabled:
+        reason = "TRUST_PROXY_HEADERS is false"
+    elif not raw_cidrs.strip():
+        reason = "TRUSTED_PROXY_CIDRS is empty"
+    else:
+        reason = f"{peer} is not in TRUSTED_PROXY_CIDRS ({raw_cidrs})"
+
+    _logger.warning(
+        "Requests carry X-Forwarded-For but %s, so every client shares the rate-limit "
+        "bucket for peer %s. Set TRUST_PROXY_HEADERS=true and list this proxy in "
+        "TRUSTED_PROXY_CIDRS — only if the proxy overwrites X-Forwarded-For rather "
+        "than appending to it.",
+        reason,
+        peer,
+    )
+
 
 limiter = Limiter(key_func=_client_ip)

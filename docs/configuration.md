@@ -35,6 +35,27 @@ where the database uses a migrator/runtime role split: the runtime role cannot
 run DDL, so a development-mode startup crashes on the first DDL-bearing
 revision instead of deferring to the deploy's `MIGRATION_DATABASE_URL`.
 
+### Behind a reverse proxy
+
+```ini
+TRUST_PROXY_HEADERS=true
+TRUSTED_PROXY_CIDRS=10.0.0.0/8,fd00::/8
+```
+
+Rate limiting keys on `request.client.host`, which behind a proxy is the
+*proxy's* address for every request — so one user hitting a limit locks out
+everyone. Enabling these lets the limiter recover the real caller from
+`X-Forwarded-For`, but only when the directly connected peer is inside
+`TRUSTED_PROXY_CIDRS`; a direct caller can never forge its own bucket.
+
+Enable this **only** if the proxy **overwrites** `X-Forwarded-For` rather than
+appending to it. A proxy that appends lets a client prepend any address it
+likes.
+
+Leave it off and the app logs one warning per proxy peer naming the exact
+setting that is missing, so a burst of shared-bucket 429s is not mistaken for
+an attack.
+
 ---
 
 ## 🔑 1. Security & Authentication Configuration
