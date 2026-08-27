@@ -179,4 +179,4 @@ The platform features a secure, decoupled mechanism to automatically update itse
 
 ## 📈 License
 
-This project is licensed under the **Apache License 2.0**. See the [`LICENSE`](LICENSE) file for more details.
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. See the [`LICENSE`](LICENSE) file for more details.
