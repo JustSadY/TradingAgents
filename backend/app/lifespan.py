@@ -13,21 +13,6 @@ from backend.startup.recovery import recover_lost_alerts, recover_stale_analyses
 _logger = logging.getLogger(__name__)
 
 
-async def _load_cron_settings(cron) -> None:
-    try:
-        from sqlalchemy import select
-
-        from backend.core.rls_context import BackgroundCapability, trusted_background_session
-        from backend.models.settings import AppSettings
-
-        async with trusted_background_session(BackgroundCapability.CRON_BOOTSTRAP) as db:
-            app_res = await db.execute(select(AppSettings).where(AppSettings.cron_enabled))
-            for app_settings in app_res.scalars():
-                await cron.apply_user_settings(app_settings)
-    except Exception as exc:
-        _logger.warning("Could not load cron settings: %s", exc)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _logger.info("Starting TradingAgents Web API...")
@@ -60,8 +45,12 @@ async def lifespan(app: FastAPI):
         _logger.info("Redis event bus active (queue mode: %s).", settings.ANALYSIS_QUEUE_MODE)
 
     cron = init_cron_service()
-    await _load_cron_settings(cron)
+    # Start before loading the stored schedules: a bootstrap that fails while
+    # the database is still coming up then leaves a live scheduler whose resync
+    # job retries, rather than a process with no cron jobs until someone
+    # restarts it.
     cron.start()
+    await cron.bootstrap()
     _logger.info("Application ready.")
     yield
     cron.stop()

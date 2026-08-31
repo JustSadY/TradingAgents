@@ -199,6 +199,28 @@ Lookups fail open: a missing package, unknown calendar code, or out-of-range
 date is treated as "open" and logged, so a calendar problem can never freeze
 every tenant's automation. Manual, user-initiated analyses are not gated.
 
+### Is the scheduler actually running?
+
+The scheduler runs inside the API process, so a restart, a startup that raced
+the database, or an empty watchlist can leave a schedule that never fires.
+**Settings → Cron** answers that directly, from `GET /api/cron/status`:
+
+| Indicator | Meaning |
+| :--- | :--- |
+| Green — *Scheduler Core Online* | Running, responding, and this account's job is registered. |
+| Amber — *Scheduler Core Degraded* | The process is up but scans will not run. The reason is shown: the scheduler is not responding (`scheduler_stalled`), the stored schedules failed to load (`bootstrap_failed`), or scans are enabled with no job registered (`job_missing`). |
+| Red — *Scheduler Core Offline* | The scheduler is not running at all. |
+
+**Last Run** is read back from the analyses the scan created, so it survives a
+restart and shows whether anything ran in the last few days; **Last Outcome**
+says why the most recent attempt did nothing — an exchange holiday, an empty
+watchlist, or an error. A `job_missing` state repairs itself within 15 minutes:
+the scheduler replays the stored schedules on a timer and logs a warning naming
+the user whose job it restored.
+
+Note that schedules are interpreted in `APP_TIMEZONE` (UTC by default), not the
+browser's timezone — `0 9 * * 1-5` with the default fires at 09:00 UTC.
+
 ---
 
 ## 📋 7. System Logs

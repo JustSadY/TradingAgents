@@ -102,6 +102,40 @@ There is no separate `risk_mgmt` sub-agent package. Aggressive, conservative and
 
 The canonical structured accepted decision persisted by the application is `AnalysisResult.portfolio_decision_json`. Execution/share/history/strategy-continuity code must not reconstruct a decision from chart annotations, retired Trader fields, or raw PM proposal data.
 
+## Scheduled work and scheduler health
+
+`cron_service` owns every recurring job: the per-user watchlist scan, the alert
+checker, the performance backfill, the position monitor, transient-data cleanup,
+a liveness heartbeat and a settings resync. The scheduler is in-process, and the
+systemd unit deliberately runs a single uvicorn process (`deploy/README.md`), so
+every job registration lives only in that process's memory.
+
+That makes a lost registration the failure mode to design against. A bootstrap
+that ran while PostgreSQL was still coming up, a settings update whose watchlist
+was empty, or a PostgreSQL advisory lock left behind on a pooled connection each
+stop the user's scans without raising anything — and the status endpoint used to
+publish a boolean latched at `start()`, so the UI stayed green throughout.
+
+Three things make that visible and self-correcting:
+
+| Mechanism | What it covers |
+| :--- | :--- |
+| `scheduler_heartbeat` (60s) | A wedged event loop. APScheduler reports `running` from `start()` onwards, so a timestamp only a live loop can refresh is what separates "up" from "responding". |
+| `cron_resync` (15 min) | A registration that went missing. The stored `AppSettings` rows are replayed onto the scheduler, restoring a job that disappeared and dropping one whose owner turned scans off. A failed startup bootstrap is retried by the same job instead of waiting for a restart. |
+| Per-job outcome records | *Why* nothing ran. Every run records `ok`/`skipped`/`error`/`missed` with a reason (exchange holiday, empty watchlist, lock held elsewhere, exception), and an APScheduler listener records missed run times and max-instance skips that only ever reached the logs. |
+
+`GET /api/cron/status` publishes all of it: the real `running` state, a
+`degraded_reason` code (`scheduler_stopped`, `scheduler_stalled`,
+`bootstrap_failed`, `job_missing`, `scheduler_not_initialized`), the registered
+schedule and its timezone, the heartbeat age, the last outcome and its detail,
+and `last_run_at` read back from the analyses the scan created — the one field
+that survives a restart and answers "did this run at all in the last few days?".
+
+Advisory locks are session-scoped and survive `ROLLBACK`, so `_job_lock`
+invalidates any connection whose unlock fails rather than returning it to the
+pool: a leaked lock would make every later run of that job skip itself silently
+until the process restarted.
+
 ## Exchange-calendar gating
 
 `backend/services/market_calendar_service.py` maps a ticker onto an
