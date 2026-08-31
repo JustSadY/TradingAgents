@@ -224,15 +224,24 @@ export default function Layout() {
           </div>
         )}
 
-        {/* Next Scheduled Scan */}
-        {cronStatus?.next_run_time && (
+        {/* Next Scheduled Scan. A schedule that has stopped firing has no next
+            run at all, so showing this chip only when one exists is exactly the
+            case where the user most needs to be told something is wrong. */}
+        {cronStatus?.degraded_reason ? (
+          <div className="mx-3 mb-2 px-3 py-2 rounded-xl bg-amber-500/[0.06] border border-amber-500/20">
+            <div className="flex items-center gap-1.5 text-[9px] text-amber-300/90 font-medium">
+              <Clock size={11} className="text-amber-400 shrink-0" />
+              <span>{t('nav.scheduler_degraded')}</span>
+            </div>
+          </div>
+        ) : cronStatus?.next_run_time ? (
           <div className="mx-3 mb-2 px-3 py-2 rounded-xl bg-white/[0.02] border border-white/[0.04]">
             <div className="flex items-center gap-1.5 text-[9px] text-slate-500 font-medium">
               <Clock size={11} className="text-violet-400" />
               <span>{t('nav.next_run')}: {new Date(cronStatus.next_run_time).toLocaleTimeString(language === 'tr' ? 'tr-TR' : 'en-US', { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
           </div>
-        )}
+        ) : null}
 
         {/* Language / Currency Selection & User Menu */}
         <div className="px-3 py-3 border-t border-white/[0.04] space-y-3 bg-gray-950/40">

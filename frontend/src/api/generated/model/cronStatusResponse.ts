@@ -7,7 +7,19 @@
  */
 
 export interface CronStatusResponse {
+  degraded_detail?: string | null;
+  degraded_reason?: string | null;
+  heartbeat_age_seconds?: number | null;
   job_configured: boolean;
+  last_heartbeat_at?: string | null;
+  last_outcome?: string | null;
+  last_outcome_at?: string | null;
+  last_outcome_detail?: string | null;
+  last_resync_at?: string | null;
+  last_run_at?: string | null;
   next_run_time?: string | null;
   running: boolean;
+  schedule?: string | null;
+  started_at?: string | null;
+  timezone?: string | null;
 }
