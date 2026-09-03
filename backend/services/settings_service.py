@@ -25,6 +25,21 @@ class SettingsPermissionError(PermissionError):
     pass
 
 
+def _enforce_auto_execution_safety(settings: AppSettings, fields: dict) -> None:
+    """Make automatic AI execution impossible without deterministic safeguards.
+
+    ``auto_execute_signals`` is an opt-in to unattended execution, not an opt-out
+    from the stability controller or run-quality gate.  Keep the stored settings
+    self-consistent so every execution path observes the same contract, including
+    presets and background scheduler runs.
+    """
+    auto_execute = bool(fields.get("auto_execute_signals", getattr(settings, "auto_execute_signals", False)))
+    if not auto_execute:
+        return
+    fields["quality_gate_enabled"] = True
+    fields["decision_stability_mode"] = "enforce"
+
+
 async def enforce_settings_update_permissions(db: AsyncSession, user, body: SettingsUpdate) -> None:
     """Validate which settings sections a non-admin user may mutate."""
     from backend.models.page_permission import SECTION_FIELDS
@@ -109,6 +124,7 @@ async def apply_settings_update(
     persist, and emit a 'settings_updated' event."""
     has_changes = False
     fields = body.model_dump(exclude_unset=True)
+    _enforce_auto_execution_safety(settings, fields)
     webhook_url = fields.get("webhook_url")
     if webhook_url:
         from backend.services.notification_service import resolve_webhook_target
@@ -168,6 +184,7 @@ async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
         await resolve_webhook_target(webhook_url)
 
     settings = await get_or_create_settings(db, user)
+    _enforce_auto_execution_safety(settings, fields)
     for key, value in fields.items():
         setattr(settings, key, value)
     settings.active_preset_name = preset.name
