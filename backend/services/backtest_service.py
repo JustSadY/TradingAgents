@@ -182,6 +182,31 @@ def _prepare_data(data: pd.DataFrame, strategy_type: str, params: dict | None = 
     return data
 
 
+def _decision_mapping(analysis) -> dict:
+    """Read the canonical accepted decision attached to a consensus analysis."""
+    raw = getattr(analysis, "portfolio_decision_json", None)
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (TypeError, ValueError):
+            return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _consensus_target_allocation(analyses_map: dict, signal_date: str | None) -> Decimal | None:
+    analysis = analyses_map.get(signal_date) if signal_date else None
+    if analysis is None:
+        return None
+    raw = _decision_mapping(analysis).get("position_size_pct")
+    if raw is None:
+        return None
+    try:
+        target = _decimal(raw)
+    except ValueError:
+        return None
+    return min(Decimal("100"), max(_ZERO, target))
+
+
 def _generate_signal(
     data: pd.DataFrame,
     row,
@@ -223,10 +248,17 @@ def _generate_signal(
         analysis = analyses_map.get(consensus_signal_date) if consensus_signal_date else None
         if analysis:
             sig = (analysis.signal or "").strip().lower()
+            target = _consensus_target_allocation(analyses_map, consensus_signal_date)
             if sig in ("buy", "overweight"):
                 signal = "BUY"
-            elif sig in ("sell", "underweight"):
-                signal = "SELL"
+            elif sig == "underweight":
+                # Underweight is a smaller positive long allocation, never a
+                # request to cross zero and open a short.
+                signal = "UNDERWEIGHT"
+            elif sig == "sell":
+                # The canonical decision uses a positive target only for an
+                # intentional short. A zero/absent target means exit/flat.
+                signal = "SHORT" if target is not None and target > 0 else "EXIT"
 
             ann = analysis.chart_annotations
             if isinstance(ann, str):
@@ -622,7 +654,59 @@ async def run_backtest_simulation(
                             "long", fill_price, rec_stop_loss, rec_take_profit
                         )
 
-                elif signal == "SELL" and position_side != "short":
+                elif signal == "UNDERWEIGHT" and position_side == "long":
+                    target_pct = _consensus_target_allocation(analyses_map, previous_trade_date)
+                    if target_pct is not None and execution_price > 0:
+                        equity = cash + (position_size * execution_price)
+                        target_qty = (equity * target_pct / Decimal("100")) / execution_price
+                        reduce_qty = max(_ZERO, position_size - target_qty)
+                        if reduce_qty > 0:
+                            sell_price = _apply_slippage_decimal(execution_price, "SELL", slippage_bps_decimal)
+                            cash_delta, trade = _close_position_decimal(
+                                "long",
+                                entry_price,
+                                sell_price,
+                                reduce_qty,
+                                entry_date,
+                                date_str,
+                                "UNDERWEIGHT",
+                                _COMMISSION_RATE,
+                            )
+                            cash += cash_delta
+                            trades.append(trade)
+                            position_size -= reduce_qty
+                            if position_size <= _ZERO:
+                                position_side = None
+                                position_size = _ZERO
+                                stop_loss = None
+                                take_profit = None
+                                holding_days = 0
+
+                elif signal == "EXIT":
+                    if position_side is not None:
+                        exit_action = "SELL" if position_side == "long" else "BUY"
+                        exit_price = _apply_slippage_decimal(execution_price, exit_action, slippage_bps_decimal)
+                        cash_delta, trade = _close_position_decimal(
+                            position_side,
+                            entry_price,
+                            exit_price,
+                            position_size,
+                            entry_date,
+                            date_str,
+                            "SIGNAL",
+                            _COMMISSION_RATE,
+                            short_financing_cost,
+                        )
+                        cash += cash_delta
+                        trades.append(trade)
+                        position_side = None
+                        position_size = _ZERO
+                        stop_loss = None
+                        take_profit = None
+                        holding_days = 0
+                        short_financing_cost = _ZERO
+
+                elif signal in {"SELL", "SHORT"} and position_side != "short":
                     if position_side == "long":
                         sell_price = _apply_slippage_decimal(execution_price, "SELL", slippage_bps_decimal)
                         cash_delta, trade = _close_position_decimal(
@@ -738,6 +822,8 @@ async def run_backtest_simulation(
                 "When a bar touches both stop and target, the stop is assumed to execute first (conservative intrabar ordering).",
                 f"Short positions accrue a fixed {float(_SHORT_BORROW_APR * Decimal(100)):.2f}% annual borrow cost over 252 trading days.",
                 "Short locate availability, margin calls, dividends, taxes, and variable borrow rates are not modeled.",
+                "Consensus Underweight reduces an existing long toward its canonical target allocation and never opens a short.",
+                "Consensus Sell opens a short only when the canonical accepted decision carries a positive short target; otherwise it exits to flat.",
                 "Benchmark return uses the same commission and slippage assumptions as the strategy.",
             ],
         }
