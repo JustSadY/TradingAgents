@@ -15,6 +15,7 @@ from backend.repositories.performance import (
 )
 from backend.repositories.settings import get_app_settings
 from backend.services.market_data_service import calculate_returns
+from backend.services.outcome_semantics import rating_outcome_success
 
 _logger = logging.getLogger(__name__)
 
@@ -98,44 +99,18 @@ def _is_recent(row: object, *, now: datetime | None = None) -> bool:
     return observed >= now - timedelta(days=90)
 
 
-def _return_value(value: object) -> float | None:
-    try:
-        parsed = float(value)
-    except (TypeError, ValueError):
-        return None
-    if parsed != parsed or parsed in (float("inf"), float("-inf")):
-        return None
-    return parsed
-
-
 def _prediction_success(report: object, raw_return: object, alpha_return: object = None) -> bool | None:
-    """Score analyst ratings with their actual five-tier semantics.
-
-    Buy/Sell are absolute directional calls and use raw return. Overweight and
-    Underweight are relative allocation calls and therefore require benchmark
-    alpha. Hold uses alpha when available (otherwise raw return) to represent a
-    roughly neutral outcome. Missing alpha never silently turns a relative call
-    into an absolute one.
-    """
+    """Score an analyst rating with the platform's canonical five-tier semantics."""
     from backend.trading_agents.agents.runtime.rating import parse_rating
 
     prediction = parse_rating(str(report or ""), default=None)
     if not prediction:
         return None
-    raw = _return_value(raw_return)
-    alpha = _return_value(alpha_return)
-    if prediction == "Buy":
-        return raw > 0 if raw is not None else None
-    if prediction == "Sell":
-        return raw < 0 if raw is not None else None
-    if prediction == "Overweight":
-        return alpha > 0 if alpha is not None else None
-    if prediction == "Underweight":
-        return alpha < 0 if alpha is not None else None
-    if prediction == "Hold":
-        neutral_return = alpha if alpha is not None else raw
-        return abs(neutral_return) <= 0.02 if neutral_return is not None else None
-    return None
+    return rating_outcome_success(
+        prediction,
+        raw_return=raw_return,
+        alpha_return=alpha_return,
+    )
 
 
 def _posterior_accuracy(successes: int, count: int, *, prior_mean: float = 0.5) -> float:
@@ -259,6 +234,40 @@ async def get_regime_aware_analyst_attribution_stats(
     }
 
 
+async def _create_reflector_for_row(db, row, settings_obj):
+    """Build reflection LLM from the row owner's actual provider configuration."""
+    from backend.repositories.users import get_user_by_id
+    from backend.services.user_service import resolve_user_api_key
+    from backend.trading_agents.default_config import DEFAULT_CONFIG
+    from backend.trading_agents.graph.reflection import Reflector
+    from backend.trading_agents.llm_clients import create_llm_client
+    from backend.trading_agents.llm_clients.registry import provider_requires_api_key
+
+    provider = str(
+        getattr(settings_obj, "llm_provider", None)
+        or DEFAULT_CONFIG.get("llm_provider", "openai")
+    ).strip().lower()
+    model = str(
+        getattr(settings_obj, "llm_model", None)
+        or DEFAULT_CONFIG.get("llm_model", "gpt-5.6-luna")
+    ).strip()
+
+    api_key = None
+    if getattr(row, "user_id", None) is not None:
+        user = await get_user_by_id(db, int(row.user_id))
+        if user is not None:
+            api_key = resolve_user_api_key(user, provider)
+
+    if provider_requires_api_key(provider) and not api_key:
+        raise ValueError(
+            f"No stored API key is available for reflection provider '{provider}'"
+        )
+
+    client_kwargs = {"api_key": api_key} if api_key else {}
+    client = create_llm_client(provider=provider, model=model, **client_kwargs)
+    return Reflector(client.get_llm())
+
+
 async def backfill_returns(db) -> int:
     from backend.trading_agents.dataflows.config import get_config
 
@@ -269,6 +278,7 @@ async def backfill_returns(db) -> int:
 
     for row in rows:
         row_config = dict(config)
+        settings_obj = None
         if row.user_id:
             settings_obj = await get_app_settings(db, row.user_id)
             if settings_obj:
@@ -292,16 +302,7 @@ async def backfill_returns(db) -> int:
             try:
                 import asyncio
 
-                from backend.trading_agents.default_config import DEFAULT_CONFIG
-                from backend.trading_agents.graph.reflection import Reflector
-                from backend.trading_agents.llm_clients import create_llm_client
-
-                client = create_llm_client(
-                    provider=DEFAULT_CONFIG.get("llm_provider", "openai"),
-                    model=DEFAULT_CONFIG.get("llm_model", "gpt-5.6-luna"),
-                )
-                reflector = Reflector(client.get_llm())
-
+                reflector = await _create_reflector_for_row(db, row, settings_obj)
                 reflection = await asyncio.to_thread(
                     reflector.reflect_on_final_decision,
                     final_decision=row.final_decision,
