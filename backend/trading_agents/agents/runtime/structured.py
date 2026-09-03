@@ -21,6 +21,7 @@ _DETERMINISTIC_CALLER_FALLBACK_SCHEMAS = frozenset(
         "AnalysisPlan",
         "SynthesisAssessment",
         "StrategyRevisionCandidate",
+        "StrategyRevisionIntent",
     }
 )
 
