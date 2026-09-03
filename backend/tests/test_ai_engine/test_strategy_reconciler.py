@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from backend.trading_agents.agents.main.strategy_reconciler import (
+    StrategyRevisionIntent,
     _candidate_respects_lifecycle,
     _fallback_candidate,
+    _materialize_intent,
 )
 from backend.trading_agents.agents.schemas import (
     AssetStrategySnapshot,
@@ -130,3 +132,66 @@ def test_weaken_cannot_smuggle_a_strategic_bias_flip() -> None:
     )
 
     assert _candidate_respects_lifecycle(candidate, {"synthesis_json": {}}) is False
+
+
+def test_weaken_intent_materializes_with_a_strictly_lower_conviction() -> None:
+    state = {
+        "company_of_interest": "NVDA",
+        "asset_type": "stock",
+        "strategy_context": {"strategy_before": _active_strategy()},
+        "analysis_plan_json": {"invalidations_to_check": []},
+        "synthesis_json": {
+            "dominant_bias": "Bullish",
+            "evidence_groups": {},
+            "data_quality": {"level": "medium", "score": 60},
+            "triggered_invalidations": [],
+            "unresolved_questions": [],
+            "market_regime": {},
+        },
+    }
+    fallback = _fallback_candidate(state)
+    intent = StrategyRevisionIntent(
+        revision_action=StrategyRevisionAction.WEAKEN,
+        change_strength=StrategyChangeStrength.MATERIAL,
+        revision_reason="Momentum and valuation evidence weakened without invalidating the thesis.",
+    )
+
+    candidate = _materialize_intent(state, intent, fallback)
+
+    assert candidate.revision_action is StrategyRevisionAction.WEAKEN
+    assert candidate.strategy_before is not None
+    assert candidate.strategy_after is not None
+    assert candidate.strategy_after.version == candidate.strategy_before.version + 1
+    assert candidate.strategy_after.conviction < candidate.strategy_before.conviction
+    assert candidate.strategy_after.strategic_bias is candidate.strategy_before.strategic_bias
+    assert candidate.strategy_after.accepted_rating is candidate.strategy_before.accepted_rating
+
+
+def test_zero_conviction_bias_conflict_does_not_generate_invalid_weaken() -> None:
+    state = {
+        "company_of_interest": "NVDA",
+        "asset_type": "stock",
+        "strategy_context": {
+            "strategy_before": {
+                **_active_strategy(),
+                "conviction": 0.0,
+            }
+        },
+        "analysis_plan_json": {"invalidations_to_check": []},
+        "synthesis_json": {
+            "dominant_bias": "Bearish",
+            "evidence_groups": {},
+            "data_quality": {"level": "medium", "score": 60},
+            "triggered_invalidations": [],
+            "unresolved_questions": [],
+            "market_regime": {},
+        },
+    }
+
+    candidate = _fallback_candidate(state)
+
+    assert candidate.revision_action is StrategyRevisionAction.KEEP
+    assert candidate.strategy_before is not None
+    assert candidate.strategy_after is not None
+    assert candidate.strategy_before.conviction == 0.0
+    assert candidate.strategy_after.conviction == 0.0
