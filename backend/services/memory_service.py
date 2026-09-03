@@ -127,15 +127,25 @@ async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
 
 _SYSTEM_OWNER = "system"
 _SITUATION_MAX_CHARS = 4000
+_QA_TRANSCRIPT_MAX_CHARS = 6000
 
 
 def _namespace(user_id: int | None) -> str:
     return f"ep_user_{user_id}" if user_id else f"ep_{_SYSTEM_OWNER}"
 
 
+def _qa_namespace(user_id: int | None) -> str:
+    return f"qa_user_{user_id}" if user_id else f"qa_{_SYSTEM_OWNER}"
+
+
 def _episode_id(user_id: int | None, ticker: str, trade_date: str) -> str:
     owner = user_id if user_id else _SYSTEM_OWNER
     return f"{owner}:{ticker}:{trade_date}"
+
+
+def _qa_id(user_id: int | None, ticker: str, trade_date: str) -> str:
+    owner = user_id if user_id else _SYSTEM_OWNER
+    return f"{owner}:{ticker}:{trade_date}:agent_qa"
 
 
 async def record_episode(
@@ -184,6 +194,100 @@ async def record_episode(
     except Exception as exc:  # noqa: BLE001 — memory must never break the pipeline
         _logger.warning("record_episode failed for %s %s: %s", ticker, trade_date, exc)
         return False
+
+
+async def record_agent_qa(
+    *,
+    user_id: int | None,
+    ticker: str,
+    trade_date: str,
+    situation_text: str,
+    transcript: str,
+    store: MemoryStore | None = None,
+) -> bool:
+    """Store one cross-examination transcript in a separate semantic namespace."""
+    if not transcript.strip():
+        return False
+    store = store or await get_user_memory_store(user_id)
+    if store is None:
+        return False
+
+    observed_at = datetime.now(UTC).isoformat()
+    situation = (situation_text or f"Cross-examination for {ticker}")[:_SITUATION_MAX_CHARS]
+    transcript = transcript[:_QA_TRANSCRIPT_MAX_CHARS]
+    record = MemoryRecord(
+        id=_qa_id(user_id, ticker, trade_date),
+        text=f"{situation}\n\n{transcript}",
+        metadata={
+            "ticker": ticker,
+            "trade_date": trade_date,
+            "transcript": transcript,
+            "observed_at": observed_at,
+            "memory_type": "agent_qa",
+        },
+    )
+    try:
+        await store.upsert(_qa_namespace(user_id), [record])
+        return True
+    except Exception as exc:  # noqa: BLE001 — memory must never break the pipeline
+        _logger.warning("record_agent_qa failed for %s %s: %s", ticker, trade_date, exc)
+        return False
+
+
+async def recall_agent_qa(
+    *,
+    user_id: int | None,
+    situation_text: str,
+    top_k: int = 3,
+    as_of: str | None = None,
+    store: MemoryStore | None = None,
+) -> str:
+    """Recall similar prior cross-examinations without leaking future transcripts."""
+    store = store or await get_user_memory_store(user_id)
+    if store is None or not situation_text.strip():
+        return ""
+
+    query_limit = max(top_k, top_k * 5 if as_of else top_k)
+    try:
+        hits = await store.query(_qa_namespace(user_id), situation_text, top_k=query_limit)
+    except Exception as exc:  # noqa: BLE001 — Q&A memory is advisory
+        _logger.warning("recall_agent_qa failed: %s", exc)
+        return ""
+
+    if as_of:
+        from backend.core.temporal import parse_iso_date
+
+        cutoff = parse_iso_date(as_of, field_name="as_of")
+        safe_hits = []
+        for hit in hits:
+            observed = hit.metadata.get("observed_at")
+            if not observed:
+                continue
+            try:
+                observed_date = datetime.fromisoformat(str(observed).replace("Z", "+00:00")).date()
+            except ValueError:
+                continue
+            if observed_date <= cutoff:
+                safe_hits.append(hit)
+        hits = safe_hits[:top_k]
+    else:
+        hits = hits[:top_k]
+
+    if not hits:
+        return ""
+
+    parts = ["### Memory: similar prior analyst cross-examinations"]
+    for hit in hits:
+        transcript = str(hit.metadata.get("transcript") or "").strip()
+        if not transcript:
+            continue
+        ticker = hit.metadata.get("ticker", "?")
+        trade_date = hit.metadata.get("trade_date", "?")
+        parts.append(
+            f"\n**{ticker} · {trade_date} · similarity {hit.score:.2f}**\n"
+            f"{transcript[:_QA_TRANSCRIPT_MAX_CHARS]}"
+        )
+    return "\n".join(parts) if len(parts) > 1 else ""
 
 
 async def recall_episode_lessons(
