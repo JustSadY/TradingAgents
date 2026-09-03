@@ -79,9 +79,11 @@ def create_agent_qa_node(ctx: AgentRunContext) -> NodeFn:
         )[:4000]
 
         memory_context = ""
-        # Exact checkpoint time travel deliberately does not consult vector
-        # memory; day-level observed timestamps cannot prove intraday knowledge.
-        if str(config.get("analysis_mode") or "live").lower() != "time_travel":
+        # Vector memory stores observation timestamps at application-write time,
+        # not exact market-knowledge time. Historical/time-travel runs therefore
+        # never consult it: even a same-day transcript could have been recorded
+        # after the replay cutoff and would create look-ahead leakage.
+        if str(config.get("analysis_mode") or "live").lower() == "live":
             try:
                 from backend.services.memory_service import recall_agent_qa
 
@@ -89,7 +91,6 @@ def create_agent_qa_node(ctx: AgentRunContext) -> NodeFn:
                     user_id=config.get("user_id"),
                     situation_text=situation_text,
                     top_k=3,
-                    as_of=state.get("trade_date") or None,
                 )
             except Exception as exc:
                 logger.debug("[agent_qa] memory recall failed (non-fatal): %s", exc)
