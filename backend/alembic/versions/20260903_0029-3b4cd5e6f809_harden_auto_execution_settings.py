@@ -7,18 +7,20 @@ Create Date: 2026-09-03 19:30:00.000000+00:00
 
 from __future__ import annotations
 
-from alembic import op
-import sqlalchemy as sa
+from collections.abc import Sequence
 
-revision = "3b4cd5e6f809"
-down_revision = "2a3bc4d5e6f7"
-branch_labels = None
-depends_on = None
+import sqlalchemy as sa
+from alembic import op
+
+revision: str = "3b4cd5e6f809"
+down_revision: str | None = "2a3bc4d5e6f7"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
     # Existing users may have opted into automatic signal execution before the
-    # stability controller and quality gate became mandatory companions.  Bring
+    # stability controller and quality gate became mandatory companions. Bring
     # those rows onto the same invariant enforced by settings_service.
     op.execute(
         sa.text(
