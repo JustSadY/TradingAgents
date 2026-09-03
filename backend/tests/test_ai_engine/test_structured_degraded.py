@@ -19,6 +19,11 @@ _DEGRADED = "Function id 'ac74040f-9fc9-4c5e-ac74-279ba5161d69': DEGRADED functi
 class _Decision(BaseModel):
     rating: str
 
+class PortfolioDecision(BaseModel):
+    """Local name intentionally matches the runtime deterministic fallback contract."""
+
+    rating: str
+
 def test_structured_schema_helpers_use_pydantic_v2_contract():
     assert validate_schema(_Decision, {"rating": "Hold"}) == _Decision(rating="Hold")
     assert '"rating"' in get_json_schema(_Decision)
@@ -130,6 +135,23 @@ async def test_malformed_structured_response_never_escapes_as_raw_provider_objec
     assert result == _Decision(rating="Hold")
     assert structured_llm.calls == 1
     assert plain_llm.calls == 1
+
+
+async def test_portfolio_decision_malformed_structured_output_fails_closed_without_repair_calls():
+    structured_llm = _MalformedStructuredLLM()
+    plain_llm = _SuccessfulFallbackLLM()
+
+    result = await ainvoke_structured_or_freetext(
+        structured_llm,
+        plain_llm,
+        "Make a decision",
+        "Portfolio Manager",
+        schema=PortfolioDecision,
+    )
+
+    assert result == ""
+    assert structured_llm.calls == 1
+    assert plain_llm.calls == 0
 
 
 async def test_configured_fallback_is_used_for_a_degraded_primary():
