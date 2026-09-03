@@ -83,6 +83,7 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         "output_language": settings.output_language or DEFAULT_CONFIG["output_language"],
         "investor_persona": settings.investor_persona or DEFAULT_CONFIG["investor_persona"],
         "analyst_concurrency_limit": settings.analyst_concurrency_limit or DEFAULT_CONFIG["analyst_concurrency_limit"],
+        "max_analyst_tool_turns": DEFAULT_CONFIG.get("max_analyst_tool_turns", 4),
         "skip_disk_log": True,
         "checkpoint_enabled": True,
         "allow_short_selling": bool(getattr(settings, "allow_short_selling", False)),
