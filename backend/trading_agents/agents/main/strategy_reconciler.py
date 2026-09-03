@@ -14,6 +14,8 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
+from pydantic import Field
+
 from backend.trading_agents.agents.base import AgentRunContext, NodeFn
 from backend.trading_agents.agents.runtime.structured import (
     ainvoke_structured_or_freetext,
@@ -33,12 +35,27 @@ from backend.trading_agents.agents.schemas import (
     StrategyChangeStrength,
     StrategyRevisionAction,
     StrategyRevisionCandidate,
+    StructuredAgentSchema,
 )
 from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
 
 logger = logging.getLogger(__name__)
 
 MAIN_KEY = "strategy_reconciler"
+
+
+class StrategyRevisionIntent(StructuredAgentSchema):
+    """Small LLM-facing decision contract materialized into exact state in code.
+
+    The model chooses the lifecycle action and explains why.  It deliberately
+    does not reproduce ``strategy_before`` / ``strategy_after`` or choose a raw
+    conviction value; those fields are derived from canonical state so semantic
+    invariants cannot be broken by a malformed structured completion.
+    """
+
+    revision_action: StrategyRevisionAction
+    change_strength: StrategyChangeStrength
+    revision_reason: str = Field(min_length=1)
 
 
 def _mapping(value: object) -> dict[str, Any]:
@@ -250,7 +267,10 @@ def _fallback_candidate(state: Mapping[str, Any]) -> StrategyRevisionCandidate:
             regime_after=_mapping(synthesis.get("market_regime")) or before.regime_assumption,
         )
 
-    if dominant is not before.strategic_bias:
+    # A zero-conviction strategy cannot be weakened further.  Previously this
+    # branch clamped 0.0 - 0.10 back to 0.0 and then violated the candidate
+    # validator's strict "WEAKEN must decrease conviction" invariant.
+    if dominant is not before.strategic_bias and before.conviction > 0.0:
         after = _next_snapshot(
             before,
             action=StrategyRevisionAction.WEAKEN,
@@ -301,6 +321,114 @@ def _fallback_candidate(state: Mapping[str, Any]) -> StrategyRevisionCandidate:
         regime_before=before.regime_assumption,
         regime_after=_mapping(synthesis.get("market_regime")) or before.regime_assumption,
     )
+
+
+def _materialize_intent(
+    state: Mapping[str, Any],
+    intent: StrategyRevisionIntent,
+    fallback: StrategyRevisionCandidate,
+) -> StrategyRevisionCandidate:
+    """Turn a small LLM intent into a schema-valid exact transition.
+
+    Lifecycle state, versions, evidence and conviction arithmetic remain under
+    deterministic control.  If an intent is impossible for the current state,
+    the already validated fallback is returned instead of asking the model to
+    reproduce canonical snapshots correctly.
+    """
+
+    context = _mapping(state.get("strategy_context"))
+    before = _snapshot_from_raw(context.get("strategy_before"))
+    synthesis = _mapping(state.get("synthesis_json"))
+    evidence = _evidence_items(synthesis)
+    material_triggered = _material_invalidations(synthesis.get("triggered_invalidations"))
+    action = intent.revision_action
+
+    if before is None:
+        if action is StrategyRevisionAction.CREATE:
+            return fallback.model_copy(update={"revision_reason": intent.revision_reason})
+        return fallback
+
+    if before.status in {AssetStrategyStatus.INVALIDATED, AssetStrategyStatus.CLOSED}:
+        if action is StrategyRevisionAction.REBUILD:
+            return fallback.model_copy(update={"revision_reason": intent.revision_reason})
+        return fallback
+
+    if action in {StrategyRevisionAction.CREATE, StrategyRevisionAction.REBUILD}:
+        return fallback
+
+    regime_after = _mapping(synthesis.get("market_regime")) or before.regime_assumption
+
+    if action is StrategyRevisionAction.INVALIDATE:
+        if not material_triggered:
+            return fallback
+        after = _next_snapshot(
+            before,
+            action=StrategyRevisionAction.INVALIDATE,
+            status=AssetStrategyStatus.INVALIDATED,
+        )
+        return StrategyRevisionCandidate(
+            revision_action=action,
+            expected_version=before.version,
+            strategy_before=before,
+            strategy_after=after,
+            change_strength=StrategyChangeStrength.MAJOR,
+            revision_reason=intent.revision_reason,
+            supporting_evidence=evidence[:8],
+            triggered_invalidations=material_triggered,
+            regime_before=before.regime_assumption,
+            regime_after=regime_after,
+        )
+
+    if action is StrategyRevisionAction.KEEP:
+        after = _next_snapshot(before, action=action)
+        strength = (
+            StrategyChangeStrength.MINOR
+            if intent.change_strength is StrategyChangeStrength.MINOR
+            else StrategyChangeStrength.NONE
+        )
+        return StrategyRevisionCandidate(
+            revision_action=action,
+            expected_version=before.version,
+            strategy_before=before,
+            strategy_after=after,
+            change_strength=strength,
+            revision_reason=intent.revision_reason,
+            supporting_evidence=evidence[:8],
+            triggered_invalidations=[],
+            regime_before=before.regime_assumption,
+            regime_after=regime_after,
+        )
+
+    if action in {StrategyRevisionAction.STRENGTHEN, StrategyRevisionAction.WEAKEN}:
+        if action is StrategyRevisionAction.WEAKEN and before.conviction <= 0.0:
+            return fallback
+        if action is StrategyRevisionAction.STRENGTHEN and before.conviction >= 1.0:
+            return fallback
+
+        # The model chooses direction and materiality, never the numeric value.
+        # This makes the strict Pydantic invariants true by construction.
+        strength = (
+            intent.change_strength
+            if intent.change_strength in {StrategyChangeStrength.MATERIAL, StrategyChangeStrength.MAJOR}
+            else StrategyChangeStrength.MATERIAL
+        )
+        delta = 0.10 if strength is StrategyChangeStrength.MAJOR else 0.05
+        conviction = before.conviction + delta if action is StrategyRevisionAction.STRENGTHEN else before.conviction - delta
+        after = _next_snapshot(before, action=action, conviction=conviction)
+        return StrategyRevisionCandidate(
+            revision_action=action,
+            expected_version=before.version,
+            strategy_before=before,
+            strategy_after=after,
+            change_strength=strength,
+            revision_reason=intent.revision_reason,
+            supporting_evidence=evidence[:8],
+            triggered_invalidations=[],
+            regime_before=before.regime_assumption,
+            regime_after=regime_after,
+        )
+
+    return fallback
 
 
 def _candidate_respects_lifecycle(candidate: StrategyRevisionCandidate, state: Mapping[str, Any]) -> bool:
@@ -359,7 +487,9 @@ def create_strategy_reconciler_node(ctx: AgentRunContext) -> NodeFn:
 
         prompt = f"""You are a strategy reconciler. Compare an exact active asset strategy with
 fresh structured evidence, research, and risk guardrails. Return only a
-StrategyRevisionCandidate matching the schema.
+StrategyRevisionIntent matching the schema. Do NOT reproduce strategy_before,
+strategy_after, versions, or numeric conviction values; the caller materializes
+those fields deterministically from canonical state.
 
 ## Existing strategy context
 {json.dumps(_mapping(state.get('strategy_context')).get('strategy_before'), ensure_ascii=False, default=str)}
@@ -375,23 +505,29 @@ StrategyRevisionCandidate matching the schema.
 
 Rules:
 - Choose only CREATE, KEEP, STRENGTHEN, WEAKEN, INVALIDATE, or REBUILD.
-- KEEP must not create a new version.
-- STRENGTHEN/WEAKEN may change conviction and thesis detail only; they MUST preserve ACTIVE status, strategic_bias, accepted_rating, ticker, asset type and lineage. A direction change requires INVALIDATE followed by a later REBUILD.
+- KEEP means conviction stays unchanged.
+- WEAKEN means conviction must strictly decrease; never choose WEAKEN when current conviction is already 0.
+- STRENGTHEN means conviction must strictly increase; never choose STRENGTHEN when current conviction is already 1.
+- For STRENGTHEN/WEAKEN, use MATERIAL or MAJOR change_strength. The caller computes the exact numeric conviction delta.
+- STRENGTHEN/WEAKEN preserve ACTIVE status, strategic_bias, accepted_rating, ticker, asset type and lineage. A direction change requires INVALIDATE followed by a later REBUILD.
 - INVALIDATE requires a validated MATERIAL or CRITICAL triggered invalidation from Structured Synthesis. WATCH conditions can justify caution/WEAKEN but never close a thesis.
-- CREATE and REBUILD must produce ACTIVE strategy state; do not emit PROVISIONAL.
+- CREATE is only valid when there is no prior strategy. REBUILD is only valid when the prior strategy is INVALIDATED or CLOSED.
 - Do not emit Buy, Sell, order sizing, entries, stops, or execution advice.
-- Preserve the old lineage/version for normal revisions. REBUILD starts a new lineage only after the old thesis is invalidated.
 - Review-origin evidence never counts as independent reversal confirmation.
 {get_general_settings_block()}"""
         try:
             result = await ainvoke_structured_or_freetext(
-                bind_structured(ctx.llm_for(MAIN_KEY), StrategyRevisionCandidate, "Strategy Reconciler"),
+                bind_structured(ctx.llm_for(MAIN_KEY), StrategyRevisionIntent, "Strategy Reconciler"),
                 ctx.llm_for(MAIN_KEY),
                 prompt,
                 "Strategy Reconciler",
-                schema=StrategyRevisionCandidate,
+                schema=StrategyRevisionIntent,
             )
-            candidate = result if isinstance(result, StrategyRevisionCandidate) else fallback
+            candidate = (
+                _materialize_intent(state, result, fallback)
+                if isinstance(result, StrategyRevisionIntent)
+                else fallback
+            )
             if not _candidate_respects_lifecycle(candidate, state):
                 logger.warning("Strategy reconciler candidate violated deterministic lifecycle invariants; using fallback")
                 candidate = fallback
@@ -406,4 +542,4 @@ Rules:
     return strategy_reconciler_node
 
 
-__all__ = ["create_strategy_reconciler_node"]
+__all__ = ["StrategyRevisionIntent", "create_strategy_reconciler_node"]
