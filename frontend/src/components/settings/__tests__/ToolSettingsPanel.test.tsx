@@ -53,7 +53,6 @@ const defaultSettings = {
 describe('ToolSettingsPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // Default mock: return full tools list
     mockUseMeta.mockReturnValue({ tools: fullToolsMeta })
   })
 
@@ -73,8 +72,6 @@ describe('ToolSettingsPanel', () => {
   it('renders category headers from the tool catalogue labels', async () => {
     vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultSettings })
     renderWithQuery(<ToolSettingsPanel />)
-    // The previous mock invented its own labels, so this asserted on strings
-    // that appeared nowhere in the app. These are the real ones.
     expect(await screen.findByText('Market & Technicals')).toBeInTheDocument()
     expect(screen.getByText('tools.category.analysis')).toBeInTheDocument()
   })
@@ -114,7 +111,7 @@ describe('ToolSettingsPanel', () => {
     expect(mockTriggerMetaRefetch).not.toHaveBeenCalled()
   })
 
-  it('refreshes metadata only after a changed successful tool save', async () => {
+  it('sends only the changed tool and refreshes metadata after success', async () => {
     vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultSettings })
     const changedSettings = {
       tools: {
@@ -136,6 +133,9 @@ describe('ToolSettingsPanel', () => {
     })
 
     expect(put).toHaveBeenCalledTimes(1)
+    expect(put.mock.calls[0]?.[1]).toEqual({
+      tools: { technical_indicator: changedSettings.tools.technical_indicator },
+    })
     expect(mockTriggerMetaRefetch).toHaveBeenCalledTimes(1)
   })
 })
