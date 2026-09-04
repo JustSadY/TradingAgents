@@ -9,6 +9,7 @@ from backend.trading_agents.config import MAX_FALLBACK_LLM_CHAIN_LENGTH, Fallbac
 _MAX_WATCHLIST_ITEMS = 100
 _MAX_TICKER_LENGTH = 20
 
+
 def _normalize_watchlist(value: list[str] | None) -> list[str] | None:
     if value is None:
         return None
@@ -24,6 +25,7 @@ def _normalize_watchlist(value: list[str] | None) -> list[str] | None:
         if ticker not in normalized:
             normalized.append(ticker)
     return normalized
+
 
 def _validate_webhook_url_shape(v: str | None) -> str | None:
     """Shared shape check for the ``webhook_url`` field on both settings models.
@@ -45,6 +47,7 @@ def _validate_webhook_url_shape(v: str | None) -> str | None:
         raise ValueError("webhook_url must be a valid http or https URL") from exc
     return v
 
+
 def _normalize_webhook_events(events: list[str]) -> list[str]:
     """Validate the canonical webhook-event collection.
 
@@ -64,6 +67,7 @@ def _normalize_webhook_events(events: list[str]) -> list[str]:
     if unknown:
         raise ValueError(f"Unsupported webhook events: {', '.join(unknown)}")
     return normalized
+
 
 class SettingsBase(BaseModel):
     cron_enabled: bool = False
@@ -110,12 +114,7 @@ class SettingsBase(BaseModel):
     webhook_enabled: bool = False
     webhook_events: list[str] = Field(default_factory=lambda: ["analysis_complete"], max_length=len(WEBHOOK_EVENTS))
     active_preset_name: str | None = None
-    memory_store: str = "pgvector"
-    pinecone_index: str = "tradingagents-memory"
-    pinecone_cloud: str = "aws"
-    pinecone_region: str = "us-east-1"
     memory_embedder: str = "openai"
-    pinecone_embed_model: str = "llama-text-embed-v2"
     memory_openai_embed_model: str = "text-embedding-3-small"
     memory_ollama_embed_model: str = "nomic-embed-text"
     agent_qa_enabled: bool = True
@@ -155,28 +154,40 @@ class SettingsBase(BaseModel):
     def validate_webhook_events(cls, value: list[str]) -> list[str]:
         return _normalize_webhook_events(value)
 
+    @field_validator("memory_embedder")
+    @classmethod
+    def validate_memory_embedder(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"openai", "ollama"}:
+            raise ValueError("memory_embedder must be openai or ollama")
+        return normalized
+
+
 class SettingsRead(SettingsBase, ApiResponse):
     updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
+
 class MemoryStatusResponse(BaseModel):
     enabled: bool
     store: str
     embedder: str | None
-    index: str | None
     embed_model: str | None
     needs_openai_key: bool
     agent_qa_enabled: bool
+
 
 class LLMModelOption(BaseModel):
     value: str
     label: str
     supported_output_languages: list[str] | None = None
 
+
 class LLMProviderCatalogEntry(BaseModel):
     label: str
     models: list[LLMModelOption]
+
 
 class SettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -224,12 +235,7 @@ class SettingsUpdate(BaseModel):
     webhook_url: str | None = None
     webhook_enabled: bool | None = None
     webhook_events: list[str] | None = Field(default=None, max_length=len(WEBHOOK_EVENTS))
-    memory_store: str | None = None
-    pinecone_index: str | None = None
-    pinecone_cloud: str | None = None
-    pinecone_region: str | None = None
-    memory_embedder: str | None = None
-    pinecone_embed_model: str | None = None
+    memory_embedder: str | None = Field(default=None, pattern="^(openai|ollama)$")
     memory_openai_embed_model: str | None = None
     memory_ollama_embed_model: str | None = None
     agent_qa_enabled: bool | None = None
