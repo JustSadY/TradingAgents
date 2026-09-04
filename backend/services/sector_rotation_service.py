@@ -16,6 +16,7 @@ _logger = logging.getLogger(__name__)
 class _EmptyDownload(Exception):
     """An empty frame is retried like a failure but is not an error to report."""
 
+
 SECTORS: dict[str, str] = {
     "XLK": "Technology",
     "XLF": "Financials",
@@ -32,6 +33,8 @@ SECTORS: dict[str, str] = {
 
 _CACHE_TTL = 1800
 _cache: TTLCache = TTLCache(maxsize=1, ttl=_CACHE_TTL)
+_cache_fill_lock = asyncio.Lock()
+
 
 def _rsi(prices: list[float], period: int = 14) -> float:
     if len(prices) < period + 1:
@@ -43,11 +46,24 @@ def _rsi(prices: list[float], period: int = 14) -> float:
     value = rsi_series.iloc[-1]
     return float(value) if not np.isnan(value) else 50.0
 
+
 async def get_sector_rotation() -> list[dict[str, Any]]:
     cached = _cache.get("sector_rotation")
     if cached is not None:
         return cached
 
+    async with _cache_fill_lock:
+        cached = _cache.get("sector_rotation")
+        if cached is not None:
+            return cached
+        results = await _load_sector_rotation()
+        if results:
+            _cache["sector_rotation"] = results
+        return results
+
+
+async def _load_sector_rotation() -> list[dict[str, Any]]:
+    """Load and compute one fresh sector snapshot for the cache owner."""
     tickers = list(SECTORS.keys())
 
     def _fetch() -> Any:
@@ -113,11 +129,9 @@ async def get_sector_rotation() -> list[dict[str, Any]]:
                     "momentum_score": round(momentum_score, 3),
                 }
             )
-        except Exception as _e:
-            _logger.debug("Failed processing sector ticker %s: %s", ticker, _e)
+        except Exception as exc:
+            _logger.debug("Failed processing sector ticker %s: %s", ticker, exc)
             continue
 
     results.sort(key=lambda x: x["momentum_score"], reverse=True)
-    if results:
-        _cache["sector_rotation"] = results
     return results
