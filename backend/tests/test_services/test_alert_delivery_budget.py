@@ -1,9 +1,21 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from backend.services import alert_service
+
+
+class _SessionContext:
+    def __init__(self) -> None:
+        self.session = object()
+
+    async def __aenter__(self):
+        return self.session
+
+    async def __aexit__(self, *_args) -> bool:
+        return False
 
 
 async def test_auto_analyze_alert_reuses_one_user_settings_read(monkeypatch) -> None:
@@ -43,3 +55,33 @@ async def test_auto_analyze_alert_reuses_one_user_settings_read(monkeypatch) -> 
     create_result.assert_awaited_once()
     register_task.assert_awaited_once()
     dispatch.assert_awaited_once()
+
+
+async def test_claimed_outbox_delivery_is_bounded(monkeypatch) -> None:
+    active = 0
+    max_active = 0
+    delivered: list[int] = []
+    release = asyncio.Event()
+    set_context = AsyncMock()
+
+    async def fake_deliver(_db, item_id: int) -> None:
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        if active >= 3:
+            release.set()
+        await release.wait()
+        await asyncio.sleep(0)
+        delivered.append(item_id)
+        active -= 1
+
+    monkeypatch.setattr(alert_service, "_OUTBOX_SEMAPHORE", asyncio.Semaphore(3))
+    monkeypatch.setattr(alert_service, "AsyncSessionLocal", lambda: _SessionContext())
+    monkeypatch.setattr(alert_service, "set_user_background_context", set_context)
+    monkeypatch.setattr(alert_service, "_deliver_outbox_item", fake_deliver)
+
+    await asyncio.gather(*[alert_service._deliver_claimed_outbox_item(item_id, 7) for item_id in range(8)])
+
+    assert sorted(delivered) == list(range(8))
+    assert max_active == 3
+    assert set_context.await_count == 8
