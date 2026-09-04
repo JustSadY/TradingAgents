@@ -10,11 +10,7 @@ from backend.core.security import encrypt_secret
 from backend.models.tool_settings import AgentToolSetting
 from backend.models.user import User
 from backend.schemas.tool_settings import ToolSettingsRead, ToolSettingsUpdate, ToolSettingValue
-from backend.services.tool_access_service import (
-    get_user_access_overrides,
-    get_user_tool_access,
-    get_user_tool_field_access,
-)
+from backend.services.tool_access_service import get_user_access_overrides
 from backend.trading_agents.agents.tools.base import BaseAgentTool
 from backend.trading_agents.agents.tools.registry import registry
 
@@ -111,8 +107,9 @@ async def _render_user_tool_settings(
         tool_access_map = {}
         field_access_map = {}
     else:
-        tool_access_map = await get_user_tool_access(db, user.id)
-        field_access_map = await get_user_tool_field_access(db, user.id)
+        access = await get_user_access_overrides(db, user.id)
+        tool_access_map = access["tool_access"]
+        field_access_map = access["field_access"]
 
     tools_map = {}
     for tool in registry.list():
