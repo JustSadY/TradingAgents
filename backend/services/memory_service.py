@@ -20,8 +20,10 @@ import hashlib
 import logging
 import os
 import tempfile
+from collections import OrderedDict
 from datetime import UTC, datetime
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 _logger = logging.getLogger(__name__)
@@ -31,12 +33,25 @@ _EPISODE_AGENT_ID = "trading-episodes"
 _QA_AGENT_ID = "trading-agent-qa"
 _SITUATION_MAX_CHARS = 4000
 _QA_TRANSCRIPT_MAX_CHARS = 6000
+_SEARCH_CACHE_TTL_SECONDS = 120.0
+_SEARCH_CACHE_MAX_ENTRIES = 128
 
 # Mem0 is intentionally lazy-imported so the application can still boot when
-# memory is not configured.  Instances are reused per effective DB/embedder
+# memory is not configured. Instances are reused per effective DB/embedder
 # configuration; provider secrets are represented only by a short fingerprint
-# in the cache key.
+# in the cache key. Parallel first-use calls share one initialization task so
+# they cannot create duplicate Mem0 clients/connection pools for the same key.
 _store_cache: dict[tuple[Any, ...], Any] = {}
+_store_init_tasks: dict[tuple[Any, ...], asyncio.Task[Any]] = {}
+
+# Short-lived semantic-search cache. Research Manager and Portfolio Manager
+# commonly ask for the same episodic lessons in one run. The key stores only a
+# digest of the prompt text, and writes invalidate the matching owner/agent
+# scope before and after mutation so local readers never keep stale results.
+_search_cache: OrderedDict[
+    tuple[Any, ...],
+    tuple[float, list[dict[str, Any]]],
+] = OrderedDict()
 
 _OPENAI_DIMS = {
     "text-embedding-ada-002": 1536,
@@ -73,7 +88,7 @@ def _embedding_dimensions(provider: str, model: str) -> int:
     """Return the vector size used to create the Mem0 pgvector collection.
 
     Mem0's pgvector adapter needs the dimension before the first embedding is
-    produced.  Keep the supported UI defaults explicit and use a conservative
+    produced. Keep the supported UI defaults explicit and use a conservative
     provider default for custom model names.
     """
     normalized = model.split(":", 1)[0].strip().lower()
@@ -107,7 +122,7 @@ def _mem0_connection_string(database_url: str) -> str | None:
 
 def _collection_name(provider: str, model: str, dimensions: int) -> str:
     # Different embedding models (even with the same dimensions) must never
-    # share a vector space.  The digest also keeps the SQL identifier compact.
+    # share a vector space. The digest also keeps the SQL identifier compact.
     digest = hashlib.sha256(f"{provider}:{model}:{dimensions}".encode()).hexdigest()[:12]
     return f"tradingagents_mem0_{provider}_{digest}"
 
@@ -127,7 +142,7 @@ def _build_mem0(
     dimensions = _embedding_dimensions(embedder_kind, embed_model)
     collection = _collection_name(embedder_kind, embed_model, dimensions)
 
-    # Telemetry is not needed for this internal adapter.  Mem0's Python OSS
+    # Telemetry is not needed for this internal adapter. Mem0's Python OSS
     # implementation also uses SQLite for mutation history, so keep that
     # auxiliary file in a guaranteed-writable temp directory rather than the
     # application source tree.
@@ -146,7 +161,7 @@ def _build_mem0(
                 "embedding_dims": dimensions,
             },
         }
-        # infer=False means this LLM is never called by TradingAgents.  Mem0
+        # infer=False means this LLM is never called by TradingAgents. Mem0
         # still constructs an LLM adapter during initialization, so use the
         # same local provider and avoid introducing a cloud-key requirement.
         llm_config = {
@@ -195,6 +210,49 @@ def _build_mem0(
             "history_db_path": str(mem0_dir / f"{collection}-history.db"),
         }
     )
+
+
+async def _get_or_build_mem0(
+    cache_key: tuple[Any, ...],
+    *,
+    database_url: str,
+    embedder_kind: str,
+    embed_model: str,
+    openai_api_key: str | None,
+    ollama_base_url: str,
+):
+    """Return one shared Mem0 instance per effective configuration.
+
+    The first caller owns a background initialization task. Other concurrent
+    callers await that same task through ``shield`` so one cancelled analysis
+    cannot cancel initialization needed by the rest of the process.
+    """
+    cached = _store_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    task = _store_init_tasks.get(cache_key)
+    if task is None:
+
+        async def _build_and_cache():
+            try:
+                store = await asyncio.to_thread(
+                    _build_mem0,
+                    database_url=database_url,
+                    embedder_kind=embedder_kind,
+                    embed_model=embed_model,
+                    openai_api_key=openai_api_key,
+                    ollama_base_url=ollama_base_url,
+                )
+                _store_cache[cache_key] = store
+                return store
+            finally:
+                _store_init_tasks.pop(cache_key, None)
+
+        task = asyncio.create_task(_build_and_cache())
+        _store_init_tasks[cache_key] = task
+
+    return await asyncio.shield(task)
 
 
 async def get_user_memory_store(user_id: int | None):
@@ -250,19 +308,29 @@ async def get_user_memory_store(user_id: int | None):
             ollama_base_url if embedder_kind == "ollama" else "",
             _secret_fingerprint(openai_key),
         )
-        if cache_key not in _store_cache:
-            _store_cache[cache_key] = await asyncio.to_thread(
-                _build_mem0,
-                database_url=app_config.DATABASE_URL,
-                embedder_kind=embedder_kind,
-                embed_model=embed_model,
-                openai_api_key=openai_key,
-                ollama_base_url=ollama_base_url,
-            )
-        return _store_cache[cache_key]
+        return await _get_or_build_mem0(
+            cache_key,
+            database_url=app_config.DATABASE_URL,
+            embedder_kind=embedder_kind,
+            embed_model=embed_model,
+            openai_api_key=openai_key,
+            ollama_base_url=ollama_base_url,
+        )
     except Exception as exc:  # noqa: BLE001 — memory must never break the pipeline
         _logger.warning("Could not resolve Mem0 memory for user_id=%s: %s", user_id, exc)
         return None
+
+
+def _search_cache_key(store, *, owner: str, agent_id: str, query: str, top_k: int) -> tuple[Any, ...]:
+    query_digest = hashlib.sha256(query.encode("utf-8")).hexdigest()[:16]
+    return id(store), owner, agent_id, query_digest, int(top_k)
+
+
+def _invalidate_search_cache(store, *, owner: str, agent_id: str) -> None:
+    scope = (id(store), owner, agent_id)
+    for key in tuple(_search_cache):
+        if key[:3] == scope:
+            _search_cache.pop(key, None)
 
 
 async def _replace_memory(
@@ -275,6 +343,7 @@ async def _replace_memory(
     metadata: dict[str, Any],
 ) -> None:
     """Idempotently replace one logical TradingAgents memory in Mem0."""
+    _invalidate_search_cache(store, owner=owner, agent_id=agent_id)
     try:
         await asyncio.to_thread(store.delete_all, user_id=owner, agent_id=agent_id, run_id=run_id)
     except Exception as exc:  # duplicate avoidance is best-effort; writing is more important
@@ -289,6 +358,9 @@ async def _replace_memory(
         metadata=metadata,
         infer=False,
     )
+    # A search may have raced between delete and add; clear it again after the
+    # successful write so subsequent recalls observe the new memory.
+    _invalidate_search_cache(store, owner=owner, agent_id=agent_id)
 
 
 def _normalize_hits(payload: Any) -> list[dict[str, Any]]:
@@ -304,7 +376,7 @@ def _normalize_hits(payload: Any) -> list[dict[str, Any]]:
 def _hit_metadata(hit: dict[str, Any]) -> dict[str, Any]:
     metadata = dict(hit.get("metadata") or {})
     # Mem0/vector-store versions have differed on whether custom payload fields
-    # are nested under metadata or returned at the top level.  Merge only known
+    # are nested under metadata or returned at the top level. Merge only known
     # TradingAgents fields so the formatter remains version-tolerant.
     for key in (
         "ticker",
@@ -334,13 +406,28 @@ def _hit_score(hit: dict[str, Any]) -> float:
 
 
 async def _search_memories(store, *, owner: str, agent_id: str, query: str, top_k: int) -> list[dict[str, Any]]:
+    cache_key = _search_cache_key(store, owner=owner, agent_id=agent_id, query=query, top_k=top_k)
+    now = monotonic()
+    cached = _search_cache.get(cache_key)
+    if cached is not None:
+        created_at, hits = cached
+        if now - created_at <= _SEARCH_CACHE_TTL_SECONDS:
+            _search_cache.move_to_end(cache_key)
+            return [dict(hit) for hit in hits]
+        _search_cache.pop(cache_key, None)
+
     payload = await asyncio.to_thread(
         store.search,
         query,
         filters={"user_id": owner, "agent_id": agent_id},
         top_k=top_k,
     )
-    return _normalize_hits(payload)
+    hits = _normalize_hits(payload)
+    _search_cache[cache_key] = (now, hits)
+    _search_cache.move_to_end(cache_key)
+    while len(_search_cache) > _SEARCH_CACHE_MAX_ENTRIES:
+        _search_cache.popitem(last=False)
+    return [dict(hit) for hit in hits]
 
 
 async def record_episode(
