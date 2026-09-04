@@ -19,6 +19,13 @@ from backend.models.settings import AppSettings
 from backend.schemas.settings import SettingsRead, SettingsUpdate
 
 _logger = logging.getLogger(__name__)
+_MEMORY_STORE_CONFIG_FIELDS = frozenset(
+    {
+        "memory_embedder",
+        "memory_openai_embed_model",
+        "memory_ollama_embed_model",
+    }
+)
 
 
 class SettingsPermissionError(PermissionError):
@@ -38,6 +45,14 @@ def _enforce_auto_execution_safety(settings: AppSettings, fields: dict) -> None:
         return
     fields["quality_gate_enabled"] = True
     fields["decision_stability_mode"] = "enforce"
+
+
+def _invalidate_memory_store_if_needed(settings: AppSettings, changed_fields: set[str]) -> None:
+    if not changed_fields.intersection(_MEMORY_STORE_CONFIG_FIELDS):
+        return
+    from backend.services.memory_service import invalidate_user_memory_store_cache
+
+    invalidate_user_memory_store_cache(getattr(settings, "user_id", None))
 
 
 async def enforce_settings_update_permissions(db: AsyncSession, user, body: SettingsUpdate) -> None:
@@ -153,6 +168,7 @@ async def apply_settings_update(
     settings.updated_at = datetime.now(UTC)
     await db.flush()
     await db.commit()
+    _invalidate_memory_store_if_needed(settings, set(changed_fields))
 
     from backend.core.events import emit
 
@@ -193,6 +209,9 @@ async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
 
     settings = await get_or_create_settings(db, user)
     _enforce_auto_execution_safety(settings, fields)
+    changed_field_names = {
+        key for key, value in fields.items() if getattr(settings, key, None) != value
+    }
     for key, value in fields.items():
         setattr(settings, key, value)
     settings.active_preset_name = preset.name
@@ -205,6 +224,7 @@ async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
 
     await db.flush()
     await db.commit()
+    _invalidate_memory_store_if_needed(settings, changed_field_names)
 
     from backend.core.events import emit
 
