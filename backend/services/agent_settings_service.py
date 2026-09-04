@@ -17,7 +17,6 @@ def validate_agent_settings(agent: AgentInfo, incoming: dict[str, Any]) -> dict[
     for key, value in incoming.items():
         if key not in schema_by_key:
             raise ValueError(f"Unknown setting '{key}' for agent '{agent.key}'.")
-        field = schema_by_key[key]
         normalized[key] = value
 
     for field in agent.settings_schema:
@@ -29,12 +28,8 @@ def validate_agent_settings(agent: AgentInfo, incoming: dict[str, Any]) -> dict[
     return normalized
 
 
-async def get_agent_settings_by_scope(db: AsyncSession, scope: str, user_id: int | None = None) -> AgentSettingsRead:
-    from backend.repositories.agent_settings import get_agent_settings_by_scope as _repo_get
-
-    rows_list = await _repo_get(db, scope, user_id)
-    rows = {row.agent_key: row for row in rows_list}
-
+def _agent_settings_read_from_rows(rows: dict[str, AgentSetting]) -> AgentSettingsRead:
+    """Render the API settings view from an already-loaded row snapshot."""
     agents_map = {}
     for agent in list_agents():
         default_enabled = agent.default_enabled
@@ -49,6 +44,14 @@ async def get_agent_settings_by_scope(db: AsyncSession, scope: str, user_id: int
         agents_map[agent.key] = AgentSettingValue(enabled=enabled, settings=settings)
 
     return AgentSettingsRead(agents=agents_map)
+
+
+async def get_agent_settings_by_scope(db: AsyncSession, scope: str, user_id: int | None = None) -> AgentSettingsRead:
+    from backend.repositories.agent_settings import get_agent_settings_by_scope as _repo_get
+
+    rows_list = await _repo_get(db, scope, user_id)
+    rows = {row.agent_key: row for row in rows_list}
+    return _agent_settings_read_from_rows(rows)
 
 
 async def get_user_agent_settings(db: AsyncSession, user: User) -> AgentSettingsRead:
@@ -86,9 +89,9 @@ async def apply_agent_settings_update_by_scope(
         current_settings = row.settings.copy() if row is not None else {}
         if update.reset_settings:
             default_settings = {field.key: field.default for field in agent.settings_schema}
-            for k in update.reset_settings:
-                if k in current_settings:
-                    current_settings[k] = default_settings.get(k)
+            for key in update.reset_settings:
+                if key in current_settings:
+                    current_settings[key] = default_settings.get(key)
         elif update.settings is not None:
             validated = validate_agent_settings(agent, update.settings)
             current_settings.update(validated)
@@ -104,7 +107,9 @@ async def apply_agent_settings_update_by_scope(
         )
 
     await db.flush()
-    return await get_agent_settings_by_scope(db, scope, user_id)
+    # ``rows`` already contains the persisted/mutated ORM objects. Re-querying
+    # the same scope just to construct the response adds a redundant round trip.
+    return _agent_settings_read_from_rows(rows)
 
 
 async def apply_agent_settings_update(db: AsyncSession, user: User, body: AgentSettingsUpdate) -> AgentSettingsRead:
