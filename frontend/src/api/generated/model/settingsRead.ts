@@ -55,17 +55,12 @@ export interface SettingsRead {
   memory_ollama_embed_model: string;
   memory_openai_embed_model: string;
   memory_recall_count: number;
-  memory_store: string;
   news_article_limit: number;
   node_retry_attempts: number;
   node_retry_base_delay: number;
   node_timeout_seconds: number;
   openai_reasoning_effort: string | null;
   output_language: string;
-  pinecone_cloud: string;
-  pinecone_embed_model: string;
-  pinecone_index: string;
-  pinecone_region: string;
   price_tolerance_pct: number;
   quality_gate_enabled: boolean;
   regime_aware_weighting_enabled: boolean;
