@@ -83,3 +83,13 @@ async def test_news_fetch_releases_db_session_before_external_io(monkeypatch) ->
     assert opened_sessions == 2
     assert committed == 1
     assert active_sessions == 0
+
+
+def test_news_ticker_normalization_dedupes_before_limit() -> None:
+    raw = "aapl,AAPL,msft,MSFT," + ",".join(f"T{index}" for index in range(20))
+
+    normalized = news_service._normalize_tickers(raw)
+
+    assert normalized[:2] == ["AAPL", "MSFT"]
+    assert len(normalized) == news_service._MAX_TICKERS
+    assert len(normalized) == len(set(normalized))
