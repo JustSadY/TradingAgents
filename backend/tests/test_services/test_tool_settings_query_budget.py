@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from backend.services.tool_settings_service import get_user_tool_settings, registry
+from backend.schemas.tool_settings import ToolSettingsUpdate
+from backend.services.tool_settings_service import apply_tool_settings_update, get_user_tool_settings, registry
 
 
 class _Tool:
@@ -17,6 +18,22 @@ class _Tool:
         return {}
 
 
+class _Db:
+    def __init__(self) -> None:
+        self.flushes = 0
+
+    async def flush(self) -> None:
+        self.flushes += 1
+
+
+class _Hierarchy:
+    def __init__(self, context):
+        self.context = context
+
+    def is_enabled(self, agent_key: str) -> bool:
+        return bool(self.context.get(agent_key, {}).get("enabled", True))
+
+
 async def test_user_tool_settings_builds_agent_hierarchy_once_for_all_tools(monkeypatch) -> None:
     context_calls = 0
 
@@ -29,16 +46,9 @@ async def test_user_tool_settings_builds_agent_hierarchy_once_for_all_tools(monk
         context_calls += 1
         return {"market": {"enabled": True}, "news": {"enabled": True}}
 
-    class FakeHierarchy:
-        def __init__(self, context):
-            self.context = context
-
-        def is_enabled(self, agent_key: str) -> bool:
-            return bool(self.context.get(agent_key, {}).get("enabled", True))
-
     monkeypatch.setattr("backend.repositories.tool_settings.get_user_tool_settings", fake_rows)
     monkeypatch.setattr("backend.services.agent_settings_service.build_agent_runtime_context", fake_context)
-    monkeypatch.setattr("backend.trading_agents.agents.hierarchy.AgentHierarchy", FakeHierarchy)
+    monkeypatch.setattr("backend.trading_agents.agents.hierarchy.AgentHierarchy", _Hierarchy)
     monkeypatch.setattr(registry, "list", lambda: [_Tool("first", "market"), _Tool("second", "news")])
 
     result = await get_user_tool_settings(
@@ -48,3 +58,43 @@ async def test_user_tool_settings_builds_agent_hierarchy_once_for_all_tools(monk
 
     assert set(result.tools) == {"first", "second"}
     assert context_calls == 1
+
+
+async def test_tool_update_reuses_loaded_rows_and_agent_context_for_response(monkeypatch) -> None:
+    row_queries = 0
+    context_calls = 0
+    tool = _Tool("first", "market")
+
+    async def fake_rows(_db, user_id):
+        nonlocal row_queries
+        assert user_id == 7
+        row_queries += 1
+        return []
+
+    async def fake_context(_db, user_id):
+        nonlocal context_calls
+        assert user_id == 7
+        context_calls += 1
+        return {"market": {"enabled": True}}
+
+    def fake_ensure(_db, *, tool_key, default_enabled, **_kwargs):
+        return SimpleNamespace(tool_key=tool_key, enabled=default_enabled, settings={})
+
+    monkeypatch.setattr("backend.repositories.tool_settings.get_user_tool_settings", fake_rows)
+    monkeypatch.setattr("backend.repositories.tool_settings.ensure_tool_setting", fake_ensure)
+    monkeypatch.setattr("backend.services.agent_settings_service.build_agent_runtime_context", fake_context)
+    monkeypatch.setattr("backend.trading_agents.agents.hierarchy.AgentHierarchy", _Hierarchy)
+    monkeypatch.setattr(registry, "list", lambda: [tool])
+    monkeypatch.setattr(registry, "get", lambda key: tool if key == tool.key else None)
+
+    db = _Db()
+    result = await apply_tool_settings_update(
+        db,
+        SimpleNamespace(id=7, is_admin=True),
+        ToolSettingsUpdate(tools={"first": {"enabled": False}}),
+    )
+
+    assert result.tools["first"].enabled is False
+    assert row_queries == 1
+    assert context_calls == 1
+    assert db.flushes == 1
