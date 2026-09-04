@@ -256,9 +256,12 @@ async def add_ticker_to_watchlist(db: AsyncSession, user, ticker: str) -> list[s
 
 
 async def remove_ticker_from_watchlist(db: AsyncSession, user, ticker: str) -> list[str]:
-    """Remove ``ticker`` from ``user``'s watchlist."""
+    """Remove ``ticker`` without rewriting an unchanged watchlist."""
     settings = await get_or_create_settings(db, user)
-    settings.watchlist = [t for t in settings.watchlist if t != ticker]
+    current = list(settings.watchlist or [])
+    if ticker not in current:
+        return current
+    settings.watchlist = [item for item in current if item != ticker]
     await db.flush()
     return settings.watchlist
 
