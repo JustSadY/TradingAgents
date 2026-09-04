@@ -94,3 +94,28 @@ async def test_rebalance_market_and_signal_context_start_concurrently(monkeypatc
     assert max_active == 2
     assert result["summary"] == "ok"
     assert result["suggestions"][0]["rationale"] == "why"
+
+
+async def test_rebalance_sector_lookups_are_bounded(monkeypatch) -> None:
+    active = 0
+    max_active = 0
+    release = asyncio.Event()
+
+    async def fake_sector(ticker: str) -> str:
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        if active >= service._REBALANCE_SECTOR_CONCURRENCY:
+            release.set()
+        await release.wait()
+        await asyncio.sleep(0)
+        active -= 1
+        return f"sector:{ticker}"
+
+    monkeypatch.setattr(service, "fetch_sector", fake_sector)
+    tickers = [f"T{index}" for index in range(12)]
+
+    sectors = await service._fetch_sectors(tickers)
+
+    assert max_active == service._REBALANCE_SECTOR_CONCURRENCY
+    assert sectors == {ticker: f"sector:{ticker}" for ticker in tickers}
