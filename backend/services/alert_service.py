@@ -12,10 +12,10 @@ from backend.core.rls_context import (
     trusted_background_session,
 )
 from backend.repositories.alert_runtime import (
-    alert_analysis_exists,
     claim_alert_and_enqueue_outbox,
     claim_outbox_batch,
     complete_outbox_item,
+    existing_alert_analysis_keys,
     get_alert_unscoped,
     get_outbox_item,
     get_outbox_item_for_update,
@@ -362,26 +362,23 @@ async def check_and_recover_lost_alerts() -> None:
     await process_alert_outbox()
     async with trusted_background_session(BackgroundCapability.ALERT_RECOVERY) as db:
         triggered_alerts = await list_triggered_auto_analyze_alerts(db)
-        missing: list[tuple[str, str, int | None]] = []
-        missing_keys: set[tuple[str, str, int | None]] = set()
+        recovery_candidates: list[tuple[str, str, int | None]] = []
+        seen_candidates: set[tuple[str, str, int | None]] = set()
         for alert in triggered_alerts:
             trigger_date = alert.triggered_at.strftime("%Y-%m-%d")
-            exists = await alert_analysis_exists(
-                db,
-                ticker=alert.ticker,
-                trade_date=trigger_date,
-                user_id=alert.user_id,
+            recovery_key = (alert.ticker, trigger_date, alert.user_id)
+            if recovery_key not in seen_candidates:
+                seen_candidates.add(recovery_key)
+                recovery_candidates.append(recovery_key)
+
+        existing_keys = await existing_alert_analysis_keys(db, seen_candidates)
+        missing = [key for key in recovery_candidates if key not in existing_keys]
+        for ticker, trigger_date, _user_id in missing:
+            _logger.warning(
+                "Recovering lost alert analysis task for %s (triggered at %s)",
+                ticker,
+                trigger_date,
             )
-            if not exists:
-                _logger.warning(
-                    "Recovering lost alert analysis task for %s (triggered at %s)",
-                    alert.ticker,
-                    trigger_date,
-                )
-                recovery_key = (alert.ticker, trigger_date, alert.user_id)
-                if recovery_key not in missing_keys:
-                    missing_keys.add(recovery_key)
-                    missing.append(recovery_key)
 
         if not missing:
             return
