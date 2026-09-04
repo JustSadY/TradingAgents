@@ -39,8 +39,10 @@ async def generate_daily_summary(db: AsyncSession, user: User) -> dict:
     settings = await get_or_create_settings(db, user)
     watchlist: list[str] = list(settings.watchlist or [])[:10]
 
-    price_lines = await _fetch_watchlist_prices(watchlist)
-    sector_lines = await _fetch_sector_data()
+    price_lines, sector_lines = await asyncio.gather(
+        _fetch_watchlist_prices(watchlist),
+        _fetch_sector_data(),
+    )
 
     watchlist_block = "\n".join(price_lines) if price_lines else "  (watchlist empty)"
     sector_block = "\n".join(sector_lines) if sector_lines else "  (sector data unavailable)"
