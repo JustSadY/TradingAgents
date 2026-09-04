@@ -45,6 +45,42 @@ async def test_reflection_uses_analysis_owner_provider_model_and_api_key(monkeyp
     }
 
 
+async def test_reflection_reuses_preloaded_owner_without_repository_lookup(monkeypatch) -> None:
+    captured = {}
+    owner = SimpleNamespace(id=42)
+
+    async def forbidden_lookup(*_args):
+        raise AssertionError("preloaded owner must avoid a repository lookup")
+
+    class FakeClient:
+        def get_llm(self):
+            return "configured-llm"
+
+    def fake_create_llm_client(*, provider, model, **kwargs):
+        captured.update(provider=provider, model=model, **kwargs)
+        return FakeClient()
+
+    class FakeReflector:
+        def __init__(self, llm):
+            self.llm = llm
+
+    monkeypatch.setattr("backend.repositories.users.get_user_by_id", forbidden_lookup)
+    monkeypatch.setattr("backend.services.user_service.resolve_user_api_key", lambda user, _provider: "tenant-key" if user is owner else None)
+    monkeypatch.setattr("backend.trading_agents.llm_clients.registry.provider_requires_api_key", lambda _provider: True)
+    monkeypatch.setattr("backend.trading_agents.llm_clients.create_llm_client", fake_create_llm_client)
+    monkeypatch.setattr("backend.trading_agents.graph.reflection.Reflector", FakeReflector)
+
+    reflector = await _create_reflector_for_row(
+        object(),
+        SimpleNamespace(user_id=42),
+        SimpleNamespace(llm_provider="nvidia", llm_model="meta/llama-test"),
+        owner_user=owner,
+    )
+
+    assert reflector.llm == "configured-llm"
+    assert captured["api_key"] == "tenant-key"
+
+
 async def test_reflection_rejects_hosted_provider_without_owner_key(monkeypatch) -> None:
     async def fake_get_user_by_id(_db, _user_id):
         return SimpleNamespace(id=42)
