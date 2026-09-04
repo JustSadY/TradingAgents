@@ -14,6 +14,11 @@ from backend.repositories.common import scope_to_user
 
 _logger = logging.getLogger(__name__)
 
+_HISTORICAL_REVIEW_COLUMNS = (
+    AnalysisResult.id,
+    AnalysisResult.trade_date,
+    AnalysisResult.final_decision,
+)
 _ANALYSIS_LIST_COLUMNS = (
     AnalysisResult.id,
     AnalysisResult.ticker,
@@ -59,11 +64,15 @@ async def list_historical_analyses(
     before_trade_date: str,
     limit: int,
 ) -> list[AnalysisResult]:
+    # The Review tool consumes only the prior canonical decision and its date.
+    # Loading the rest of a completed analysis here can pull dozens of large
+    # report/JSON columns into every review-agent tool call.
     q = scope_to_user(select(AnalysisResult), AnalysisResult, user)
     q = (
         q.where(AnalysisResult.ticker == ticker)
         .where(AnalysisResult.trade_date < before_trade_date)
         .where(AnalysisResult.status == "completed")
+        .options(load_only(*_HISTORICAL_REVIEW_COLUMNS))
         .order_by(_desc(AnalysisResult.trade_date), _desc(AnalysisResult.created_at))
         .limit(limit)
     )
