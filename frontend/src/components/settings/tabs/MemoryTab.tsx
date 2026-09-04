@@ -13,13 +13,6 @@ interface MemoryTabProps {
   update: Update
   meta: Meta | null
   memoryStatus: MemoryStatusResponse | null
-  // Kept temporarily so Settings.tsx does not need a broad generated-API/UI
-  // refactor in the same change. Mem0 no longer consumes Pinecone credentials.
-  pineconeKey: string
-  setPineconeKey: (key: string) => void
-  pineconeSaving: boolean
-  savePineconeKey: () => void
-  deletePineconeKey: () => void
 }
 
 export function MemoryTab({ s, t, update, meta, memoryStatus }: MemoryTabProps) {
