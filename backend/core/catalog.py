@@ -9,6 +9,7 @@ from backend.trading_agents.llm_clients.registry import llm_registry
 
 _RISK_DEBATE = "Risk Debate"
 
+
 def _node_specs() -> dict:
     try:
         from backend.trading_agents.agents.runtime.analyst_execution import ANALYST_NODE_SPECS
@@ -16,6 +17,7 @@ def _node_specs() -> dict:
         return ANALYST_NODE_SPECS
     except Exception:
         return {}
+
 
 async def available_analysts(db=None, user=None) -> list[dict]:
     """Single source: the engine analyst catalog.
@@ -47,8 +49,10 @@ async def available_analysts(db=None, user=None) -> list[dict]:
             )
     return out
 
+
 def _analyst_label(key: str) -> str:
     return label_for(key)
+
 
 SECTION_LABELS: dict[str, str] = {
     "market_report": "Market Analysis",
@@ -130,6 +134,7 @@ LLM_CATALOG: dict[str, dict] = {
     for p in llm_registry.list_providers()
 }
 
+
 def trading_options_for_user(user=None) -> tuple[list[dict], list[dict]]:
     """Return only brokerage choices the requesting user may safely configure.
 
@@ -150,9 +155,6 @@ def trading_options_for_user(user=None) -> tuple[list[dict], list[dict]]:
         {"value": "alpaca", "label": "Alpaca (Paper)"},
     ]
 
-MEMORY_STORES: list[dict] = [
-    {"value": "pgvector", "label": "Mem0 + pgvector (PostgreSQL)"},
-]
 
 EMBEDDERS: list[dict] = [
     {"value": "openai", "label": "OpenAI", "note": "Uses your OpenAI key"},
@@ -204,6 +206,7 @@ SECTIONS: list[dict] = [
     {"key": "final_decision", "label": "Final Decision", "category": "decision", "order": 26, "icon": "CheckCircle"},
 ]
 
+
 async def investor_personas(db=None, user=None) -> list[dict]:
     from backend.trading_agents.personas import list_personas
 
@@ -218,6 +221,7 @@ async def investor_personas(db=None, user=None) -> list[dict]:
         except Exception:
             pass
     return builtins
+
 
 ORDER_STATUSES: list[dict] = [
     {"value": "FILLED", "label": "Filled", "tone": "positive"},
@@ -238,6 +242,7 @@ CHART_PERIODS: list[dict] = [
     {"value": "5y", "label": "5Y"},
 ]
 
+
 async def build_meta(db=None, user=None) -> dict:
     from backend.schemas.meta import AgentMeta
     from backend.schemas.tool_settings import ToolMeta
@@ -249,12 +254,14 @@ async def build_meta(db=None, user=None) -> dict:
     tools_list = [ToolMeta.model_validate(item).model_dump() for item in registry.metadata()]
     agents_list = [AgentMeta.model_validate(a.metadata()).model_dump() for a in list_agents()]
     if db is not None and user is not None:
-        from backend.services.tool_access_service import get_user_tool_access
-
         agent_ctx = await build_agent_runtime_context(db, user.id)
         hierarchy = AgentHierarchy(agent_ctx)
 
-        tool_access_map = await get_user_tool_access(db, user.id)
+        tool_access_map = {}
+        if not user.is_admin:
+            from backend.services.tool_access_service import get_user_tool_access
+
+            tool_access_map = await get_user_tool_access(db, user.id)
 
         filtered_tools = []
         for t in tools_list:
@@ -291,12 +298,12 @@ async def build_meta(db=None, user=None) -> dict:
         "setting_keys": [{"value": key, "label": key} for key in SETTING_KEYS],
         "sections": SECTIONS,
         "webhook_events": WEBHOOK_EVENTS,
-        "memory_stores": MEMORY_STORES,
         "embedders": EMBEDDERS,
         # Published so the generated client carries the WebSocket vocabulary
         # and the browser can be checked against it; see schemas/analysis_events.
         "analysis_event_types": list(ANALYSIS_EVENT_TYPES),
     }
+
 
 _STATIC_NODE_LABELS: dict[str, tuple[str, str]] = {
     "Strategy Context Loader": ("Strategy Context", "research"),
@@ -317,6 +324,7 @@ _STATIC_NODE_LABELS: dict[str, tuple[str, str]] = {
 }
 _ANALYST_NODE_LABELS: dict[str, tuple[str, str]] | None = None
 
+
 def _analyst_node_labels() -> dict[str, tuple[str, str]]:
     global _ANALYST_NODE_LABELS
     if _ANALYST_NODE_LABELS is None:
@@ -327,6 +335,7 @@ def _analyst_node_labels() -> dict[str, tuple[str, str]]:
             mapping[spec.tool_node] = (f"{label} — fetching data", "tool")
         _ANALYST_NODE_LABELS = mapping
     return _ANALYST_NODE_LABELS
+
 
 def node_progress(node_name: str) -> dict | None:
     hit = _analyst_node_labels().get(node_name) or _STATIC_NODE_LABELS.get(node_name)
