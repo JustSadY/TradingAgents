@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, act } from '@testing-library/react'
+import { screen, act, fireEvent } from '@testing-library/react'
 import { renderWithQuery } from '../../../test/renderWithQuery'
 import axios from 'axios'
 import ToolSettingsPanel from '../ToolSettingsPanel'
@@ -100,12 +100,37 @@ describe('ToolSettingsPanel', () => {
     expect(screen.queryByText('Save Tools')).not.toBeInTheDocument()
   })
 
-  it('refreshes metadata only after a successful tool save', async () => {
+  it('skips mutation and metadata refresh when tool settings are unchanged', async () => {
     vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultSettings })
     const put = vi.spyOn(axios, 'put').mockResolvedValue({ data: defaultSettings })
     renderWithQuery(<ToolSettingsPanel />)
 
     const saveButton = await screen.findByText('Save Tools')
+    await act(async () => {
+      saveButton.click()
+    })
+
+    expect(put).not.toHaveBeenCalled()
+    expect(mockTriggerMetaRefetch).not.toHaveBeenCalled()
+  })
+
+  it('refreshes metadata only after a changed successful tool save', async () => {
+    vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultSettings })
+    const changedSettings = {
+      tools: {
+        ...defaultSettings.tools,
+        technical_indicator: { ...defaultSettings.tools.technical_indicator, enabled: true },
+      },
+    }
+    const put = vi.spyOn(axios, 'put').mockResolvedValue({ data: changedSettings })
+    renderWithQuery(<ToolSettingsPanel />)
+
+    await screen.findByText('Technical Indicators')
+    const toggle = document.querySelector('input[name="technical_indicator-enabled"]')
+    expect(toggle).toBeInstanceOf(HTMLInputElement)
+    fireEvent.click(toggle as HTMLInputElement)
+
+    const saveButton = screen.getByText('Save Tools')
     await act(async () => {
       saveButton.click()
     })
