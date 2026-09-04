@@ -137,6 +137,11 @@ Give a direct, honest assessment."""
             status_code=400,
         )
 
+    # The order, note, settings and agent runtime configuration are all copied
+    # into local prompt/provider values. Release the read transaction before the
+    # model call; the debrief write below starts a fresh tenant-scoped transaction.
+    await db.commit()
+
     try:
         client = create_llm_client(provider=provider, model=model, api_key=user_key)
         llm = client.get_llm()
