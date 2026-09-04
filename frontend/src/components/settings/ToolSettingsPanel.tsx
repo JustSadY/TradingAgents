@@ -38,6 +38,12 @@ export interface ToolSettingsPanelHandle {
   save: () => Promise<void>
 }
 
+function changedTools(current: ToolSettings, persisted: ToolSettings | null): Record<string, ToolSettingState> {
+  return Object.fromEntries(
+    Object.entries(current.tools).filter(([key, value]) => JSON.stringify(value) !== JSON.stringify(persisted?.tools[key])),
+  )
+}
+
 const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelProps>(({
   userId,
   serverScope = false,
@@ -46,7 +52,7 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
   const { t } = useTranslation()
   const meta = useMeta()
   const [settings, setSettings] = useState<ToolSettings | null>(null)
-  const persistedSnapshot = useRef<string | null>(null)
+  const persistedSettings = useRef<ToolSettings | null>(null)
 
   const otherUserId = !serverScope && userId ? userId : 0
   const serverQuery = useSystemSettingsGetServerTools({ query: { enabled: serverScope } })
@@ -60,7 +66,7 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
     if (activeQuery.data) {
       const next = activeQuery.data as unknown as ToolSettings
       setSettings(next)
-      persistedSnapshot.current = JSON.stringify(next)
+      persistedSettings.current = next
     }
   }, [activeQuery.data])
 
@@ -71,11 +77,11 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
 
   const save = useCallback(async () => {
     if (!settings) return
-    const currentSnapshot = JSON.stringify(settings)
-    if (currentSnapshot === persistedSnapshot.current) return
+    const tools = changedTools(settings, persistedSettings.current)
+    if (Object.keys(tools).length === 0) return
 
     try {
-      const body = settings as unknown as Parameters<typeof saveOwn.mutateAsync>[0]['data']
+      const body = { tools } as unknown as Parameters<typeof saveOwn.mutateAsync>[0]['data']
       const response = serverScope
         ? await saveServer.mutateAsync({ data: body })
         : userId
@@ -83,7 +89,7 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
           : await saveOwn.mutateAsync({ data: body })
       const persisted = response as unknown as ToolSettings
       setSettings(persisted)
-      persistedSnapshot.current = JSON.stringify(persisted)
+      persistedSettings.current = persisted
       triggerMetaRefetch()
       notify('success', t('settings.tools_saved'))
     } catch (error: unknown) {
