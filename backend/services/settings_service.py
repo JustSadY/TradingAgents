@@ -29,7 +29,7 @@ def _enforce_auto_execution_safety(settings: AppSettings, fields: dict) -> None:
     """Make automatic AI execution impossible without deterministic safeguards.
 
     ``auto_execute_signals`` is an opt-in to unattended execution, not an opt-out
-    from the stability controller or run-quality gate.  Keep the stored settings
+    from the stability controller or run-quality gate. Keep the stored settings
     self-consistent so every execution path observes the same contract, including
     presets and background scheduler runs.
     """
@@ -66,10 +66,9 @@ async def enforce_settings_update_permissions(db: AsyncSession, user, body: Sett
 def parse_preset_settings_json(settings_json: str) -> SettingsUpdate:
     """Parse a stored preset as a strict, validated ``SettingsUpdate``.
 
-    ``SettingsUpdate`` deliberately accepts partial updates, but Pydantic's
-    default extra-field behaviour is permissive. Check field names first so
-    an ORM attribute such as ``user_id`` cannot reappear as a mass-assignment
-    path through a legacy or manually-created preset.
+    ``SettingsUpdate`` deliberately accepts partial updates. Check field names
+    first so an ORM attribute such as ``user_id`` cannot reappear as a
+    mass-assignment path through a legacy or manually-created preset.
     """
     try:
         data = json.loads(settings_json)
@@ -120,22 +119,31 @@ async def apply_settings_update(
     settings: AppSettings,
     body: SettingsUpdate,
 ) -> AppSettings:
-    """Apply a partial settings update, reset the active preset on real changes,
-    persist, and emit a 'settings_updated' event."""
-    has_changes = False
+    """Apply a partial settings update and emit only when stored values change.
+
+    Idempotent PUT/PATCH callers must not advance ``updated_at``, issue a commit,
+    or fan out a ``settings_updated`` event when they resend values that are
+    already persisted.
+    """
     fields = body.model_dump(exclude_unset=True)
     _enforce_auto_execution_safety(settings, fields)
-    webhook_url = fields.get("webhook_url")
+    changed_fields = {
+        field: value
+        for field, value in fields.items()
+        if getattr(settings, field, None) != value
+    }
+    if not changed_fields:
+        return settings
+
+    webhook_url = changed_fields.get("webhook_url")
     if webhook_url:
         from backend.services.notification_service import resolve_webhook_target
 
         await resolve_webhook_target(webhook_url)
-    for field, value in fields.items():
-        if getattr(settings, field, None) != value:
-            has_changes = True
+
+    for field, value in changed_fields.items():
         setattr(settings, field, value)
-    if has_changes:
-        settings.active_preset_name = None
+    settings.active_preset_name = None
 
     if settings.webhook_url:
         from backend.core.log_redaction import register_sensitive_literal
