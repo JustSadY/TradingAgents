@@ -17,8 +17,8 @@ import json
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from cryptography.fernet import InvalidToken
 from alembic import op
+from cryptography.fernet import InvalidToken
 
 revision: str = "4c5de6f7081a"
 down_revision: str | None = "3b4cd5e6f809"
