@@ -9,7 +9,7 @@ from backend.models.user import User
 from backend.repositories.permissions import get_user_page_permission, get_user_setting_permission
 from backend.repositories.users import get_user_by_username
 from backend.schemas.tool_settings import ToolSettingsUpdate
-from backend.services.tool_access_service import get_user_tool_access, get_user_tool_field_access
+from backend.services.tool_access_service import get_user_access_overrides
 from backend.trading_agents.agents.tools.registry import registry
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -145,9 +145,9 @@ async def enforce_tool_settings_permission(
         return
 
     await enforce_setting_section_permission(db, user, "tools")
-
-    tool_access_map = await get_user_tool_access(db, user.id)
-    field_access_map = await get_user_tool_field_access(db, user.id)
+    access = await get_user_access_overrides(db, user.id)
+    tool_access_map = access["tool_access"]
+    field_access_map = access["field_access"]
 
     for tool_key, update in body.tools.items():
         tool = registry.get(tool_key)
