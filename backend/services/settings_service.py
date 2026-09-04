@@ -193,45 +193,51 @@ async def get_user_language(db: AsyncSession, user=None) -> str:
 
 
 async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
-    """Apply a preset's settings JSON onto *user*'s AppSettings row.
+    """Apply a preset without rewriting identical runtime state.
 
-    Raises ValueError if the stored preset JSON is invalid. Flushes so any
-    constraint error surfaces here rather than at request-commit time.
+    The active preset marker is bookkeeping and may change even when every
+    runtime setting already matches. In that marker-only case persist the label
+    but do not fan out ``settings_updated`` because no runtime consumer needs to
+    rebuild itself.
     """
     update = parse_preset_settings_json(preset.settings_json)
     fields = update.model_dump(exclude_unset=True)
-
-    webhook_url = fields.get("webhook_url")
-    if webhook_url:
-        from backend.services.notification_service import resolve_webhook_target
-
-        await resolve_webhook_target(webhook_url)
-
     settings = await get_or_create_settings(db, user)
     _enforce_auto_execution_safety(settings, fields)
+
     changed_field_names = {
         key for key, value in fields.items() if getattr(settings, key, None) != value
     }
-    for key, value in fields.items():
-        setattr(settings, key, value)
+    marker_changed = settings.active_preset_name != preset.name
+    if not changed_field_names and not marker_changed:
+        return preset.name
+
+    if "webhook_url" in changed_field_names and fields.get("webhook_url"):
+        from backend.services.notification_service import resolve_webhook_target
+
+        await resolve_webhook_target(fields["webhook_url"])
+
+    for key in changed_field_names:
+        setattr(settings, key, fields[key])
     settings.active_preset_name = preset.name
-    settings.updated_at = datetime.now(UTC)
 
     if settings.webhook_url:
         from backend.core.log_redaction import register_sensitive_literal
 
         register_sensitive_literal(settings.webhook_url)
 
+    settings.updated_at = datetime.now(UTC)
     await db.flush()
     await db.commit()
     _invalidate_memory_store_if_needed(settings, changed_field_names)
 
-    from backend.core.events import emit
+    if changed_field_names:
+        from backend.core.events import emit
 
-    try:
-        await emit("settings_updated", settings=settings)
-    except Exception:
-        _logger.warning("Preset settings update event emission failed", exc_info=True)
+        try:
+            await emit("settings_updated", settings=settings)
+        except Exception:
+            _logger.warning("Preset settings update event emission failed", exc_info=True)
     return preset.name
 
 
