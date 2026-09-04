@@ -60,6 +60,36 @@ async def test_user_tool_settings_builds_agent_hierarchy_once_for_all_tools(monk
     assert context_calls == 1
 
 
+async def test_non_admin_tool_settings_reads_one_unified_access_snapshot(monkeypatch) -> None:
+    access_calls = 0
+
+    async def fake_rows(_db, _user_id):
+        return []
+
+    async def fake_context(_db, _user_id):
+        return {"market": {"enabled": True}, "news": {"enabled": True}}
+
+    async def fake_access(_db, user_id):
+        nonlocal access_calls
+        assert user_id == 7
+        access_calls += 1
+        return {"agent_access": {}, "tool_access": {}, "field_access": {}}
+
+    monkeypatch.setattr("backend.repositories.tool_settings.get_user_tool_settings", fake_rows)
+    monkeypatch.setattr("backend.services.agent_settings_service.build_agent_runtime_context", fake_context)
+    monkeypatch.setattr("backend.services.tool_settings_service.get_user_access_overrides", fake_access)
+    monkeypatch.setattr("backend.trading_agents.agents.hierarchy.AgentHierarchy", _Hierarchy)
+    monkeypatch.setattr(registry, "list", lambda: [_Tool("first", "market"), _Tool("second", "news")])
+
+    result = await get_user_tool_settings(
+        object(),
+        SimpleNamespace(id=7, is_admin=False),
+    )
+
+    assert set(result.tools) == {"first", "second"}
+    assert access_calls == 1
+
+
 async def test_tool_update_reuses_loaded_rows_and_agent_context_for_response(monkeypatch) -> None:
     row_queries = 0
     context_calls = 0
