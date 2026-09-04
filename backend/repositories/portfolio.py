@@ -1,17 +1,31 @@
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import delete, desc, select
+from sqlalchemy import delete, desc, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.util import identity_key
 
 from backend.models.order import Order
 from backend.models.portfolio import Holding, Portfolio
 from backend.repositories.common import scope_to_user
 
 
+def _cached_portfolio_with_holdings(db: AsyncSession, portfolio_id: int, user=None) -> Portfolio | None:
+    """Reuse an already-loaded portfolio only when its holdings collection is ready."""
+    cached = db.identity_map.get(identity_key(Portfolio, portfolio_id))
+    if cached is None or "holdings" in inspect(cached).unloaded:
+        return None
+    if user is not None and not getattr(user, "is_admin", False) and cached.user_id != user.id:
+        return None
+    return cached
+
+
 async def get_portfolio_by_id(db: AsyncSession, portfolio_id: int, user=None) -> Portfolio | None:
+    cached = _cached_portfolio_with_holdings(db, portfolio_id, user=user)
+    if cached is not None:
+        return cached
     q = select(Portfolio).where(Portfolio.id == portfolio_id).options(selectinload(Portfolio.holdings))
     q = scope_to_user(q, Portfolio, user)
     result = await db.execute(q)
@@ -69,8 +83,14 @@ async def lock_portfolio_for_update(db: AsyncSession, portfolio_id: int) -> Port
 
 
 async def list_simulation_portfolios_for_update(db: AsyncSession) -> list[Portfolio]:
+    # The position monitor immediately reads every holding. Load all holdings in
+    # one secondary query so the subsequent per-portfolio snapshot can reuse the
+    # identity-mapped objects instead of issuing two queries per portfolio.
     result = await db.execute(
-        select(Portfolio).where(Portfolio.mode == "simulation").with_for_update(skip_locked=True)
+        select(Portfolio)
+        .where(Portfolio.mode == "simulation")
+        .options(selectinload(Portfolio.holdings))
+        .with_for_update(skip_locked=True)
     )
     return list(result.scalars().all())
 
