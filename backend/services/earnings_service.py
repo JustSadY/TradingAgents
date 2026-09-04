@@ -19,6 +19,7 @@ from backend.models.user import User
 _logger = logging.getLogger(__name__)
 
 MAX_TICKERS = 20
+_EARNINGS_FETCH_CONCURRENCY = 6
 
 class EarningsEntry(BaseModel):
     ticker: str
@@ -180,9 +181,13 @@ async def get_earnings_calendar(db: AsyncSession, user: User, tickers: str | Non
     if not cleaned:
         return []
 
-    loop = asyncio.get_running_loop()
-    tasks = [loop.run_in_executor(None, fetch_earnings, ticker) for ticker in cleaned]
-    raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+    semaphore = asyncio.Semaphore(_EARNINGS_FETCH_CONCURRENCY)
+
+    async def _fetch_one(ticker: str):
+        async with semaphore:
+            return await asyncio.to_thread(fetch_earnings, ticker)
+
+    raw_results = await asyncio.gather(*[_fetch_one(ticker) for ticker in cleaned], return_exceptions=True)
 
     results: list[dict] = []
     for ticker, entry in zip(cleaned, raw_results, strict=False):
