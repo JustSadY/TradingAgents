@@ -3,7 +3,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from backend.schemas.tool_settings import ToolSettingsUpdate
-from backend.services.tool_settings_service import apply_tool_settings_update, get_user_tool_settings, registry
+from backend.services.tool_settings_service import (
+    apply_server_tool_settings_update,
+    apply_tool_settings_update,
+    build_global_runtime_context,
+    get_user_tool_settings,
+    registry,
+)
 
 
 class _Tool:
@@ -14,7 +20,7 @@ class _Tool:
         self.settings_schema = []
 
     def default_settings(self, *, scope: str) -> dict:
-        assert scope == "user"
+        assert scope in {"server", "user"}
         return {}
 
 
@@ -127,4 +133,64 @@ async def test_tool_update_reuses_loaded_rows_and_agent_context_for_response(mon
     assert result.tools["first"].enabled is False
     assert row_queries == 1
     assert context_calls == 1
+    assert db.flushes == 1
+
+
+async def test_global_runtime_context_reads_server_and_user_tool_scopes_once(monkeypatch) -> None:
+    runtime_queries = 0
+    access_queries = 0
+    tool = _Tool("first", "market")
+
+    async def fake_runtime_rows(_db, user_id):
+        nonlocal runtime_queries
+        assert user_id == 7
+        runtime_queries += 1
+        return [
+            SimpleNamespace(scope="server", user_id=None, tool_key="first", enabled=False, settings={"a": 1}),
+            SimpleNamespace(scope="user", user_id=7, tool_key="first", enabled=True, settings={"b": 2}),
+        ]
+
+    async def fake_access(_db, user_id):
+        nonlocal access_queries
+        assert user_id == 7
+        access_queries += 1
+        return {"agent_access": {}, "tool_access": {}, "field_access": {}}
+
+    monkeypatch.setattr("backend.repositories.tool_settings.get_runtime_tool_settings", fake_runtime_rows)
+    monkeypatch.setattr("backend.services.tool_settings_service.get_user_access_overrides", fake_access)
+    monkeypatch.setattr(registry, "list", lambda: [tool])
+
+    context = await build_global_runtime_context(object(), 7)
+
+    assert runtime_queries == 1
+    assert access_queries == 1
+    assert context["server_settings"]["first"] == {"enabled": False, "settings": {"a": 1}}
+    assert context["user_settings"]["first"] == {"enabled": True, "settings": {"b": 2}}
+
+
+async def test_server_tool_update_reuses_loaded_rows_for_response(monkeypatch) -> None:
+    row_queries = 0
+    tool = _Tool("first", "market")
+
+    async def fake_server_rows(_db):
+        nonlocal row_queries
+        row_queries += 1
+        return []
+
+    def fake_ensure(_db, *, tool_key, default_enabled, **_kwargs):
+        return SimpleNamespace(tool_key=tool_key, enabled=default_enabled, settings={})
+
+    monkeypatch.setattr("backend.repositories.tool_settings.get_server_tool_settings", fake_server_rows)
+    monkeypatch.setattr("backend.repositories.tool_settings.ensure_tool_setting", fake_ensure)
+    monkeypatch.setattr(registry, "list", lambda: [tool])
+    monkeypatch.setattr(registry, "get", lambda key: tool if key == tool.key else None)
+
+    db = _Db()
+    result = await apply_server_tool_settings_update(
+        db,
+        ToolSettingsUpdate(tools={"first": {"enabled": False}}),
+    )
+
+    assert result.tools["first"].enabled is False
+    assert row_queries == 1
     assert db.flushes == 1
