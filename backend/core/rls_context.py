@@ -56,6 +56,21 @@ _CONTEXT_KEYS = (
     "app.background_capability",
 )
 _CONTEXT_INFO_KEY = "tradingagents.rls_context"
+_CONTEXT_SET_STATEMENT = text(
+    "SELECT "
+    + ", ".join(
+        f"set_config(:key_{index}, :value_{index}, true)"
+        for index in range(len(_CONTEXT_KEYS))
+    )
+)
+
+
+def _context_parameters(values: dict[str, str]) -> dict[str, str]:
+    params: dict[str, str] = {}
+    for index, key in enumerate(_CONTEXT_KEYS):
+        params[f"key_{index}"] = key
+        params[f"value_{index}"] = values[key]
+    return params
 
 
 def _is_postgres(db: AsyncSession) -> bool:
@@ -76,11 +91,7 @@ def _is_postgres(db: AsyncSession) -> bool:
 def _apply_values_sync(connection: Any, values: dict[str, str]) -> None:
     if connection.dialect.name != "postgresql":
         return
-    for key in _CONTEXT_KEYS:
-        connection.execute(
-            text("SELECT set_config(:key, :value, true)"),
-            {"key": key, "value": values[key]},
-        )
+    connection.execute(_CONTEXT_SET_STATEMENT, _context_parameters(values))
 
 
 @event.listens_for(Session, "after_begin")
@@ -129,13 +140,9 @@ async def _apply_context(
     # If the caller already opened a transaction (for example login first read
     # the unprotected users table), after_begin has already fired. Update that
     # current transaction immediately and clear every selector from the previous
-    # context at the same time.
+    # context at the same time. All selectors are applied in one round trip.
     if db.in_transaction():
-        for key in _CONTEXT_KEYS:
-            await db.execute(
-                text("SELECT set_config(:key, :value, true)"),
-                {"key": key, "value": values[key]},
-            )
+        await db.execute(_CONTEXT_SET_STATEMENT, _context_parameters(values))
 
 
 async def set_request_tenant_context(db: AsyncSession, user_id: int) -> None:
