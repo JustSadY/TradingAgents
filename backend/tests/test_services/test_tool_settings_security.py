@@ -17,8 +17,10 @@ def _tool():
         ],
     )
 
+
 def test_partial_tool_settings_validation_does_not_materialize_missing_defaults():
     assert validate_tool_settings(_tool(), {"visible": 20}) == {"visible": 20.0}
+
 
 def test_reset_tool_setting_removes_only_that_override():
     row = SimpleNamespace(enabled=True, settings={"visible": 20, "locked": "admin-value"})
@@ -27,22 +29,27 @@ def test_reset_tool_setting_removes_only_that_override():
 
     assert row.settings == {"locked": "admin-value"}
 
+
 @pytest.mark.asyncio
 async def test_hidden_tool_field_cannot_be_changed_by_direct_request(monkeypatch):
     from backend.api import deps
 
+    access_calls = 0
+
     async def allow_section(*args):
         return None
 
-    async def tool_access(*args):
-        return {"test_tool": {"can_view": True, "can_edit": True, "can_enable": True}}
-
-    async def field_access(*args):
-        return {"test_tool": {"locked": {"can_view": False, "can_edit": True}}}
+    async def access_snapshot(*args):
+        nonlocal access_calls
+        access_calls += 1
+        return {
+            "agent_access": {},
+            "tool_access": {"test_tool": {"can_view": True, "can_edit": True, "can_enable": True}},
+            "field_access": {"test_tool": {"locked": {"can_view": False, "can_edit": True}}},
+        }
 
     monkeypatch.setattr(deps, "enforce_setting_section_permission", allow_section)
-    monkeypatch.setattr(deps, "get_user_tool_access", tool_access)
-    monkeypatch.setattr(deps, "get_user_tool_field_access", field_access)
+    monkeypatch.setattr(deps, "get_user_access_overrides", access_snapshot)
     monkeypatch.setattr(deps.registry, "get", lambda key: _tool() if key == "test_tool" else None)
 
     body = ToolSettingsUpdate(tools={"test_tool": ToolSettingUpdateValue(settings={"locked": "attempt"})})
@@ -50,3 +57,4 @@ async def test_hidden_tool_field_cannot_be_changed_by_direct_request(monkeypatch
         await deps.enforce_tool_settings_permission(SimpleNamespace(), SimpleNamespace(id=1, is_admin=False), body)
 
     assert exc.value.status_code == 403
+    assert access_calls == 1
