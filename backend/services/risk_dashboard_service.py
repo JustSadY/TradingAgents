@@ -17,6 +17,7 @@ _logger = logging.getLogger(__name__)
 _BETA_THRESHOLD = 1.5
 _VOL_THRESHOLD = 0.40
 _SECTOR_THRESHOLD = 50.0
+_RISK_FETCH_CONCURRENCY = 8
 
 def _evaluate_breaches(
     portfolio_beta: float | None,
@@ -91,18 +92,26 @@ async def _fetch_market_data(tickers: list[str]) -> tuple[dict[str, Any], Any, d
     """Concurrently fetch per-ticker close history, SPY history, and sectors.
 
     Returns ``(ticker_hist, spy_returns, sector_map)`` with failed fetches simply
-    omitted from the maps.
+    omitted from the maps. External fan-out is explicitly bounded so a large
+    portfolio cannot open an unbounded number of provider/thread operations.
     """
+    semaphore = asyncio.Semaphore(_RISK_FETCH_CONCURRENCY)
 
     async def hist_for(ticker: str):
-        return ticker, await _fetch_close_history(ticker)
+        async with semaphore:
+            return ticker, await _fetch_close_history(ticker)
+
+    async def spy_history():
+        async with semaphore:
+            return await _fetch_close_history("SPY")
 
     async def sector_for(ticker: str):
-        return ticker, await fetch_sector(ticker)
+        async with semaphore:
+            return ticker, await fetch_sector(ticker)
 
     results = await asyncio.gather(
         *[hist_for(t) for t in tickers],
-        _fetch_close_history("SPY"),
+        spy_history(),
         *[sector_for(t) for t in tickers],
         return_exceptions=True,
     )
@@ -247,7 +256,13 @@ def _build_correlation_matrix(ticker_returns: dict[str, Any]) -> list[dict]:
 
 async def _fetch_returns(tickers: list[str]) -> dict[str, Any]:
     """Fetch 3mo daily returns per ticker; failed/short series are omitted."""
-    results = await asyncio.gather(*[_fetch_close_history(t) for t in tickers], return_exceptions=True)
+    semaphore = asyncio.Semaphore(_RISK_FETCH_CONCURRENCY)
+
+    async def _fetch_one(ticker: str):
+        async with semaphore:
+            return await _fetch_close_history(ticker)
+
+    results = await asyncio.gather(*[_fetch_one(t) for t in tickers], return_exceptions=True)
     out: dict[str, Any] = {}
     for ticker, hist in zip(tickers, results, strict=False):
         if isinstance(hist, Exception) or hist is None:
