@@ -30,16 +30,16 @@ def _triggered_alert(*, user_id: int, ticker: str = "AAPL"):
 
 
 async def test_recovery_accepts_existing_alert_analysis(monkeypatch):
-    """Recovery checks existence; historical duplicates are irrelevant."""
+    """Recovery checks all candidate identities through one batch lookup."""
     session = object()
     alert = _triggered_alert(user_id=7)
     list_alerts = AsyncMock(return_value=[alert])
-    analysis_exists = AsyncMock(return_value=True)
+    existing_keys = AsyncMock(return_value={("AAPL", "2026-07-28", 7)})
     throttled_analyze = AsyncMock()
 
     monkeypatch.setattr(alert_service, "trusted_background_session", lambda _cap: _SessionContext(session))
     monkeypatch.setattr(alert_service, "list_triggered_auto_analyze_alerts", list_alerts)
-    monkeypatch.setattr(alert_service, "alert_analysis_exists", analysis_exists)
+    monkeypatch.setattr(alert_service, "existing_alert_analysis_keys", existing_keys)
     monkeypatch.setattr(alert_service, "_throttled_analyze", throttled_analyze)
     monkeypatch.setattr(alert_service, "process_alert_outbox", AsyncMock())
 
@@ -47,35 +47,58 @@ async def test_recovery_accepts_existing_alert_analysis(monkeypatch):
 
     throttled_analyze.assert_not_awaited()
     list_alerts.assert_awaited_once_with(session)
-    analysis_exists.assert_awaited_once_with(
-        session,
-        ticker="AAPL",
-        trade_date="2026-07-28",
-        user_id=7,
-    )
+    existing_keys.assert_awaited_once_with(session, {("AAPL", "2026-07-28", 7)})
 
 
-async def test_recovery_deduplicates_identical_alert_targets(monkeypatch):
-    """Two triggered alerts for one target must not launch two recovery jobs."""
+async def test_recovery_deduplicates_identical_alert_targets_before_batch_lookup(monkeypatch):
+    """Duplicate alerts produce one lookup identity and one recovery job."""
     session = object()
     alerts = [_triggered_alert(user_id=7), _triggered_alert(user_id=7)]
     list_alerts = AsyncMock(return_value=alerts)
-    analysis_exists = AsyncMock(side_effect=[False, False])
+    existing_keys = AsyncMock(return_value=set())
     throttled_analyze = AsyncMock()
 
     monkeypatch.setattr(alert_service, "trusted_background_session", lambda _cap: _SessionContext(session))
     monkeypatch.setattr(alert_service, "list_triggered_auto_analyze_alerts", list_alerts)
-    monkeypatch.setattr(alert_service, "alert_analysis_exists", analysis_exists)
+    monkeypatch.setattr(alert_service, "existing_alert_analysis_keys", existing_keys)
     monkeypatch.setattr(alert_service, "_throttled_analyze", throttled_analyze)
     monkeypatch.setattr(alert_service, "process_alert_outbox", AsyncMock())
 
     await alert_service.check_and_recover_lost_alerts()
 
-    assert analysis_exists.await_count == 2
+    existing_keys.assert_awaited_once_with(session, {("AAPL", "2026-07-28", 7)})
     throttled_analyze.assert_awaited_once_with(
         "AAPL",
         "2026-07-28",
         7,
+        alert_service._RECOVERY_SEMAPHORE,
+    )
+
+
+async def test_recovery_batches_multiple_targets_and_only_recovers_missing(monkeypatch):
+    session = object()
+    alerts = [
+        _triggered_alert(user_id=7, ticker="AAPL"),
+        _triggered_alert(user_id=8, ticker="MSFT"),
+    ]
+    candidates = {("AAPL", "2026-07-28", 7), ("MSFT", "2026-07-28", 8)}
+    list_alerts = AsyncMock(return_value=alerts)
+    existing_keys = AsyncMock(return_value={("AAPL", "2026-07-28", 7)})
+    throttled_analyze = AsyncMock()
+
+    monkeypatch.setattr(alert_service, "trusted_background_session", lambda _cap: _SessionContext(session))
+    monkeypatch.setattr(alert_service, "list_triggered_auto_analyze_alerts", list_alerts)
+    monkeypatch.setattr(alert_service, "existing_alert_analysis_keys", existing_keys)
+    monkeypatch.setattr(alert_service, "_throttled_analyze", throttled_analyze)
+    monkeypatch.setattr(alert_service, "process_alert_outbox", AsyncMock())
+
+    await alert_service.check_and_recover_lost_alerts()
+
+    existing_keys.assert_awaited_once_with(session, candidates)
+    throttled_analyze.assert_awaited_once_with(
+        "MSFT",
+        "2026-07-28",
+        8,
         alert_service._RECOVERY_SEMAPHORE,
     )
 
@@ -95,7 +118,7 @@ def test_alert_service_does_not_own_background_sql() -> None:
     assert "claim_alert_and_enqueue_outbox" in source
     assert "claim_outbox_batch" in source
     assert "list_triggered_auto_analyze_alerts" in source
-    assert "alert_analysis_exists" in source
+    assert "existing_alert_analysis_keys" in source
 
 
 def test_alert_service_keeps_audited_background_capabilities() -> None:
