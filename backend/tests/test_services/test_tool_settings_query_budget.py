@@ -136,6 +136,40 @@ async def test_tool_update_reuses_loaded_rows_and_agent_context_for_response(mon
     assert db.flushes == 1
 
 
+async def test_default_user_tool_state_does_not_create_override_row(monkeypatch) -> None:
+    ensure_calls = 0
+    tool = _Tool("first", "market")
+
+    async def fake_rows(_db, _user_id):
+        return []
+
+    async def fake_context(_db, _user_id):
+        return {"market": {"enabled": True}}
+
+    def fake_ensure(*_args, **_kwargs):
+        nonlocal ensure_calls
+        ensure_calls += 1
+        raise AssertionError("default tool state must not create an override row")
+
+    monkeypatch.setattr("backend.repositories.tool_settings.get_user_tool_settings", fake_rows)
+    monkeypatch.setattr("backend.repositories.tool_settings.ensure_tool_setting", fake_ensure)
+    monkeypatch.setattr("backend.services.agent_settings_service.build_agent_runtime_context", fake_context)
+    monkeypatch.setattr("backend.trading_agents.agents.hierarchy.AgentHierarchy", _Hierarchy)
+    monkeypatch.setattr(registry, "list", lambda: [tool])
+    monkeypatch.setattr(registry, "get", lambda key: tool if key == tool.key else None)
+
+    db = _Db()
+    result = await apply_tool_settings_update(
+        db,
+        SimpleNamespace(id=7, is_admin=True),
+        ToolSettingsUpdate(tools={"first": {"enabled": True, "settings": {}}}),
+    )
+
+    assert result.tools["first"].enabled is True
+    assert ensure_calls == 0
+    assert db.flushes == 0
+
+
 async def test_global_runtime_context_reads_server_and_user_tool_scopes_once(monkeypatch) -> None:
     runtime_queries = 0
     access_queries = 0
@@ -194,3 +228,31 @@ async def test_server_tool_update_reuses_loaded_rows_for_response(monkeypatch) -
     assert result.tools["first"].enabled is False
     assert row_queries == 1
     assert db.flushes == 1
+
+
+async def test_default_server_tool_state_does_not_create_override_row(monkeypatch) -> None:
+    ensure_calls = 0
+    tool = _Tool("first", "market")
+
+    async def fake_server_rows(_db):
+        return []
+
+    def fake_ensure(*_args, **_kwargs):
+        nonlocal ensure_calls
+        ensure_calls += 1
+        raise AssertionError("default server tool state must not create an override row")
+
+    monkeypatch.setattr("backend.repositories.tool_settings.get_server_tool_settings", fake_server_rows)
+    monkeypatch.setattr("backend.repositories.tool_settings.ensure_tool_setting", fake_ensure)
+    monkeypatch.setattr(registry, "list", lambda: [tool])
+    monkeypatch.setattr(registry, "get", lambda key: tool if key == tool.key else None)
+
+    db = _Db()
+    result = await apply_server_tool_settings_update(
+        db,
+        ToolSettingsUpdate(tools={"first": {"enabled": True, "settings": {}}}),
+    )
+
+    assert result.tools["first"].enabled is True
+    assert ensure_calls == 0
+    assert db.flushes == 0
