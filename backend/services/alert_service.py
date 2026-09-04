@@ -39,8 +39,13 @@ async def _fetch_alert_market_summary(ticker: str) -> str:
     try:
         import yfinance as yf
 
-        info = await asyncio.to_thread(lambda: yf.Ticker(ticker).info)
-        hist = await asyncio.to_thread(lambda: yf.Ticker(ticker).history(period="3mo"))
+        from backend.services.news_service import get_news_feed
+
+        info, hist, news = await asyncio.gather(
+            asyncio.to_thread(lambda: yf.Ticker(ticker).info),
+            asyncio.to_thread(lambda: yf.Ticker(ticker).history(period="3mo")),
+            get_news_feed(ticker, 3),
+        )
 
         parts = []
         price = info.get("regularMarketPrice") or info.get("currentPrice")
@@ -63,9 +68,6 @@ async def _fetch_alert_market_summary(ticker: str) -> str:
                 rsi_val = float(rsi_series.iloc[-1])
                 parts.append(f"RSI(14): {rsi_val:.1f}")
 
-        from backend.services.news_service import get_news_feed
-
-        news = await get_news_feed(ticker, 3)
         if news:
             headlines = [n.get("title", "")[:80] for n in news[:3] if n.get("title")]
             if headlines:
@@ -146,8 +148,9 @@ async def _deliver_alert_side_effects(db, alert, settings, current_value: float 
         _logger.info("Alert market summary for %s: %s", alert.ticker, summary)
 
     user = await get_user_by_id(db, alert.user_id) if alert.user_id is not None else None
-    if settings and user:
-        user_settings = await get_or_create_settings(db, user)
+    needs_user_settings = user is not None and (settings or alert.auto_analyze)
+    user_settings = await get_or_create_settings(db, user) if needs_user_settings else None
+    if settings and user and user_settings:
         await notify_alert_triggered(
             alert.ticker,
             alert.condition,
@@ -157,13 +160,12 @@ async def _deliver_alert_side_effects(db, alert, settings, current_value: float 
             market_summary=summary,
         )
 
-    if alert.auto_analyze and user:
+    if alert.auto_analyze and user and user_settings:
         from backend.services.analysis_queue import dispatch_analysis
         from backend.services.analysis_service import register_queued_task
 
         today = datetime.now(UTC).strftime("%Y-%m-%d")
         task_id = str(uuid.uuid4())
-        user_settings = await get_or_create_settings(db, user)
         from backend.repositories.analysis import create_analysis_result
 
         await create_analysis_result(
