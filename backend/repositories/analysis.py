@@ -108,15 +108,13 @@ async def get_analysis_by_id(db: AsyncSession, analysis_id: int, user=None) -> A
 
 
 async def delete_analysis_by_id(db: AsyncSession, analysis_id: int, user=None) -> bool:
-    q = select(AnalysisResult).where(AnalysisResult.id == analysis_id)
-    q = scope_to_user(q, AnalysisResult, user)
-    res = await db.execute(q)
-    row = res.scalar_one_or_none()
-    if not row:
-        return False
-    await db.delete(row)
-    await db.commit()
-    return True
+    statement = delete(AnalysisResult).where(AnalysisResult.id == analysis_id)
+    statement = scope_to_user(statement, AnalysisResult, user)
+    result = await db.execute(statement)
+    deleted = int(result.rowcount or 0)
+    if deleted:
+        await db.commit()
+    return deleted > 0
 
 
 async def clear_analysis_history(db: AsyncSession, user=None) -> int:
