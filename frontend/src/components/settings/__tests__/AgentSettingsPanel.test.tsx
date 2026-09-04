@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen } from '@testing-library/react'
+import { act, fireEvent, screen } from '@testing-library/react'
 import { renderWithQuery } from '../../../test/renderWithQuery'
 import axios from 'axios'
 import AgentSettingsPanel from '../AgentSettingsPanel'
 
 // Use mutable mock to avoid object-reference infinite re-render loop
 const mockUseMeta = vi.fn()
+const mockTriggerMetaRefetch = vi.fn()
 
 vi.mock('../../../contexts/LanguageContext', async () => ({
   useTranslation: (await import('../../../test/i18nMock')).useTranslationMock,
@@ -13,7 +14,7 @@ vi.mock('../../../contexts/LanguageContext', async () => ({
 
 vi.mock('../../../hooks/useMeta', () => ({
   useMeta: () => mockUseMeta(),
-  triggerMetaRefetch: vi.fn(),
+  triggerMetaRefetch: mockTriggerMetaRefetch,
 }))
 
 const fullAgentsMeta = [
@@ -98,8 +99,46 @@ describe('AgentSettingsPanel', () => {
     vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultSettings })
     renderWithQuery(<AgentSettingsPanel />)
 
-    // Click the expand button to show LLM settings for portfolio_manager
     const configureButtons = await screen.findAllByText('Configure LLM settings')
     expect(configureButtons.length).toBeGreaterThan(0)
+  })
+
+  it('skips mutation and metadata refresh when agent settings are unchanged', async () => {
+    vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultSettings })
+    const put = vi.spyOn(axios, 'put').mockResolvedValue({ data: defaultSettings })
+    renderWithQuery(<AgentSettingsPanel />)
+
+    const saveButton = await screen.findByText('Save Agents')
+    await act(async () => {
+      saveButton.click()
+    })
+
+    expect(put).not.toHaveBeenCalled()
+    expect(mockTriggerMetaRefetch).not.toHaveBeenCalled()
+  })
+
+  it('refreshes metadata only after a changed successful agent save', async () => {
+    vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultSettings })
+    const changedSettings = {
+      agents: {
+        ...defaultSettings.agents,
+        market_intelligence: { ...defaultSettings.agents.market_intelligence, enabled: false },
+      },
+    }
+    const put = vi.spyOn(axios, 'put').mockResolvedValue({ data: changedSettings })
+    renderWithQuery(<AgentSettingsPanel />)
+
+    await screen.findByText('Market Intelligence')
+    const toggle = document.querySelector('input[name="market_intelligence-enabled"]')
+    expect(toggle).toBeInstanceOf(HTMLInputElement)
+    fireEvent.click(toggle as HTMLInputElement)
+
+    const saveButton = screen.getByText('Save Agents')
+    await act(async () => {
+      saveButton.click()
+    })
+
+    expect(put).toHaveBeenCalledTimes(1)
+    expect(mockTriggerMetaRefetch).toHaveBeenCalledTimes(1)
   })
 })
