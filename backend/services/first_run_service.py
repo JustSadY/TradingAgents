@@ -74,6 +74,5 @@ async def create_first_owner(
             role="owner",
         )
         await db.commit()
-        await db.refresh(user)
         _logger.info("Initial Server Owner account registered: %s", user.username)
         return user
