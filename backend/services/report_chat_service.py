@@ -12,6 +12,7 @@ import logging
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from backend.models import AnalysisChat
 from backend.models.analysis import AnalysisResult
@@ -39,6 +40,9 @@ _REPORT_SECTIONS = [
 ]
 
 _MAX_SECTION_CHARS = 5000
+_MAX_PROMPT_HISTORY_MESSAGES = 20
+_REPORT_COLUMNS = tuple(getattr(AnalysisResult, attr) for _, attr in _REPORT_SECTIONS)
+
 
 def _capped(text: str) -> str:
     text = (text or "").strip()
@@ -46,8 +50,24 @@ def _capped(text: str) -> str:
         return text
     return text[:_MAX_SECTION_CHARS].rstrip() + "\n…[section truncated to conserve tokens]"
 
+
 async def _get_owned_analysis(db: AsyncSession, analysis_id: int, user) -> AnalysisResult:
-    q = select(AnalysisResult).where(AnalysisResult.id == analysis_id)
+    # Report chat does not need strategy snapshots, debate histories, raw JSON,
+    # token accounting, or other large AnalysisResult fields. Loading only the
+    # report surface keeps one chat turn from pulling the full analysis row.
+    q = (
+        select(AnalysisResult)
+        .where(AnalysisResult.id == analysis_id)
+        .options(
+            load_only(
+                AnalysisResult.id,
+                AnalysisResult.ticker,
+                AnalysisResult.signal,
+                AnalysisResult.final_decision,
+                *_REPORT_COLUMNS,
+            )
+        )
+    )
     if user is not None and not getattr(user, "is_admin", False):
         q = q.where(AnalysisResult.user_id == user.id)
     analysis = (await db.execute(q)).scalar_one_or_none()
@@ -55,12 +75,31 @@ async def _get_owned_analysis(db: AsyncSession, analysis_id: int, user) -> Analy
         raise HTTPException(status_code=404, detail="Analysis report not found")
     return analysis
 
-async def get_chat_history(db: AsyncSession, analysis_id: int, user) -> list[AnalysisChat]:
-    await _get_owned_analysis(db, analysis_id, user)
+
+async def _list_chat_history(db: AsyncSession, analysis_id: int) -> list[AnalysisChat]:
     result = await db.execute(
         select(AnalysisChat).where(AnalysisChat.analysis_id == analysis_id).order_by(AnalysisChat.created_at.asc())
     )
     return list(result.scalars().all())
+
+
+async def _list_prompt_history(db: AsyncSession, analysis_id: int) -> list[AnalysisChat]:
+    """Return only the newest bounded chat window, restored to chronological order."""
+    result = await db.execute(
+        select(AnalysisChat)
+        .where(AnalysisChat.analysis_id == analysis_id)
+        .order_by(AnalysisChat.created_at.desc())
+        .limit(_MAX_PROMPT_HISTORY_MESSAGES)
+    )
+    rows = list(result.scalars().all())
+    rows.reverse()
+    return rows
+
+
+async def get_chat_history(db: AsyncSession, analysis_id: int, user) -> list[AnalysisChat]:
+    await _get_owned_analysis(db, analysis_id, user)
+    return await _list_chat_history(db, analysis_id)
+
 
 def _build_report_context(analysis: AnalysisResult) -> str:
     parts = [
@@ -71,6 +110,7 @@ def _build_report_context(analysis: AnalysisResult) -> str:
     if analysis.final_decision:
         parts.append(f"### FINAL PORTFOLIO DECISION & SIGNAL ({analysis.signal})\n{analysis.final_decision}")
     return "\n\n".join(parts)
+
 
 def _build_system_prompt(analysis: AnalysisResult, output_language: str | None) -> str:
     lang = (output_language or "English").strip()
@@ -86,6 +126,7 @@ def _build_system_prompt(analysis: AnalysisResult, output_language: str | None) 
         f"about something not covered in the report, say so politely.{lang_inst}"
     )
 
+
 async def answer_report_question(
     db: AsyncSession,
     analysis_id: int,
@@ -99,7 +140,9 @@ async def answer_report_question(
     analysis = await _get_owned_analysis(db, analysis_id, user)
     settings = await get_or_create_settings(db, user)
 
-    past_messages = await get_chat_history(db, analysis_id, user)
+    # Ownership was already verified above. Do not issue the same analysis
+    # lookup again merely to load the prompt's conversation window.
+    past_messages = await _list_prompt_history(db, analysis_id)
     payload = [SystemMessage(content=_build_system_prompt(analysis, settings.output_language))]
     for msg in past_messages:
         payload.append(HumanMessage(content=msg.content) if msg.role == "user" else AIMessage(content=msg.content))
@@ -131,9 +174,9 @@ async def answer_report_question(
     try:
         llm = client.get_llm()
         response = await llm.ainvoke(payload)
-    except ValueError as e:
-        _logger.warning("Report chat model request rejected: %s", e)
-        raise HTTPException(status_code=400, detail="The model request or configuration is invalid") from e
+    except ValueError as exc:
+        _logger.warning("Report chat model request rejected: %s", exc)
+        raise HTTPException(status_code=400, detail="The model request or configuration is invalid") from exc
 
     db.add(AnalysisChat(analysis_id=analysis_id, role="user", content=message))
     assistant_chat = AnalysisChat(analysis_id=analysis_id, role="assistant", content=llm_text(response))
