@@ -56,7 +56,6 @@ async def get_memory_status(
         "enabled": not using_openai or "openai" in providers,
         "store": "mem0-pgvector",
         "embedder": embedder,
-        "index": None,
         "embed_model": (
             settings.memory_ollama_embed_model if embedder == "ollama" else settings.memory_openai_embed_model
         ),
