@@ -88,7 +88,9 @@ async def generate_daily_summary(db: AsyncSession, user: User) -> dict:
     )
     db.add(record)
     await db.commit()
-    await db.refresh(record)
+    # AsyncSessionLocal uses expire_on_commit=False. ``id`` is populated by the
+    # INSERT and ``created_at`` also has a Python default, so a post-commit
+    # refresh only adds a redundant SELECT.
 
     return {
         "id": record.id,
