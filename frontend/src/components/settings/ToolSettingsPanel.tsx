@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { RefreshCw, Save } from 'lucide-react'
 import { useSystemSettingsGetServerTools, useSystemSettingsUpdateServerTools } from '../../api/generated/system-settings/system-settings'
 import {
@@ -46,6 +46,7 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
   const { t } = useTranslation()
   const meta = useMeta()
   const [settings, setSettings] = useState<ToolSettings | null>(null)
+  const persistedSnapshot = useRef<string | null>(null)
 
   const otherUserId = !serverScope && userId ? userId : 0
   const serverQuery = useSystemSettingsGetServerTools({ query: { enabled: serverScope } })
@@ -56,7 +57,11 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
   const activeQuery = serverScope ? serverQuery : userId ? otherUserQuery : ownQuery
 
   useEffect(() => {
-    if (activeQuery.data) setSettings(activeQuery.data as unknown as ToolSettings)
+    if (activeQuery.data) {
+      const next = activeQuery.data as unknown as ToolSettings
+      setSettings(next)
+      persistedSnapshot.current = JSON.stringify(next)
+    }
   }, [activeQuery.data])
 
   const saveServer = useSystemSettingsUpdateServerTools()
@@ -66,6 +71,9 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
 
   const save = useCallback(async () => {
     if (!settings) return
+    const currentSnapshot = JSON.stringify(settings)
+    if (currentSnapshot === persistedSnapshot.current) return
+
     try {
       const body = settings as unknown as Parameters<typeof saveOwn.mutateAsync>[0]['data']
       const response = serverScope
@@ -73,7 +81,9 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
         : userId
           ? await saveOtherUser.mutateAsync({ userId, data: body })
           : await saveOwn.mutateAsync({ data: body })
-      setSettings(response as unknown as ToolSettings)
+      const persisted = response as unknown as ToolSettings
+      setSettings(persisted)
+      persistedSnapshot.current = JSON.stringify(persisted)
       triggerMetaRefetch()
       notify('success', t('settings.tools_saved'))
     } catch (error: unknown) {
