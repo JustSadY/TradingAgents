@@ -18,6 +18,14 @@ async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
     return result.scalar_one_or_none()
 
 
+async def get_users_by_ids(db: AsyncSession, user_ids: set[int]) -> dict[int, User]:
+    """Load multiple users in one query, keyed by integer id."""
+    if not user_ids:
+        return {}
+    result = await db.execute(select(User).where(User.id.in_(user_ids)))
+    return {int(user.id): user for user in result.scalars().all()}
+
+
 async def username_exists(db: AsyncSession, username: str, exclude_user_id: int | None = None) -> bool:
     query = select(User.id).where(User.username == username)
     if exclude_user_id is not None:
