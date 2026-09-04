@@ -80,3 +80,28 @@ async def test_portfolio_syntax_failure_makes_no_remote_requests(monkeypatch):
         await ticker_validation.validate_analysis_tickers(["AAPL", "../BAD"])
 
     quote_lookup.assert_not_awaited()
+
+
+async def test_portfolio_validation_deduplicates_normalized_tickers(monkeypatch):
+    async def quote_lookup(ticker: str):
+        return [{"symbol": ticker, "quoteType": "EQUITY"}]
+
+    lookup = AsyncMock(side_effect=quote_lookup)
+    monkeypatch.setattr(ticker_validation, "_fetch_quote_candidates", lookup)
+    monkeypatch.setattr(ticker_validation, "_fetch_search_candidates", AsyncMock())
+
+    results = await ticker_validation.validate_analysis_tickers([" aapl ", "AAPL", "msft", "MSFT"])
+
+    assert [result.ticker for result in results] == ["AAPL", "MSFT"]
+    assert lookup.await_count == 2
+    assert {call.args[0] for call in lookup.await_args_list} == {"AAPL", "MSFT"}
+
+
+async def test_portfolio_requires_two_distinct_tickers_before_remote_lookup(monkeypatch):
+    quote_lookup = AsyncMock()
+    monkeypatch.setattr(ticker_validation, "_fetch_quote_candidates", quote_lookup)
+
+    with pytest.raises(ValueError, match="at least 2 distinct tickers"):
+        await ticker_validation.validate_analysis_tickers(["AAPL", " aapl "])
+
+    quote_lookup.assert_not_awaited()
