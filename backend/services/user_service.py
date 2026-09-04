@@ -129,6 +129,15 @@ def _app_fernet() -> Fernet:
     return get_settings().get_fernet()
 
 
+def _invalidate_memory_cache_for_provider(user: User, provider: str) -> None:
+    """Invalidate only credentials that can change the Mem0 store client."""
+    if provider.strip().lower() != "openai":
+        return
+    from backend.services.memory_service import invalidate_user_memory_store_cache
+
+    invalidate_user_memory_store_cache(user.id)
+
+
 def list_stored_api_key_providers(user: User) -> list[str]:
     """List tenant-managed provider keys using the application encryption key."""
     return list_user_api_key_providers(user, _app_fernet())
@@ -138,6 +147,7 @@ async def save_stored_api_key(db: AsyncSession, user: User, provider: str, api_k
     """Encrypt and persist a tenant-managed provider key."""
     set_user_api_key(user, provider, api_key, _app_fernet())
     await db.flush()
+    _invalidate_memory_cache_for_provider(user, provider)
 
 
 async def remove_stored_api_key(db: AsyncSession, user: User, provider: str) -> bool:
@@ -145,6 +155,7 @@ async def remove_stored_api_key(db: AsyncSession, user: User, provider: str) -> 
     deleted = delete_user_api_key(user, provider, _app_fernet())
     if deleted:
         await db.flush()
+        _invalidate_memory_cache_for_provider(user, provider)
     return deleted
 
 
