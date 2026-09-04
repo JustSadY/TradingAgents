@@ -150,16 +150,16 @@ def build_agent_runtime_state(
 
 
 async def build_agent_runtime_context(db: AsyncSession, user_id: int | None) -> dict[str, Any]:
-    from backend.repositories.agent_settings import get_server_agent_settings as _repo_get_server
-    from backend.repositories.agent_settings import get_user_agent_settings as _repo_get_user
+    from backend.repositories.agent_settings import get_runtime_agent_settings
 
-    server_rows_list = await _repo_get_server(db)
-    server_rows = {row.agent_key: row for row in server_rows_list}
-
-    user_rows = {}
-    if user_id is not None:
-        user_rows_list = await _repo_get_user(db, user_id)
-        user_rows = {row.agent_key: row for row in user_rows_list}
+    rows = await get_runtime_agent_settings(db, user_id)
+    server_rows: dict[str, AgentSetting] = {}
+    user_rows: dict[str, AgentSetting] = {}
+    for row in rows:
+        if row.scope == "server":
+            server_rows[row.agent_key] = row
+        elif row.scope == "user" and user_id is not None and row.user_id == user_id:
+            user_rows[row.agent_key] = row
 
     context = {}
     for agent in list_agents():
