@@ -81,10 +81,19 @@ async def test_openai_key_rotation_invalidates_memory_store_but_other_keys_do_no
 
     await save_stored_api_key(db, user, "openai", "sk-openai")
     assert invalidated == [7]
+    assert db.flushes == 1
 
     invalidated.clear()
+    ciphertext = user.api_keys_enc
+    await save_stored_api_key(db, user, "openai", "sk-openai")
+    assert user.api_keys_enc == ciphertext
+    assert invalidated == []
+    assert db.flushes == 1
+
     await save_stored_api_key(db, user, "anthropic", "sk-anthropic")
     assert invalidated == []
+    assert db.flushes == 2
 
     assert await remove_stored_api_key(db, user, "openai") is True
     assert invalidated == [7]
+    assert db.flushes == 3
