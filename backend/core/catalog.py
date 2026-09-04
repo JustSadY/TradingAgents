@@ -151,14 +151,12 @@ def trading_options_for_user(user=None) -> tuple[list[dict], list[dict]]:
     ]
 
 MEMORY_STORES: list[dict] = [
-    {"value": "pinecone", "label": "Pinecone"},
-    {"value": "pgvector", "label": "pgvector (PostgreSQL)"},
+    {"value": "pgvector", "label": "Mem0 + pgvector (PostgreSQL)"},
 ]
 
 EMBEDDERS: list[dict] = [
-    {"value": "pinecone", "label": "Pinecone hosted", "note": "No extra key needed"},
     {"value": "openai", "label": "OpenAI", "note": "Uses your OpenAI key"},
-    {"value": "ollama", "label": "Ollama", "note": "Local, free"},
+    {"value": "ollama", "label": "Ollama", "note": "Local, no cloud key"},
 ]
 
 SECTIONS: list[dict] = [
