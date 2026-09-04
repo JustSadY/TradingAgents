@@ -32,6 +32,7 @@ _BACKGROUND_TASKS: set[asyncio.Task] = set()
 
 _RECOVERY_SEMAPHORE = asyncio.Semaphore(3)
 _ALERT_SEMAPHORE = asyncio.Semaphore(5)
+_OUTBOX_SEMAPHORE = asyncio.Semaphore(3)
 
 _INDICATOR_ALERT_TYPES = frozenset({"rsi", "macd_cross"})
 
@@ -219,8 +220,21 @@ async def _claim_alert(
     return True
 
 
+async def _deliver_claimed_outbox_item(item_id: int, user_id: int | None) -> None:
+    """Deliver one claimed item in an isolated tenant/system session."""
+    async with _OUTBOX_SEMAPHORE:
+        if user_id is None:
+            async with trusted_background_session(BackgroundCapability.ALERT_OUTBOX) as system_db:
+                await _deliver_outbox_item(system_db, item_id)
+            return
+
+        async with AsyncSessionLocal() as delivery_db:
+            await set_user_background_context(delivery_db, user_id)
+            await _deliver_outbox_item(delivery_db, item_id)
+
+
 async def process_alert_outbox(limit: int = 50) -> None:
-    """Claim globally, then deliver each item in its owner's tenant context."""
+    """Claim globally, then deliver items concurrently in isolated owner contexts."""
     async with trusted_background_session(BackgroundCapability.ALERT_OUTBOX) as db:
         stale_before = datetime.fromtimestamp(datetime.now(UTC).timestamp() - 300, UTC)
         claimed = await claim_outbox_batch(
@@ -231,17 +245,16 @@ async def process_alert_outbox(limit: int = 50) -> None:
         )
         await db.commit()
 
-    for item_id, user_id in claimed:
-        async with AsyncSessionLocal() as delivery_db:
-            if user_id is not None:
-                await set_user_background_context(delivery_db, user_id)
-            else:
-                # System-owned outbox rows still require an explicit audited
-                # capability rather than an admin or tenant bypass.
-                async with trusted_background_session(BackgroundCapability.ALERT_OUTBOX) as system_db:
-                    await _deliver_outbox_item(system_db, item_id)
-                continue
-            await _deliver_outbox_item(delivery_db, item_id)
+    if not claimed:
+        return
+
+    results = await asyncio.gather(
+        *[_deliver_claimed_outbox_item(item_id, user_id) for item_id, user_id in claimed],
+        return_exceptions=True,
+    )
+    for (item_id, _user_id), result in zip(claimed, results, strict=True):
+        if isinstance(result, BaseException):
+            _logger.error("Alert outbox delivery task failed id=%s: %s", item_id, result)
 
 
 async def _deliver_outbox_item(db, item_id: int) -> None:
