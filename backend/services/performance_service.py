@@ -300,6 +300,11 @@ async def backfill_returns(db) -> int:
         benchmark = resolve_benchmark(row.ticker, row_config)
         work_items.append((row, owner_id, settings_obj, benchmark))
 
+    # Candidate rows, owner settings and credentials are fully materialized.
+    # Release the DB connection before bounded market-data I/O; expire_on_commit
+    # is disabled, so these ORM snapshots remain available for the write phase.
+    await db.commit()
+
     semaphore = asyncio.Semaphore(_BACKFILL_RETURN_CONCURRENCY)
 
     async def _calculate(item):
