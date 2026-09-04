@@ -17,10 +17,6 @@ import {
 import {
   useUsersGetMySettingPermissions,
   useUsersGetUserSettingPermissions,
-  useUsersSetMyApiKey,
-  useUsersDeleteMyApiKey,
-  useUsersSetUserApiKeyEndpoint,
-  useUsersDeleteUserApiKeyEndpoint,
 } from '../api/generated/users/users'
 import { useCronCronStatus } from '../api/generated/cron/cron'
 import {
@@ -88,11 +84,8 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   // Deliveries are only fetched when the webhooks tab asks for them.
   const loadDeliveries = useCallback(() => { void deliveriesQuery.refetch() }, [deliveriesQuery])
   const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'agents' | 'risk' | 'alerts' | 'webhooks' | 'presets' | 'advanced' | 'cron' | 'tools' | 'memory' | 'personas'>('general')
-  const [pineconeKey, setPineconeKey] = useState('')
-  const [pineconeSaving, setPineconeSaving] = useState(false)
   const memoryQuery = useSettingsGetMemoryStatus(userId ? { user_id: userId } : undefined)
   const memoryStatus = memoryQuery.data ?? null
-  const loadMemoryStatus = useCallback(() => { void memoryQuery.refetch() }, [memoryQuery])
   const [allowedSettings, setAllowedSettings] = useState<string[]>([])
   const meta = useMeta()
   
@@ -102,10 +95,6 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const applyPresetMutation = usePresetsApplyPreset()
   const deletePresetMutation = usePresetsDeletePreset()
   const testWebhookMutation = useSettingsTestWebhook()
-  const setOwnKey = useUsersSetMyApiKey()
-  const deleteOwnKey = useUsersDeleteMyApiKey()
-  const setOtherUserKey = useUsersSetUserApiKeyEndpoint()
-  const deleteOtherUserKey = useUsersDeleteUserApiKeyEndpoint()
 
   const toolPanelRef = useRef<ToolSettingsPanelHandle>(null)
   const agentPanelRef = useRef<AgentSettingsPanelHandle>(null)
@@ -212,6 +201,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
         await updateOwnSettings.mutateAsync({ data: settingsUpdate })
       }
       triggerMetaRefetch()
+      void memoryQuery.refetch()
       if (agentPanelRef.current) {
         await agentPanelRef.current.save()
       }
@@ -251,27 +241,6 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     const provider = providerOptions[0]?.[0] ?? s.llm_provider
     const model = modelsFor(llmCatalog, provider)[0]?.value ?? s.llm_model
     update('fallback_llm_chain', [...fallbackChain, { provider, model }])
-  }
-
-  const savePineconeKey = async () => {
-    if (!pineconeKey.trim()) return
-    setPineconeSaving(true)
-    try {
-      const data = { provider: 'pinecone', api_key: pineconeKey.trim() }
-      if (userId) await setOtherUserKey.mutateAsync({ userId, data })
-      else await setOwnKey.mutateAsync({ data })
-      setPineconeKey('')
-      loadMemoryStatus()
-    } finally { setPineconeSaving(false) }
-  }
-  const deletePineconeKey = async () => {
-    try {
-      if (userId) await deleteOtherUserKey.mutateAsync({ userId, provider: 'pinecone' })
-      else await deleteOwnKey.mutateAsync({ provider: 'pinecone' })
-    } catch (e) {
-      console.error('Failed to delete Pinecone key', e)
-    }
-    loadMemoryStatus()
   }
 
   const languages = meta?.languages ?? [{ value: 'English', label: 'English' }, { value: 'Turkish', label: 'Türkçe' }]
@@ -572,12 +541,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
           {activeTab === 'cron' && <CronTab s={s} t={t} update={update} cronStatus={cronStatus} />}
 
           {activeTab === 'memory' && (
-            <MemoryTab
-              s={s} t={t} update={update} meta={meta} memoryStatus={memoryStatus}
-              pineconeKey={pineconeKey} setPineconeKey={setPineconeKey}
-              pineconeSaving={pineconeSaving} savePineconeKey={savePineconeKey}
-              deletePineconeKey={deletePineconeKey}
-            />
+            <MemoryTab s={s} t={t} update={update} meta={meta} memoryStatus={memoryStatus} />
           )}
 
           {activeTab === 'tools' && (
