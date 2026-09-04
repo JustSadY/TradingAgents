@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.config import get_settings as _cfg
 from backend.core.security import decrypt_secret
 from backend.models.settings import AppSettings
-from backend.services.user_service import decrypt_api_keys, get_user_api_key
+from backend.services.user_service import decrypt_api_keys
 from backend.trading_agents.config import normalize_fallback_llm_chain
 from backend.trading_agents.default_config import DEFAULT_CONFIG
 from backend.trading_agents.llm_clients.registry import provider_requires_api_key
@@ -189,15 +189,13 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         try:
             fernet = _cfg().get_fernet()
             current_provider = str(cfg.get("llm_provider", "openai")).strip().lower()
-            user_key = get_user_api_key(user, current_provider, fernet)
-            if user.api_keys_enc:
-                cfg["user_api_keys"] = {
-                    provider: key
-                    for provider, key in decrypt_api_keys(user.api_keys_enc, fernet).items()
-                    if provider_requires_api_key(provider)
-                }
-            else:
-                cfg["user_api_keys"] = {}
+            stored_keys = decrypt_api_keys(user.api_keys_enc, fernet) if user.api_keys_enc else {}
+            cfg["user_api_keys"] = {
+                provider: key
+                for provider, key in stored_keys.items()
+                if provider_requires_api_key(provider)
+            }
+            user_key = cfg["user_api_keys"].get(current_provider) if provider_requires_api_key(current_provider) else None
         except Exception:
             _logger.exception("Failed to decrypt user API keys in build_analysis_config")
             user_key = None
