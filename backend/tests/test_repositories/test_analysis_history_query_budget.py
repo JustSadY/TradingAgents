@@ -28,6 +28,27 @@ def _sql(statement) -> str:
     return str(statement.compile(compile_kwargs={"literal_binds": True})).lower()
 
 
+async def test_historical_review_selects_only_decision_surface() -> None:
+    db = _CaptureDB()
+    user = SimpleNamespace(id=7, is_admin=False)
+
+    await analysis_repo.list_historical_analyses(
+        db,
+        user=user,
+        ticker="AAPL",
+        before_trade_date="2026-09-04",
+        limit=1,
+    )
+
+    sql = _sql(db.statements[0])
+    select_clause = sql.split(" from ", 1)[0]
+    assert "analysis_results.trade_date" in select_clause
+    assert "analysis_results.final_decision" in select_clause
+    assert "analysis_results.market_report" not in select_clause
+    assert "analysis_results.portfolio_decision_json" not in select_clause
+    assert "analysis_results.risk_debate_history" not in select_clause
+
+
 async def test_analysis_history_selects_only_list_surface() -> None:
     db = _CaptureDB()
     user = SimpleNamespace(id=7, is_admin=False)
