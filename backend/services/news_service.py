@@ -13,6 +13,7 @@ _logger = logging.getLogger(__name__)
 
 _TTL_SECONDS = 900
 _MAX_TICKERS = 10
+_NEWS_FETCH_CONCURRENCY = 4
 
 
 def _aware_utc(value: datetime) -> datetime:
@@ -49,6 +50,7 @@ async def _upsert_cache(db, ticker: str, parsed: list[dict], now: datetime) -> N
         return
     await db.execute(stmt)
 
+
 def _fetch_news_sync(ticker: str) -> list[dict]:
     import yfinance as yf
 
@@ -58,6 +60,39 @@ def _fetch_news_sync(ticker: str) -> list[dict]:
         _logger.warning("News fetch failed %s: %s", ticker, exc)
         return []
 
+
+def _parse_news_items(ticker: str, items: list[dict]) -> list[dict]:
+    parsed = []
+    for n in items[:30]:
+        content = n.get("content", {})
+        title = content.get("title") or n.get("title", "")
+        if not title:
+            continue
+        parsed.append(
+            {
+                "ticker": ticker,
+                "title": title,
+                "summary": content.get("summary") or n.get("summary", ""),
+                "url": (content.get("canonicalUrl") or {}).get("url") or n.get("link", ""),
+                "published_at": str(content.get("pubDate") or n.get("providerPublishTime", "")),
+                "source": (content.get("provider") or {}).get("displayName") or n.get("publisher", ""),
+            }
+        )
+    return parsed
+
+
+async def _fetch_news_batch(tickers: list[str]) -> dict[str, list[dict]]:
+    """Fetch cache misses concurrently without flooding the upstream provider."""
+    semaphore = asyncio.Semaphore(_NEWS_FETCH_CONCURRENCY)
+
+    async def _one(ticker: str) -> tuple[str, list[dict]]:
+        async with semaphore:
+            items = await asyncio.to_thread(_fetch_news_sync, ticker)
+        return ticker, _parse_news_items(ticker, items)
+
+    return dict(await asyncio.gather(*(_one(ticker) for ticker in tickers))) if tickers else {}
+
+
 async def get_news_feed(tickers: str, limit: int) -> list[dict]:
     from sqlalchemy import select
 
@@ -65,43 +100,44 @@ async def get_news_feed(tickers: str, limit: int) -> list[dict]:
     from backend.models.news_cache import NewsCache
 
     ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()][:_MAX_TICKERS]
-    collected: list[dict] = []
+    if not ticker_list:
+        return []
+    unique_tickers = list(dict.fromkeys(ticker_list))
 
     now = datetime.now(UTC)
     cutoff = now - timedelta(seconds=_TTL_SECONDS)
 
+    # Read cached payloads into plain values and release the DB session before
+    # any external yFinance calls. A slow upstream must not pin a DB connection
+    # or keep a read transaction open for the duration of network I/O.
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(NewsCache).where(NewsCache.ticker.in_(ticker_list)))
-        cache_map = {row.ticker: row for row in result.scalars().all()}
+        result = await db.execute(select(NewsCache).where(NewsCache.ticker.in_(unique_tickers)))
+        cache_map = {
+            row.ticker: (_aware_utc(row.updated_at), list(row.news_json or []))
+            for row in result.scalars().all()
+        }
 
-        for ticker in ticker_list:
-            cached = cache_map.get(ticker)
-            if cached and _aware_utc(cached.updated_at) >= cutoff:
-                collected.extend(cached.news_json[:limit])
-            else:
-                items = await asyncio.to_thread(_fetch_news_sync, ticker)
+    resolved: dict[str, list[dict]] = {}
+    missing: list[str] = []
+    for ticker in unique_tickers:
+        cached = cache_map.get(ticker)
+        if cached and cached[0] >= cutoff:
+            resolved[ticker] = cached[1]
+        else:
+            missing.append(ticker)
 
-                parsed = []
-                for n in items[:30]:
-                    content = n.get("content", {})
-                    title = content.get("title") or n.get("title", "")
-                    if not title:
-                        continue
-                    parsed.append(
-                        {
-                            "ticker": ticker,
-                            "title": title,
-                            "summary": content.get("summary") or n.get("summary", ""),
-                            "url": (content.get("canonicalUrl") or {}).get("url") or n.get("link", ""),
-                            "published_at": str(content.get("pubDate") or n.get("providerPublishTime", "")),
-                            "source": (content.get("provider") or {}).get("displayName") or n.get("publisher", ""),
-                        }
-                    )
+    fetched = await _fetch_news_batch(missing)
+    resolved.update(fetched)
 
+    if fetched:
+        async with AsyncSessionLocal() as db:
+            for ticker, parsed in fetched.items():
                 await _upsert_cache(db, ticker, parsed, now)
-                collected.extend(parsed[:limit])
+            await db.commit()
 
-        await db.commit()
+    collected: list[dict] = []
+    for ticker in ticker_list:
+        collected.extend(resolved.get(ticker, [])[:limit])
 
     collected.sort(key=lambda x: x.get("published_at", ""), reverse=True)
     return collected[: limit * len(ticker_list)]
