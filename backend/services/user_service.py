@@ -69,7 +69,8 @@ def resolve_user_api_key(user: User, provider: str) -> str | None:
         return None
 
 
-def set_user_api_key(user: User, provider: str, api_key: str, fernet: Fernet) -> None:
+def set_user_api_key(user: User, provider: str, api_key: str, fernet: Fernet) -> bool:
+    """Set one tenant-managed provider key and report whether it changed."""
     from backend.trading_agents.llm_clients.registry import provider_requires_api_key
 
     if not provider_requires_api_key(provider):
@@ -87,8 +88,14 @@ def set_user_api_key(user: User, provider: str, api_key: str, fernet: Fernet) ->
             raise RuntimeError(
                 "Stored API credentials cannot be decrypted. Restore the configured encryption key before changing credentials."
             ) from e
-    existing[provider.lower()] = api_key
+
+    provider_key = provider.lower()
+    if existing.get(provider_key) == api_key:
+        return False
+
+    existing[provider_key] = api_key
     user.api_keys_enc = encrypt_api_keys(existing, fernet)
+    return True
 
 
 def delete_user_api_key(user: User, provider: str, fernet: Fernet) -> bool:
@@ -144,8 +151,10 @@ def list_stored_api_key_providers(user: User) -> list[str]:
 
 
 async def save_stored_api_key(db: AsyncSession, user: User, provider: str, api_key: str) -> None:
-    """Encrypt and persist a tenant-managed provider key."""
-    set_user_api_key(user, provider, api_key, _app_fernet())
+    """Encrypt and persist a tenant-managed provider key only when it changes."""
+    changed = set_user_api_key(user, provider, api_key, _app_fernet())
+    if not changed:
+        return
     await db.flush()
     _invalidate_memory_cache_for_provider(user, provider)
 
