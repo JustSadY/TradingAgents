@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from backend.schemas.meta import MetaResponse
 from backend.schemas.settings import MemoryStatusResponse, SettingsBase, SettingsUpdate
 
 _LEGACY_MEMORY_FIELDS = {
@@ -44,3 +45,7 @@ def test_memory_status_contract_has_no_legacy_index() -> None:
 
     assert "index" not in fields
     assert {"store", "embedder", "embed_model", "enabled"}.issubset(fields)
+
+
+def test_meta_contract_has_no_memory_store_selector() -> None:
+    assert "memory_stores" not in MetaResponse.model_fields
