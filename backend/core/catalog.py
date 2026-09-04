@@ -243,17 +243,33 @@ CHART_PERIODS: list[dict] = [
     {"value": "5y", "label": "5Y"},
 ]
 
+_META_TOOLS: tuple[dict, ...] | None = None
+_META_AGENTS: tuple[dict, ...] | None = None
+
+
+def _validated_static_meta() -> tuple[tuple[dict, ...], tuple[dict, ...]]:
+    """Validate immutable registry metadata once per process."""
+    global _META_AGENTS, _META_TOOLS
+    if _META_TOOLS is None:
+        from backend.schemas.tool_settings import ToolMeta
+        from backend.trading_agents.agents.tools import registry
+
+        _META_TOOLS = tuple(ToolMeta.model_validate(item).model_dump() for item in registry.metadata())
+    if _META_AGENTS is None:
+        from backend.schemas.meta import AgentMeta
+        from backend.trading_agents.agent_catalog import list_agents
+
+        _META_AGENTS = tuple(AgentMeta.model_validate(agent.metadata()).model_dump() for agent in list_agents())
+    return _META_TOOLS, _META_AGENTS
+
 
 async def build_meta(db=None, user=None) -> dict:
-    from backend.schemas.meta import AgentMeta
-    from backend.schemas.tool_settings import ToolMeta
     from backend.services.agent_settings_service import build_agent_runtime_context
-    from backend.trading_agents.agent_catalog import list_agents
     from backend.trading_agents.agents.hierarchy import AgentHierarchy
-    from backend.trading_agents.agents.tools import registry
 
-    tools_list = [ToolMeta.model_validate(item).model_dump() for item in registry.metadata()]
-    agents_list = [AgentMeta.model_validate(a.metadata()).model_dump() for a in list_agents()]
+    static_tools, static_agents = _validated_static_meta()
+    tools_list = list(static_tools)
+    agents_list = list(static_agents)
     agent_access_map: dict[str, bool] = {}
     if db is not None and user is not None:
         agent_ctx = await build_agent_runtime_context(db, user.id)
