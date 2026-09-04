@@ -280,9 +280,9 @@ async def update_other_user_agents(
     admin: User = Depends(require_admin),
 ):
     target_user = await _require_target_user(db, user_id)
-    from backend.services.agent_settings_service import apply_server_agent_settings_update
+    from backend.services.agent_settings_service import apply_agent_settings_update
 
-    return await apply_server_agent_settings_update(db, target_user, body)
+    return await apply_agent_settings_update(db, target_user, body)
 
 
 @router.get("/agents/server", response_model=AgentSettingsRead)
