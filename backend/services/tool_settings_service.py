@@ -93,6 +93,20 @@ def _tool_is_available(tool: BaseAgentTool, hierarchy) -> bool:
     return any(hierarchy.is_enabled(agent_key) for agent_key in tool.allowed_analysts)
 
 
+def _render_server_tool_settings(server_rows: dict[str, AgentToolSetting]) -> ToolSettingsRead:
+    tools_map = {}
+    for tool in registry.list():
+        default_enabled = tool.default_enabled
+        default_settings = tool.default_settings(scope="server")
+        row = server_rows.get(tool.key)
+        enabled = row.enabled if (row and row.enabled is not None) else default_enabled
+        settings = default_settings.copy()
+        if row and row.settings:
+            settings.update(row.settings)
+        tools_map[tool.key] = ToolSettingValue(enabled=enabled, settings=_mask_secrets(tool, settings))
+    return ToolSettingsRead(tools=tools_map)
+
+
 async def _render_user_tool_settings(
     db: AsyncSession,
     user: User,
@@ -153,24 +167,8 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
 async def get_server_tool_settings(db: AsyncSession) -> ToolSettingsRead:
     from backend.repositories.tool_settings import get_server_tool_settings as _repo_get_server
 
-    server_rows_list = await _repo_get_server(db)
-    server_rows = {row.tool_key: row for row in server_rows_list}
-
-    tools_map = {}
-    for tool in registry.list():
-        default_enabled = tool.default_enabled
-        default_settings = tool.default_settings(scope="server")
-
-        row = server_rows.get(tool.key)
-        enabled = row.enabled if (row and row.enabled is not None) else default_enabled
-        settings = default_settings.copy()
-        if row and row.settings:
-            settings.update(row.settings)
-        settings = _mask_secrets(tool, settings)
-
-        tools_map[tool.key] = ToolSettingValue(enabled=enabled, settings=settings)
-
-    return ToolSettingsRead(tools=tools_map)
+    server_rows = {row.tool_key: row for row in await _repo_get_server(db)}
+    return _render_server_tool_settings(server_rows)
 
 
 async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSettingsUpdate) -> ToolSettingsRead:
@@ -245,8 +243,7 @@ async def apply_server_tool_settings_update(db: AsyncSession, body: ToolSettings
     from backend.repositories.tool_settings import ensure_tool_setting
     from backend.repositories.tool_settings import get_server_tool_settings as _repo_get_server
 
-    server_rows_list = await _repo_get_server(db)
-    server_rows = {row.tool_key: row for row in server_rows_list}
+    server_rows = {row.tool_key: row for row in await _repo_get_server(db)}
 
     for tool_key, update in body.tools.items():
         tool = registry.get(tool_key)
@@ -265,7 +262,7 @@ async def apply_server_tool_settings_update(db: AsyncSession, body: ToolSettings
         _apply_tool_setting_row_update(row, update, tool)
 
     await db.flush()
-    return await get_server_tool_settings(db)
+    return _render_server_tool_settings(server_rows)
 
 
 def build_tool_runtime_state(
@@ -300,16 +297,16 @@ def build_tool_runtime_state(
 
 
 async def build_global_runtime_context(db: AsyncSession, user_id: int | None) -> dict[str, Any]:
-    from backend.repositories.tool_settings import get_server_tool_settings as _repo_get_server
-    from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
+    from backend.repositories.tool_settings import get_runtime_tool_settings
 
-    server_rows_list = await _repo_get_server(db)
-    server_rows = {row.tool_key: row for row in server_rows_list}
-
-    user_rows = {}
-    if user_id is not None:
-        user_rows_list = await _repo_get_user(db, user_id)
-        user_rows = {row.tool_key: row for row in user_rows_list}
+    rows = await get_runtime_tool_settings(db, user_id)
+    server_rows: dict[str, AgentToolSetting] = {}
+    user_rows: dict[str, AgentToolSetting] = {}
+    for row in rows:
+        if row.scope == "server":
+            server_rows[row.tool_key] = row
+        elif row.scope == "user" and user_id is not None and row.user_id == user_id:
+            user_rows[row.tool_key] = row
 
     server_settings_map = {}
     user_settings_map = {}
