@@ -16,6 +16,12 @@ from backend.trading_agents.agents.tools.registry import registry
 
 SECRET_UNCHANGED_SENTINEL = "__SECRET_UNCHANGED__"
 
+# Tool instances in the registry are process-lifetime singletons. Keep the
+# dynamically compiled Pydantic model beside that exact instance instead of
+# rebuilding it on every settings save. Holding the instance in the value also
+# protects against a recycled ``id()`` ever matching a different object.
+_tool_validation_model_cache: dict[int, tuple[BaseAgentTool, Any]] = {}
+
 
 def _secret_field_keys(tool: BaseAgentTool) -> set[str]:
     return {f.key for f in tool.settings_schema if f.type == "secret"}
@@ -49,26 +55,32 @@ def _get_pydantic_type(field_type: str) -> Any:
     return mapping.get(field_type, Any)
 
 
-def validate_tool_settings(tool: BaseAgentTool, incoming: dict[str, Any]) -> dict[str, Any]:
-    """Validate incoming settings against the tool's schema using dynamic Pydantic models."""
+def _tool_validation_model(tool: BaseAgentTool):
+    cache_key = id(tool)
+    cached = _tool_validation_model_cache.get(cache_key)
+    if cached is not None and cached[0] is tool:
+        return cached[1]
+
     fields = {}
     for field in tool.settings_schema:
         f_type = _get_pydantic_type(field.type)
-        default = field.default
-
         extra_kwargs = {}
         if field.type == "number":
             if field.min is not None:
                 extra_kwargs["ge"] = field.min
             if field.max is not None:
                 extra_kwargs["le"] = field.max
+        fields[field.key] = (f_type, PydanticField(default=field.default, **extra_kwargs))
 
-        fields[field.key] = (f_type, PydanticField(default=default, **extra_kwargs))
+    model = create_model(f"Dynamic{tool.key}Model", **fields)
+    _tool_validation_model_cache[cache_key] = (tool, model)
+    return model
 
-    ToolModel = create_model(f"Dynamic{tool.key}Model", **fields)
 
+def validate_tool_settings(tool: BaseAgentTool, incoming: dict[str, Any]) -> dict[str, Any]:
+    """Validate incoming settings against the tool's cached dynamic model."""
     try:
-        validated_obj = ToolModel(**incoming)
+        validated_obj = _tool_validation_model(tool)(**incoming)
         normalized = validated_obj.model_dump(exclude_unset=True)
 
         for field in tool.settings_schema:
