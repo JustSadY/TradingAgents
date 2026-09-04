@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.repositories.tool_access import (
+    list_access_override_rows,
     list_agent_access_rows,
     list_tool_access_rows,
     list_tool_field_access_rows,
@@ -126,24 +127,29 @@ async def update_user_tool_field_access(
 
 async def get_user_access_overrides(db: AsyncSession, user_id: int) -> dict[str, dict]:
     """Return only persisted access overrides for runtime-context assembly."""
-    agent_access = {row.agent_key: row.can_run for row in await list_agent_access_rows(db, user_id)}
-
-    tool_access = {
-        row.tool_key: {
-            "can_view": row.can_view,
-            "can_use": row.can_use,
-            "can_edit": row.can_edit,
-            "can_enable": row.can_enable,
-        }
-        for row in await list_tool_access_rows(db, user_id)
-    }
-
+    agent_access: dict[str, bool] = {}
+    tool_access: dict[str, dict[str, bool]] = {}
     field_access: dict[str, dict[str, dict[str, bool]]] = {}
-    for row in await list_tool_field_access_rows(db, user_id):
-        field_access.setdefault(row.tool_key, {})[row.field_key] = {
-            "can_view": row.can_view,
-            "can_edit": row.can_edit,
-        }
+
+    for row in await list_access_override_rows(db, user_id):
+        kind = row["kind"]
+        key = row["key"]
+        if kind == "agent":
+            agent_access[key] = bool(row["can_view"])
+        elif kind == "tool":
+            tool_access[key] = {
+                "can_view": bool(row["can_view"]),
+                "can_use": bool(row["can_use"]),
+                "can_edit": bool(row["can_edit"]),
+                "can_enable": bool(row["can_enable"]),
+            }
+        elif kind == "field":
+            field_key = row["field_key"]
+            if field_key:
+                field_access.setdefault(key, {})[field_key] = {
+                    "can_view": bool(row["can_view"]),
+                    "can_edit": bool(row["can_edit"]),
+                }
 
     return {
         "agent_access": agent_access,
