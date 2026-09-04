@@ -31,6 +31,14 @@ _ANALYSIS_LIST_COLUMNS = (
     AnalysisResult.alpha_return,
     AnalysisResult.holding_days,
 )
+_MULTI_TICKER_LIST_COLUMNS = (
+    MultiTickerAnalysis.id,
+    MultiTickerAnalysis.trade_date,
+    MultiTickerAnalysis.asset_type,
+    MultiTickerAnalysis._tickers,
+    MultiTickerAnalysis.triggered_by,
+    MultiTickerAnalysis.created_at,
+)
 
 
 async def _rollback_after_write_error(db: AsyncSession) -> None:
@@ -175,7 +183,15 @@ async def list_multi_ticker_analyses(
     limit: int = 20,
     offset: int = 0,
 ) -> list[MultiTickerAnalysis]:
-    q = select(MultiTickerAnalysis).order_by(_desc(MultiTickerAnalysis.created_at)).limit(limit).offset(offset)
+    # The list view never renders the full super report or child analysis IDs.
+    # Keep those large fields on the detail endpoint only.
+    q = (
+        select(MultiTickerAnalysis)
+        .options(load_only(*_MULTI_TICKER_LIST_COLUMNS))
+        .order_by(_desc(MultiTickerAnalysis.created_at))
+        .limit(limit)
+        .offset(offset)
+    )
     q = scope_to_user(q, MultiTickerAnalysis, user)
     result = await db.execute(q)
     return list(result.scalars().all())
