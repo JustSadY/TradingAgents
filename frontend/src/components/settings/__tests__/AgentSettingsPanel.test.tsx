@@ -117,7 +117,7 @@ describe('AgentSettingsPanel', () => {
     expect(mockTriggerMetaRefetch).not.toHaveBeenCalled()
   })
 
-  it('refreshes metadata only after a changed successful agent save', async () => {
+  it('sends only the changed agent and refreshes metadata after success', async () => {
     vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultSettings })
     const changedSettings = {
       agents: {
@@ -139,6 +139,9 @@ describe('AgentSettingsPanel', () => {
     })
 
     expect(put).toHaveBeenCalledTimes(1)
+    expect(put.mock.calls[0]?.[1]).toEqual({
+      agents: { market_intelligence: changedSettings.agents.market_intelligence },
+    })
     expect(mockTriggerMetaRefetch).toHaveBeenCalledTimes(1)
   })
 })
