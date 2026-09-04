@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+import backend.services.analysis.config_builder as config_builder
 from backend.services.analysis.config_builder import (
     _effective_analyst_concurrency,
     build_analysis_config,
@@ -36,6 +37,42 @@ def test_hosted_parallelism_has_a_process_safe_ceiling() -> None:
 
 def test_user_can_still_choose_serial_analysis() -> None:
     assert _effective_analyst_concurrency(_settings("nvidia", 1)) == 1
+
+
+def test_build_analysis_config_decrypts_tenant_key_blob_once(monkeypatch) -> None:
+    decrypt_calls = 0
+    fernet = object()
+
+    def fake_decrypt_api_keys(value, received_fernet):
+        nonlocal decrypt_calls
+        assert value == "encrypted-keys"
+        assert received_fernet is fernet
+        decrypt_calls += 1
+        return {
+            "openai": "primary-key",
+            "anthropic": "fallback-key",
+            "ollama": "server-managed-value",
+        }
+
+    monkeypatch.setattr(config_builder, "decrypt_api_keys", fake_decrypt_api_keys)
+    monkeypatch.setattr(config_builder, "_cfg", lambda: SimpleNamespace(get_fernet=lambda: fernet))
+    monkeypatch.setattr(
+        config_builder,
+        "provider_requires_api_key",
+        lambda provider: provider in {"openai", "anthropic"},
+    )
+
+    config = build_analysis_config(
+        _settings("openai"),
+        user=SimpleNamespace(api_keys_enc="encrypted-keys", is_admin=False),
+    )
+
+    assert decrypt_calls == 1
+    assert config["api_key"] == "primary-key"
+    assert config["user_api_keys"] == {
+        "openai": "primary-key",
+        "anthropic": "fallback-key",
+    }
 
 
 async def test_prepare_graph_config_reuses_tool_context_agent_access_snapshot(monkeypatch) -> None:
