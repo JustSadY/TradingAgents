@@ -144,9 +144,10 @@ async def enforce_tool_settings_permission(
     db: AsyncSession,
     user: User,
     body: ToolSettingsUpdate,
-) -> None:
+) -> dict[str, dict] | None:
+    """Validate a tool mutation and return the access snapshot already loaded."""
     if user.is_admin:
-        return
+        return None
 
     await enforce_setting_section_permission(db, user, "tools")
     access = await get_user_access_overrides(db, user.id)
@@ -183,3 +184,5 @@ async def enforce_tool_settings_permission(
                         status_code=403,
                         detail=f"You do not have permission to modify field '{field_key}' on tool '{tool_key}'.",
                     )
+
+    return access
