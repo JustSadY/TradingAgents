@@ -22,11 +22,6 @@ export function MemoryTab({ s, t, update, meta, memoryStatus }: MemoryTabProps) 
     { value: 'ollama', label: t('settings.memory_embedder_ollama') },
   ]).filter(option => option.value === 'openai' || option.value === 'ollama')
 
-  const updateEmbedder = (value: string) => {
-    update('memory_store', 'pgvector')
-    update('memory_embedder', value)
-  }
-
   return (
     <ErrorBoundary name="SettingsMemory">
       <Section title={t('settings.section_vector_memory')}>
@@ -52,7 +47,7 @@ export function MemoryTab({ s, t, update, meta, memoryStatus }: MemoryTabProps) 
         </Row>
 
         <Row label={t('settings.row_embedder')}>
-          <select className={Input} value={embedder} onChange={event => updateEmbedder(event.target.value)}>
+          <select className={Input} value={embedder} onChange={event => update('memory_embedder', event.target.value)}>
             {embedders.map(option => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
