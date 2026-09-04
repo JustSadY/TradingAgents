@@ -110,11 +110,11 @@ class SettingsBase(BaseModel):
     webhook_enabled: bool = False
     webhook_events: list[str] = Field(default_factory=lambda: ["analysis_complete"], max_length=len(WEBHOOK_EVENTS))
     active_preset_name: str | None = None
-    memory_store: str = "pinecone"
+    memory_store: str = "pgvector"
     pinecone_index: str = "tradingagents-memory"
     pinecone_cloud: str = "aws"
     pinecone_region: str = "us-east-1"
-    memory_embedder: str = "pinecone"
+    memory_embedder: str = "openai"
     pinecone_embed_model: str = "llama-text-embed-v2"
     memory_openai_embed_model: str = "text-embedding-3-small"
     memory_ollama_embed_model: str = "nomic-embed-text"
