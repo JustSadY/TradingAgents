@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime, timedelta
@@ -29,6 +30,7 @@ _WEIGHT_COMPONENTS = (
 )
 _REGIME_KEYS = ("trend", "volatility", "risk", "macro")
 _REGIME_FRESHNESS = timedelta(hours=36)
+_BACKFILL_RETURN_CONCURRENCY = 4
 _OWNER_USER_UNSET = object()
 
 
@@ -286,6 +288,7 @@ async def backfill_returns(db) -> int:
     settings_by_user = await get_app_settings_map(db, owner_ids)
     users_by_id = await get_users_by_ids(db, owner_ids)
 
+    work_items: list[tuple[object, int | None, object, str]] = []
     for row in rows:
         row_config = dict(config)
         owner_id = int(row.user_id) if getattr(row, "user_id", None) is not None else None
@@ -294,12 +297,24 @@ async def backfill_returns(db) -> int:
             bt = getattr(settings_obj, "benchmark_ticker", None)
             if bt:
                 row_config["benchmark_ticker"] = bt
-
         benchmark = resolve_benchmark(row.ticker, row_config)
+        work_items.append((row, owner_id, settings_obj, benchmark))
 
-        raw, alpha, days = await calculate_returns(
-            row.ticker, row.trade_date, holding_days=HOLDING_DAYS, benchmark=benchmark
-        )
+    semaphore = asyncio.Semaphore(_BACKFILL_RETURN_CONCURRENCY)
+
+    async def _calculate(item):
+        row, _owner_id, _settings_obj, benchmark = item
+        async with semaphore:
+            return await calculate_returns(
+                row.ticker,
+                row.trade_date,
+                holding_days=HOLDING_DAYS,
+                benchmark=benchmark,
+            )
+
+    outcomes = await asyncio.gather(*[_calculate(item) for item in work_items])
+
+    for (row, owner_id, settings_obj, benchmark), (raw, alpha, days) in zip(work_items, outcomes, strict=True):
         if raw is not None:
             apply_return_outcome(
                 row,
@@ -309,8 +324,6 @@ async def backfill_returns(db) -> int:
             )
 
             try:
-                import asyncio
-
                 reflector = await _create_reflector_for_row(
                     db,
                     row,
