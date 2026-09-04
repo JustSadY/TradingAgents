@@ -284,7 +284,7 @@ async def update_profile(
     from backend.core.password_hashing import hash_password
     from backend.repositories.users import email_exists, update_user_profile
 
-    if email is not None and await email_exists(db, email, exclude_user_id=user.id):
+    if email is not None and email != user.email and await email_exists(db, email, exclude_user_id=user.id):
         raise EmailTakenError("Email already in use")
 
     hashed_password = None
@@ -361,7 +361,7 @@ async def update_managed_user(
         if actor.role != "owner":
             raise UserPolicyError("Only Server Owner can promote/demote admins.")
 
-    if email is not None and await email_exists(db, email, exclude_user_id=user.id):
+    if email is not None and email != user.email and await email_exists(db, email, exclude_user_id=user.id):
         raise EmailTakenError("Email already in use")
 
     return await update_user_admin(
