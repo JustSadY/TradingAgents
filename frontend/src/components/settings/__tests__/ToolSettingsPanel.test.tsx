@@ -6,6 +6,7 @@ import ToolSettingsPanel from '../ToolSettingsPanel'
 
 // Use mutable mock that can be changed per test via mockReturnValue
 const mockUseMeta = vi.fn()
+const mockTriggerMetaRefetch = vi.fn()
 
 vi.mock('../../../contexts/LanguageContext', async () => ({
   useTranslation: (await import('../../../test/i18nMock')).useTranslationMock,
@@ -13,6 +14,7 @@ vi.mock('../../../contexts/LanguageContext', async () => ({
 
 vi.mock('../../../hooks/useMeta', () => ({
   useMeta: () => mockUseMeta(),
+  triggerMetaRefetch: mockTriggerMetaRefetch,
 }))
 
 const fullToolsMeta = [
@@ -96,5 +98,19 @@ describe('ToolSettingsPanel', () => {
       renderWithQuery(<ToolSettingsPanel hideSaveButton={true} />)
     })
     expect(screen.queryByText('Save Tools')).not.toBeInTheDocument()
+  })
+
+  it('refreshes metadata only after a successful tool save', async () => {
+    vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultSettings })
+    const put = vi.spyOn(axios, 'put').mockResolvedValue({ data: defaultSettings })
+    renderWithQuery(<ToolSettingsPanel />)
+
+    const saveButton = await screen.findByText('Save Tools')
+    await act(async () => {
+      saveButton.click()
+    })
+
+    expect(put).toHaveBeenCalledTimes(1)
+    expect(mockTriggerMetaRefetch).toHaveBeenCalledTimes(1)
   })
 })
