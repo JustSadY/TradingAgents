@@ -90,36 +90,40 @@ def validate_tool_settings(tool: BaseAgentTool, incoming: dict[str, Any]) -> dic
         raise ValueError(str(e)) from e
 
 
-async def _check_tool_availability(db: AsyncSession, user_id: int, tool: BaseAgentTool) -> bool:
-    """Helper to check if a tool is available based on the agent hierarchy."""
+def _tool_is_available(tool: BaseAgentTool, hierarchy) -> bool:
+    """Return whether at least one analyst associated with ``tool`` is enabled."""
     if not tool.allowed_analysts:
         return True
-
-    from backend.services.agent_settings_service import build_agent_runtime_context
-    from backend.trading_agents.agents.hierarchy import AgentHierarchy
-
-    agent_ctx = await build_agent_runtime_context(db, user_id)
-    hierarchy = AgentHierarchy(agent_ctx)
-
-    return any(hierarchy.is_enabled(a) for a in tool.allowed_analysts)
+    return any(hierarchy.is_enabled(agent_key) for agent_key in tool.allowed_analysts)
 
 
 async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRead:
     from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
+    from backend.services.agent_settings_service import build_agent_runtime_context
+    from backend.trading_agents.agents.hierarchy import AgentHierarchy
 
     user_rows_list = await _repo_get_user(db, user.id)
     user_rows = {row.tool_key: row for row in user_rows_list}
 
-    tool_access_map = await get_user_tool_access(db, user.id)
-    field_access_map = {} if user.is_admin else await get_user_tool_field_access(db, user.id)
+    # Tool availability depends on the same agent hierarchy for every tool.
+    # Build it once instead of re-querying server/user agent settings inside
+    # the loop for each tool with ``allowed_analysts``.
+    agent_ctx = await build_agent_runtime_context(db, user.id)
+    hierarchy = AgentHierarchy(agent_ctx)
+
+    if user.is_admin:
+        tool_access_map = {}
+        field_access_map = {}
+    else:
+        tool_access_map = await get_user_tool_access(db, user.id)
+        field_access_map = await get_user_tool_field_access(db, user.id)
 
     tools_map = {}
     for tool in registry.list():
-        if not user.is_admin:
-            if not tool_access_map.get(tool.key, {}).get("can_view", True):
-                continue
+        if not user.is_admin and not tool_access_map.get(tool.key, {}).get("can_view", True):
+            continue
 
-        if not await _check_tool_availability(db, user.id, tool):
+        if not _tool_is_available(tool, hierarchy):
             continue
 
         default_enabled = tool.default_enabled
