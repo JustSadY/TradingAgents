@@ -97,20 +97,16 @@ def _tool_is_available(tool: BaseAgentTool, hierarchy) -> bool:
     return any(hierarchy.is_enabled(agent_key) for agent_key in tool.allowed_analysts)
 
 
-async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRead:
-    from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
-    from backend.services.agent_settings_service import build_agent_runtime_context
+async def _render_user_tool_settings(
+    db: AsyncSession,
+    user: User,
+    user_rows: dict[str, AgentToolSetting],
+    agent_ctx: dict[str, Any],
+) -> ToolSettingsRead:
+    """Render a user tool-settings response from already-loaded runtime state."""
     from backend.trading_agents.agents.hierarchy import AgentHierarchy
 
-    user_rows_list = await _repo_get_user(db, user.id)
-    user_rows = {row.tool_key: row for row in user_rows_list}
-
-    # Tool availability depends on the same agent hierarchy for every tool.
-    # Build it once instead of re-querying server/user agent settings inside
-    # the loop for each tool with ``allowed_analysts``.
-    agent_ctx = await build_agent_runtime_context(db, user.id)
     hierarchy = AgentHierarchy(agent_ctx)
-
     if user.is_admin:
         tool_access_map = {}
         field_access_map = {}
@@ -122,13 +118,11 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
     for tool in registry.list():
         if not user.is_admin and not tool_access_map.get(tool.key, {}).get("can_view", True):
             continue
-
         if not _tool_is_available(tool, hierarchy):
             continue
 
         default_enabled = tool.default_enabled
         default_settings = tool.default_settings(scope="user")
-
         row = user_rows.get(tool.key)
         enabled = row.enabled if (row and row.enabled is not None) else default_enabled
         settings = default_settings.copy()
@@ -143,6 +137,20 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
         tools_map[tool.key] = ToolSettingValue(enabled=enabled, settings=settings)
 
     return ToolSettingsRead(tools=tools_map)
+
+
+async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRead:
+    from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
+    from backend.services.agent_settings_service import build_agent_runtime_context
+
+    user_rows_list = await _repo_get_user(db, user.id)
+    user_rows = {row.tool_key: row for row in user_rows_list}
+
+    # Tool availability depends on the same agent hierarchy for every tool.
+    # Build it once instead of re-querying server/user agent settings inside
+    # the loop for each tool with ``allowed_analysts``.
+    agent_ctx = await build_agent_runtime_context(db, user.id)
+    return await _render_user_tool_settings(db, user, user_rows, agent_ctx)
 
 
 async def get_server_tool_settings(db: AsyncSession) -> ToolSettingsRead:
@@ -171,12 +179,10 @@ async def get_server_tool_settings(db: AsyncSession) -> ToolSettingsRead:
 async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSettingsUpdate) -> ToolSettingsRead:
     from backend.repositories.tool_settings import ensure_tool_setting
     from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
+    from backend.services.agent_settings_service import build_agent_runtime_context
 
     user_rows_list = await _repo_get_user(db, user.id)
     user_rows = {row.tool_key: row for row in user_rows_list}
-
-    from backend.services.agent_settings_service import build_agent_runtime_context
-
     agent_ctx = await build_agent_runtime_context(db, user.id)
 
     for tool_key, update in body.tools.items():
@@ -198,7 +204,9 @@ async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSet
         _apply_tool_setting_row_update(row, update, tool)
 
     await db.flush()
-    return await get_user_tool_settings(db, user)
+    # The updated ORM rows and agent context are already available. Rendering
+    # from them avoids re-reading user tool rows and both agent-setting scopes.
+    return await _render_user_tool_settings(db, user, user_rows, agent_ctx)
 
 
 def _validate_tool_availability(tool: BaseAgentTool, tool_key: str, agent_ctx: dict):
