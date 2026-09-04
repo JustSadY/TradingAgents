@@ -7,6 +7,7 @@ from backend.services import performance_service as service
 
 
 async def test_backfill_batches_owner_settings_and_users(monkeypatch) -> None:
+    db = object()
     rows = [
         SimpleNamespace(user_id=7, ticker="AAPL", trade_date="2026-08-01"),
         SimpleNamespace(user_id=7, ticker="MSFT", trade_date="2026-08-01"),
@@ -24,9 +25,9 @@ async def test_backfill_batches_owner_settings_and_users(monkeypatch) -> None:
     monkeypatch.setattr(service, "resolve_benchmark", lambda _ticker, _config: "SPY")
     monkeypatch.setattr("backend.trading_agents.dataflows.config.get_config", lambda: {})
 
-    updated = await service.backfill_returns(object())
+    updated = await service.backfill_returns(db)
 
     assert updated == 0
-    settings_map.assert_awaited_once_with(object(), {7, 8})
-    users_map.assert_awaited_once_with(object(), {7, 8})
+    settings_map.assert_awaited_once_with(db, {7, 8})
+    users_map.assert_awaited_once_with(db, {7, 8})
     assert calculate.await_count == 3
