@@ -42,12 +42,7 @@ async def get_rebalance_suggestions(db: AsyncSession, user: User) -> dict:
             "suggestions": [],
         }
 
-    tickers = [h["ticker"] for h in holdings]
-    sectors = await _fetch_sectors(tickers)
-    recent_signals = await _get_recent_signals(db, user, tickers)
-
     plan = build_plan(portfolio)
-
     if not plan["suggestions"] and not plan["issues"]:
         return {
             "summary": "No concentration or cash-allocation issues found.",
@@ -55,6 +50,12 @@ async def get_rebalance_suggestions(db: AsyncSession, user: User) -> dict:
             "issues": [],
             "suggestions": [],
         }
+
+    tickers = [h["ticker"] for h in holdings]
+    sectors, recent_signals = await asyncio.gather(
+        _fetch_sectors(tickers),
+        _get_recent_signals(db, user, tickers),
+    )
 
     prompt = _build_prompt(portfolio, sectors, recent_signals, plan)
     narrative = await _call_llm(db, user, prompt)
