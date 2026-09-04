@@ -2,8 +2,41 @@ from __future__ import annotations
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from backend.models.analysis import AnalysisResult
+
+_STATS_COLUMNS = (
+    AnalysisResult.id,
+    AnalysisResult.preset_name,
+    AnalysisResult.llm_provider,
+    AnalysisResult.llm_model,
+    AnalysisResult.duration_seconds,
+    AnalysisResult.tokens_in,
+    AnalysisResult.tokens_out,
+    AnalysisResult.signal,
+    AnalysisResult.raw_return,
+    AnalysisResult.alpha_return,
+    AnalysisResult.created_at,
+)
+_CALIBRATION_COLUMNS = (
+    AnalysisResult.id,
+    AnalysisResult.signal,
+    AnalysisResult.portfolio_decision_json,
+    AnalysisResult.raw_return,
+    AnalysisResult.alpha_return,
+)
+
+
+def _prefilter_columns() -> tuple:
+    from backend.trading_agents.agents.analyst_registry import get_report_fields
+
+    report_columns = tuple(
+        getattr(AnalysisResult, field)
+        for field in get_report_fields()
+        if hasattr(AnalysisResult, field)
+    )
+    return AnalysisResult.id, AnalysisResult.raw_return, *report_columns
 
 
 async def list_recent_run_token_totals(
@@ -40,7 +73,13 @@ async def list_completed_analyses_for_stats(
     ticker: str | None = None,
     require_raw_return: bool = False,
 ) -> list[AnalysisResult]:
-    query = select(AnalysisResult).where(AnalysisResult.status == "completed")
+    # A/B and signal-performance views use only compact run metrics. Analyst
+    # reports, debate histories and strategy JSON never participate here.
+    query = (
+        select(AnalysisResult)
+        .where(AnalysisResult.status == "completed")
+        .options(load_only(*_STATS_COLUMNS))
+    )
     if require_raw_return:
         query = query.where(AnalysisResult.raw_return.is_not(None))
     if user_id is not None:
@@ -57,10 +96,13 @@ async def list_learning_eligible_analyses(
     user_id: int | None,
     asset_type: str | None = None,
 ) -> list[AnalysisResult]:
+    # Confidence calibration consumes only the accepted decision, fallback
+    # signal and realized raw/alpha outcome.
     query = (
         select(AnalysisResult)
         .where(AnalysisResult.alpha_return.is_not(None))
         .where(AnalysisResult.learning_eligible.is_(True))
+        .options(load_only(*_CALIBRATION_COLUMNS))
     )
     if user_id is None:
         query = query.where(AnalysisResult.user_id.is_(None))
@@ -84,6 +126,7 @@ async def list_learning_eligible_ticker_analyses(
         .where(AnalysisResult.ticker == ticker.upper())
         .where(AnalysisResult.raw_return.is_not(None))
         .where(AnalysisResult.learning_eligible.is_(True))
+        .options(load_only(*_prefilter_columns()))
     )
     if user_id is None:
         query = query.where(AnalysisResult.user_id.is_(None))
