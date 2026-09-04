@@ -2,7 +2,7 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy import desc as _desc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -123,10 +123,9 @@ async def clear_analysis_history(db: AsyncSession, user=None) -> int:
     # History deletion is always self-scoped. Administrative cross-user
     # deletion must use a separate, explicitly audited maintenance path.
     owner_filter = AnalysisResult.user_id.is_(None) if user is None else AnalysisResult.user_id == user.id
-    count_res = await db.execute(select(func.count()).select_from(AnalysisResult).where(owner_filter))
-    count = int(count_res.scalar_one())
+    result = await db.execute(delete(AnalysisResult).where(owner_filter))
+    count = int(result.rowcount or 0)
     if count > 0:
-        await db.execute(delete(AnalysisResult).where(owner_filter))
         await db.commit()
     return count
 
