@@ -14,6 +14,7 @@ from backend.repositories.common import scope_to_user
 
 _logger = logging.getLogger(__name__)
 
+
 async def _rollback_after_write_error(db: AsyncSession) -> None:
     """Best-effort transaction reset that never hides the triggering error."""
     try:
@@ -22,6 +23,7 @@ async def _rollback_after_write_error(db: AsyncSession) -> None:
         raise
     except Exception:
         _logger.exception("Could not roll back failed analysis-result write")
+
 
 async def list_historical_analyses(
     db: AsyncSession,
@@ -41,6 +43,7 @@ async def list_historical_analyses(
     )
     result = await db.execute(q)
     return list(result.scalars().all())
+
 
 async def list_analyses(
     db: AsyncSession,
@@ -69,6 +72,7 @@ async def list_analyses(
     result = await db.execute(q)
     return list(result.scalars().all())
 
+
 async def get_previous_signal(db: AsyncSession, *, user_id: int | None, ticker: str, exclude_id: int) -> str | None:
     """Signal of the most recent completed analysis for this ticker, before ``exclude_id``.
 
@@ -95,11 +99,13 @@ async def get_previous_signal(db: AsyncSession, *, user_id: int | None, ticker: 
     result = await db.execute(q)
     return result.scalar_one_or_none()
 
+
 async def get_analysis_by_id(db: AsyncSession, analysis_id: int, user=None) -> AnalysisResult | None:
     q = select(AnalysisResult).where(AnalysisResult.id == analysis_id)
     q = scope_to_user(q, AnalysisResult, user)
     result = await db.execute(q)
     return result.scalar_one_or_none()
+
 
 async def delete_analysis_by_id(db: AsyncSession, analysis_id: int, user=None) -> bool:
     q = select(AnalysisResult).where(AnalysisResult.id == analysis_id)
@@ -112,6 +118,7 @@ async def delete_analysis_by_id(db: AsyncSession, analysis_id: int, user=None) -
     await db.commit()
     return True
 
+
 async def clear_analysis_history(db: AsyncSession, user=None) -> int:
     # History deletion is always self-scoped. Administrative cross-user
     # deletion must use a separate, explicitly audited maintenance path.
@@ -122,6 +129,7 @@ async def clear_analysis_history(db: AsyncSession, user=None) -> int:
         await db.execute(delete(AnalysisResult).where(owner_filter))
         await db.commit()
     return count
+
 
 async def get_latest_analysis(db: AsyncSession, *, user) -> AnalysisResult | None:
     q = (
@@ -134,6 +142,7 @@ async def get_latest_analysis(db: AsyncSession, *, user) -> AnalysisResult | Non
     result = await db.execute(q)
     return result.scalar_one_or_none()
 
+
 async def get_sentiment_history_by_ticker(db: AsyncSession, ticker: str, user=None):
     q = (
         select(AnalysisResult.trade_date, AnalysisResult.signal)
@@ -144,6 +153,7 @@ async def get_sentiment_history_by_ticker(db: AsyncSession, ticker: str, user=No
     q = scope_to_user(q, AnalysisResult, user)
     result = await db.execute(q)
     return result.all()
+
 
 async def list_multi_ticker_analyses(
     db: AsyncSession,
@@ -157,6 +167,7 @@ async def list_multi_ticker_analyses(
     result = await db.execute(q)
     return list(result.scalars().all())
 
+
 async def get_multi_ticker_analysis_by_id(
     db: AsyncSession,
     analysis_id: int,
@@ -166,6 +177,7 @@ async def get_multi_ticker_analysis_by_id(
     q = scope_to_user(q, MultiTickerAnalysis, user)
     result = await db.execute(q)
     return result.scalar_one_or_none()
+
 
 async def cleanup_stale_analyses(db: AsyncSession, *, stale_after_minutes: int = 10) -> int:
     """Fail only expired analysis leases, never every active run on web boot."""
@@ -183,6 +195,7 @@ async def cleanup_stale_analyses(db: AsyncSession, *, stale_after_minutes: int =
     await db.commit()
     return int(res.rowcount or 0)
 
+
 async def create_analysis_result(db: AsyncSession, **kwargs) -> AnalysisResult:
     task_id = kwargs.get("task_id")
     if task_id:
@@ -194,13 +207,11 @@ async def create_analysis_result(db: AsyncSession, **kwargs) -> AnalysisResult:
                 if hasattr(existing, k):
                     setattr(existing, k, v)
             await db.commit()
-            await db.refresh(existing)
             return existing
     try:
         row = AnalysisResult(**kwargs)
         db.add(row)
         await db.commit()
-        await db.refresh(row)
         return row
     except IntegrityError:
         await db.rollback()
@@ -212,9 +223,9 @@ async def create_analysis_result(db: AsyncSession, **kwargs) -> AnalysisResult:
                 if hasattr(existing, k):
                     setattr(existing, k, v)
             await db.commit()
-            await db.refresh(existing)
             return existing
         raise
+
 
 async def update_analysis_result(db: AsyncSession, row_id: int, **fields) -> AnalysisResult | None:
     stmt = select(AnalysisResult).where(AnalysisResult.id == row_id)
