@@ -13,7 +13,8 @@ from backend.repositories.performance import (
     list_resolved_learning_analyses,
     list_return_backfill_candidates,
 )
-from backend.repositories.settings import get_app_settings
+from backend.repositories.settings import get_app_settings_map
+from backend.repositories.users import get_users_by_ids
 from backend.services.market_data_service import calculate_returns
 from backend.services.outcome_semantics import rating_outcome_success
 
@@ -28,6 +29,7 @@ _WEIGHT_COMPONENTS = (
 )
 _REGIME_KEYS = ("trend", "volatility", "risk", "macro")
 _REGIME_FRESHNESS = timedelta(hours=36)
+_OWNER_USER_UNSET = object()
 
 
 def _analysis_regime(row: object) -> dict[str, str]:
@@ -234,9 +236,8 @@ async def get_regime_aware_analyst_attribution_stats(
     }
 
 
-async def _create_reflector_for_row(db, row, settings_obj):
-    """Build reflection LLM from the row owner's actual provider configuration."""
-    from backend.repositories.users import get_user_by_id
+async def _create_reflector_for_row(db, row, settings_obj, *, owner_user=_OWNER_USER_UNSET):
+    """Build reflection LLM from preloaded owner/provider configuration."""
     from backend.services.user_service import resolve_user_api_key
     from backend.trading_agents.default_config import DEFAULT_CONFIG
     from backend.trading_agents.graph.reflection import Reflector
@@ -254,7 +255,12 @@ async def _create_reflector_for_row(db, row, settings_obj):
 
     api_key = None
     if getattr(row, "user_id", None) is not None:
-        user = await get_user_by_id(db, int(row.user_id))
+        if owner_user is _OWNER_USER_UNSET:
+            from backend.repositories.users import get_user_by_id
+
+            user = await get_user_by_id(db, int(row.user_id))
+        else:
+            user = owner_user
         if user is not None:
             api_key = resolve_user_api_key(user, provider)
 
@@ -276,15 +282,18 @@ async def backfill_returns(db) -> int:
     updated = 0
     config = get_config()
 
+    owner_ids = {int(row.user_id) for row in rows if getattr(row, "user_id", None) is not None}
+    settings_by_user = await get_app_settings_map(db, owner_ids)
+    users_by_id = await get_users_by_ids(db, owner_ids)
+
     for row in rows:
         row_config = dict(config)
-        settings_obj = None
-        if row.user_id:
-            settings_obj = await get_app_settings(db, row.user_id)
-            if settings_obj:
-                bt = getattr(settings_obj, "benchmark_ticker", None)
-                if bt:
-                    row_config["benchmark_ticker"] = bt
+        owner_id = int(row.user_id) if getattr(row, "user_id", None) is not None else None
+        settings_obj = settings_by_user.get(owner_id) if owner_id is not None else None
+        if settings_obj:
+            bt = getattr(settings_obj, "benchmark_ticker", None)
+            if bt:
+                row_config["benchmark_ticker"] = bt
 
         benchmark = resolve_benchmark(row.ticker, row_config)
 
@@ -302,7 +311,12 @@ async def backfill_returns(db) -> int:
             try:
                 import asyncio
 
-                reflector = await _create_reflector_for_row(db, row, settings_obj)
+                reflector = await _create_reflector_for_row(
+                    db,
+                    row,
+                    settings_obj,
+                    owner_user=users_by_id.get(owner_id) if owner_id is not None else None,
+                )
                 reflection = await asyncio.to_thread(
                     reflector.reflect_on_final_decision,
                     final_decision=row.final_decision,
