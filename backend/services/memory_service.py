@@ -198,12 +198,12 @@ def _build_mem0(
 
 
 async def get_user_memory_store(user_id: int | None):
-    """Resolve the user's Mem0 instance from settings and encrypted keys.
+    """Resolve the user's Mem0 instance from current settings and encrypted keys.
 
-    ``memory_store``/Pinecone columns remain in the database temporarily for
-    backwards-compatible settings payloads, but the runtime now has one durable
-    backend: Mem0 OSS on the application's PostgreSQL/pgvector database.
-    Legacy ``pinecone`` embedder values are normalized to OpenAI.
+    Mem0 OSS on the application's PostgreSQL/pgvector database is the only
+    durable memory backend. Per-user settings select either OpenAI or Ollama for
+    embeddings; no legacy store selection or hosted-memory credential path is
+    consulted at runtime.
     """
     if not user_id:
         return None
