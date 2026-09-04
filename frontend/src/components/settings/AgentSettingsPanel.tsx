@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Loader2, Save, Settings2 } from 'lucide-react'
 import {
   useSettingsGetUserAgents,
@@ -183,6 +183,7 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
   const meta = useMeta()
   const llmCatalog = useLlmCatalog()
   const [settings, setSettings] = useState<AgentSettingsData | null>(null)
+  const persistedSnapshot = useRef<string | null>(null)
 
   const otherUserId = !serverScope && userId ? userId : 0
   const serverQuery = useSettingsGetServerAgents({ query: { enabled: serverScope } })
@@ -193,7 +194,11 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
   const activeQuery = serverScope ? serverQuery : userId ? otherUserQuery : ownQuery
 
   useEffect(() => {
-    if (activeQuery.data) setSettings(activeQuery.data as unknown as AgentSettingsData)
+    if (activeQuery.data) {
+      const next = activeQuery.data as unknown as AgentSettingsData
+      setSettings(next)
+      persistedSnapshot.current = JSON.stringify(next)
+    }
   }, [activeQuery.data])
 
   const saveServer = useSettingsUpdateServerAgents()
@@ -203,6 +208,9 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
 
   const save = async () => {
     if (!settings) return
+    const currentSnapshot = JSON.stringify(settings)
+    if (currentSnapshot === persistedSnapshot.current) return
+
     try {
       const body = settings as unknown as Parameters<typeof saveOwn.mutateAsync>[0]['data']
       const response = serverScope
@@ -210,7 +218,9 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
         : userId
           ? await saveOtherUser.mutateAsync({ userId, data: body })
           : await saveOwn.mutateAsync({ data: body })
-      setSettings(response as unknown as AgentSettingsData)
+      const persisted = response as unknown as AgentSettingsData
+      setSettings(persisted)
+      persistedSnapshot.current = JSON.stringify(persisted)
       triggerMetaRefetch()
       notify('success', t('settings.agents_saved'))
     } catch (error: unknown) {
