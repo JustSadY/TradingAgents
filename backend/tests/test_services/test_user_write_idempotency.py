@@ -3,7 +3,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import backend.services.settings_service as settings_service
-import backend.services.user_service as user_service
 from backend.repositories.users import update_user_admin, update_user_profile
 from backend.services.settings_service import remove_ticker_from_watchlist
 from backend.services.user_service import update_profile
