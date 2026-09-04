@@ -46,6 +46,13 @@ def _agent_settings_read_from_rows(rows: dict[str, AgentSetting]) -> AgentSettin
     return AgentSettingsRead(agents=agents_map)
 
 
+def _is_default_agent_state(agent: AgentInfo, enabled: bool | None, settings: dict[str, Any]) -> bool:
+    defaults = {field.key: field.default for field in agent.settings_schema}
+    effective_settings = defaults.copy()
+    effective_settings.update(settings)
+    return enabled == agent.default_enabled and effective_settings == defaults
+
+
 async def get_agent_settings_by_scope(db: AsyncSession, scope: str, user_id: int | None = None) -> AgentSettingsRead:
     from backend.repositories.agent_settings import get_agent_settings_by_scope as _repo_get
 
@@ -70,6 +77,7 @@ async def apply_agent_settings_update_by_scope(
 
     rows_list = await _repo_get(db, scope, user_id)
     rows = {row.agent_key: row for row in rows_list}
+    dirty = False
 
     for agent_key, update in body.agents.items():
         agent = get_agent(agent_key)
@@ -96,6 +104,14 @@ async def apply_agent_settings_update_by_scope(
             validated = validate_agent_settings(agent, update.settings)
             current_settings.update(validated)
 
+        # An absent row already means "use defaults". A full-form settings save
+        # must not manufacture an override row just because the UI echoed those
+        # effective defaults back to the API.
+        if row is None and _is_default_agent_state(agent, enabled, current_settings):
+            continue
+        if row is not None and row.enabled == enabled and row.settings == current_settings:
+            continue
+
         rows[agent_key] = persist_agent_setting(
             db,
             row=row,
@@ -105,8 +121,10 @@ async def apply_agent_settings_update_by_scope(
             enabled=enabled,
             settings=current_settings,
         )
+        dirty = True
 
-    await db.flush()
+    if dirty:
+        await db.flush()
     # ``rows`` already contains the persisted/mutated ORM objects. Re-querying
     # the same scope just to construct the response adds a redundant round trip.
     return _agent_settings_read_from_rows(rows)
