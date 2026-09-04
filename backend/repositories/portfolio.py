@@ -4,12 +4,61 @@ from typing import Any
 from sqlalchemy import delete, desc, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
 from sqlalchemy.orm.util import identity_key
 
 from backend.models.order import Order
 from backend.models.portfolio import Holding, Portfolio
 from backend.repositories.common import scope_to_user
+
+_PORTFOLIO_LIST_COLUMNS = (
+    Portfolio.id,
+    Portfolio.mode,
+    Portfolio.broker,
+    Portfolio.initial_capital,
+    Portfolio.current_balance,
+    Portfolio.cash_available,
+    Portfolio.status,
+    Portfolio.created_at,
+    Portfolio.updated_at,
+)
+_HOLDING_LIST_COLUMNS = (
+    Holding.id,
+    Holding.ticker,
+    Holding.quantity,
+    Holding.avg_buy_price,
+    Holding.current_price,
+    Holding.unrealized_pnl,
+    Holding.side,
+    Holding.leverage,
+    Holding.margin_used,
+    Holding.borrowed_amount,
+    Holding.liquidation_price,
+    Holding.stop_loss,
+    Holding.take_profit,
+    Holding.updated_at,
+    Holding.opened_at,
+)
+_ORDER_LIST_COLUMNS = (
+    Order.id,
+    Order.portfolio_id,
+    Order.broker,
+    Order.ticker,
+    Order.action,
+    Order.quantity_requested,
+    Order.quantity_filled,
+    Order.status,
+    Order.price_per_share,
+    Order.total_value,
+    Order.commission,
+    Order.leverage,
+    Order.side,
+    Order.realized_pnl,
+    Order.analysis_id,
+    Order.ai_signal,
+    Order.created_at,
+    Order.executed_at,
+)
 
 
 def _cached_portfolio_with_holdings(db: AsyncSession, portfolio_id: int, user=None) -> Portfolio | None:
@@ -149,13 +198,16 @@ async def get_holding(db: AsyncSession, portfolio_id: int, ticker: str) -> Holdi
     return result.scalar_one_or_none()
 
 async def list_portfolios(db: AsyncSession, user=None) -> list[Portfolio]:
-    q = select(Portfolio).options(selectinload(Portfolio.holdings))
+    q = select(Portfolio).options(
+        load_only(*_PORTFOLIO_LIST_COLUMNS),
+        selectinload(Portfolio.holdings).load_only(*_HOLDING_LIST_COLUMNS),
+    )
     q = scope_to_user(q, Portfolio, user)
     result = await db.execute(q)
     return list(result.scalars().all())
 
 async def list_holdings(db: AsyncSession, user=None, mode: str | None = None) -> list[Holding]:
-    q = select(Holding).join(Portfolio)
+    q = select(Holding).options(load_only(*_HOLDING_LIST_COLUMNS)).join(Portfolio)
     q = scope_to_user(q, Portfolio, user)
     if mode:
         q = q.where(Portfolio.mode == mode)
@@ -184,7 +236,13 @@ async def list_orders(
     limit: int = 50,
     offset: int = 0,
 ) -> list[Order]:
-    q = select(Order).order_by(desc(Order.created_at)).limit(limit).offset(offset)
+    q = (
+        select(Order)
+        .options(load_only(*_ORDER_LIST_COLUMNS))
+        .order_by(desc(Order.created_at))
+        .limit(limit)
+        .offset(offset)
+    )
     need_portfolio_join = (user and not getattr(user, "is_admin", False)) or mode
     if need_portfolio_join:
         q = q.join(Portfolio)
