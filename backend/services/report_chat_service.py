@@ -171,6 +171,12 @@ async def answer_report_question(
         api_key=user_key,
     )
 
+    # Every DB-backed input for this turn is now materialized. End the read
+    # transaction before waiting on the model so a slow provider does not pin a
+    # pool connection. A later write transaction receives the same RLS context
+    # from the AsyncSession transaction hook.
+    await db.commit()
+
     try:
         llm = client.get_llm()
         response = await llm.ainvoke(payload)
