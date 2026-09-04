@@ -20,6 +20,21 @@ def _aware_utc(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
+def _normalize_tickers(tickers: str) -> list[str]:
+    """Return up to the configured number of unique tickers in request order."""
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in tickers.split(","):
+        ticker = raw.strip().upper()
+        if not ticker or ticker in seen:
+            continue
+        seen.add(ticker)
+        normalized.append(ticker)
+        if len(normalized) >= _MAX_TICKERS:
+            break
+    return normalized
+
+
 async def _upsert_cache(db, ticker: str, parsed: list[dict], now: datetime) -> None:
     """Atomic cache write across PostgreSQL and SQLite."""
     from backend.models.news_cache import NewsCache
@@ -99,10 +114,9 @@ async def get_news_feed(tickers: str, limit: int) -> list[dict]:
     from backend.core.database import AsyncSessionLocal
     from backend.models.news_cache import NewsCache
 
-    ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()][:_MAX_TICKERS]
+    ticker_list = _normalize_tickers(tickers)
     if not ticker_list:
         return []
-    unique_tickers = list(dict.fromkeys(ticker_list))
 
     now = datetime.now(UTC)
     cutoff = now - timedelta(seconds=_TTL_SECONDS)
@@ -111,7 +125,7 @@ async def get_news_feed(tickers: str, limit: int) -> list[dict]:
     # any external yFinance calls. A slow upstream must not pin a DB connection
     # or keep a read transaction open for the duration of network I/O.
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(NewsCache).where(NewsCache.ticker.in_(unique_tickers)))
+        result = await db.execute(select(NewsCache).where(NewsCache.ticker.in_(ticker_list)))
         cache_map = {
             row.ticker: (_aware_utc(row.updated_at), list(row.news_json or []))
             for row in result.scalars().all()
@@ -119,7 +133,7 @@ async def get_news_feed(tickers: str, limit: int) -> list[dict]:
 
     resolved: dict[str, list[dict]] = {}
     missing: list[str] = []
-    for ticker in unique_tickers:
+    for ticker in ticker_list:
         cached = cache_map.get(ticker)
         if cached and cached[0] >= cutoff:
             resolved[ticker] = cached[1]
