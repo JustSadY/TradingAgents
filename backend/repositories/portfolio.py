@@ -46,6 +46,7 @@ async def get_or_create_simulation_portfolio(
                     cash_available=initial_capital,
                     status="active",
                     user_id=user_id,
+                    holdings=[],
                 )
                 db.add(portfolio)
                 await db.flush()
@@ -53,7 +54,9 @@ async def get_or_create_simulation_portfolio(
             portfolio = await get_simulation_portfolio(db, user_id=user_id)
             if portfolio is None:
                 raise
-    await db.refresh(portfolio, ["holdings"])
+    # Existing rows already arrive with holdings select-in loaded, and a newly
+    # created portfolio starts with an explicitly initialized empty collection.
+    # Avoid an extra relationship refresh on this hot get-or-create path.
     return portfolio
 
 
