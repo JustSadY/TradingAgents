@@ -8,6 +8,8 @@ from backend.services.memory_service import (
     _collection_name,
     _get_or_build_mem0,
     _mem0_connection_string,
+    get_user_memory_store,
+    invalidate_user_memory_store_cache,
     recall_episode_lessons,
     record_episode,
 )
@@ -118,6 +120,43 @@ async def test_mem0_initialization_is_single_flight_per_effective_config(monkeyp
     finally:
         memory_service._store_cache.pop(cache_key, None)
         memory_service._store_init_tasks.pop(cache_key, None)
+
+
+async def test_user_memory_store_resolution_cache_short_circuits_db_resolution() -> None:
+    store = object()
+    invalidate_user_memory_store_cache(9)
+    memory_service._user_store_cache[9] = (
+        time.monotonic() + memory_service._STORE_RESOLUTION_TTL_SECONDS,
+        store,
+    )
+
+    try:
+        assert await get_user_memory_store(9) is store
+    finally:
+        invalidate_user_memory_store_cache(9)
+
+
+def test_user_memory_store_invalidation_is_owner_scoped() -> None:
+    first_store = object()
+    second_store = object()
+    now = time.monotonic()
+    invalidate_user_memory_store_cache()
+    memory_service._user_store_cache[9] = (now + 30, first_store)
+    memory_service._user_store_cache[10] = (now + 30, second_store)
+    first_search_key = (id(first_store), "9", "trading-episodes", "digest", 5)
+    second_search_key = (id(second_store), "10", "trading-episodes", "digest", 5)
+    memory_service._search_cache[first_search_key] = (now, [])
+    memory_service._search_cache[second_search_key] = (now, [])
+
+    try:
+        invalidate_user_memory_store_cache(9)
+
+        assert 9 not in memory_service._user_store_cache
+        assert 10 in memory_service._user_store_cache
+        assert first_search_key not in memory_service._search_cache
+        assert second_search_key in memory_service._search_cache
+    finally:
+        invalidate_user_memory_store_cache()
 
 
 async def test_record_episode_writes_curated_mem0_memory_without_inference() -> None:
