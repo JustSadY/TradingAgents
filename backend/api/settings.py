@@ -227,10 +227,10 @@ async def update_user_tools(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    await enforce_tool_settings_permission(db, current_user, body)
+    access = await enforce_tool_settings_permission(db, current_user, body)
     from backend.services.tool_settings_service import apply_tool_settings_update
 
-    return await apply_tool_settings_update(db, current_user, body)
+    return await apply_tool_settings_update(db, current_user, body, access_snapshot=access)
 
 
 @router.get("/agents", response_model=AgentSettingsRead)
