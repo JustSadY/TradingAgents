@@ -8,7 +8,7 @@ import {
   useSettingsUpdateOtherUserTools,
 } from '../../api/generated/settings/settings'
 import { useTranslation } from '../../contexts/LanguageContext'
-import { useMeta } from '../../hooks/useMeta'
+import { triggerMetaRefetch, useMeta } from '../../hooks/useMeta'
 import type { ToolSettingFieldMeta } from '../../api/generated/model'
 import { notify } from '../../utils/notify'
 import AppSchemaForm, { legacyFieldsToSchema } from '../ui/AppSchemaForm'
@@ -74,6 +74,7 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
           ? await saveOtherUser.mutateAsync({ userId, data: body })
           : await saveOwn.mutateAsync({ data: body })
       setSettings(response as unknown as ToolSettings)
+      triggerMetaRefetch()
       notify('success', t('settings.tools_saved'))
     } catch (error: unknown) {
       const message = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
