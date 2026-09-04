@@ -187,13 +187,18 @@ async def validate_analysis_ticker(ticker: str, *, asset_type: str = "stock") ->
     return await _validate_normalized_ticker(_normalize_ticker(ticker))
 
 async def validate_analysis_tickers(tickers: list[str], *, asset_type: str = "stock") -> list[TickerValidationResult]:
-    """Validate a portfolio batch with bounded lookup concurrency.
+    """Validate one copy of each portfolio symbol with bounded concurrency.
 
-    Results and exceptions are inspected in input order, so the API reports
-    the first invalid symbol deterministically while never enqueueing a partial
-    portfolio analysis.
+    Case/whitespace-equivalent duplicates are removed before remote lookup so a
+    duplicate cannot consume a second validation request or launch a second
+    expensive analysis graph. A portfolio still requires at least two distinct
+    instruments after normalization.
     """
     normalized_tickers = [_normalize_ticker(ticker) for ticker in tickers]
+    unique_tickers = list(dict.fromkeys(normalized_tickers))
+    if len(unique_tickers) < 2:
+        raise ValueError("Portfolio analysis requires at least 2 distinct tickers.")
+
     semaphore = asyncio.Semaphore(4)
 
     async def _validate_one(ticker: str) -> TickerValidationResult:
@@ -201,7 +206,7 @@ async def validate_analysis_tickers(tickers: list[str], *, asset_type: str = "st
             return await _validate_normalized_ticker(ticker)
 
     del asset_type
-    results = await asyncio.gather(*(_validate_one(ticker) for ticker in normalized_tickers), return_exceptions=True)
+    results = await asyncio.gather(*(_validate_one(ticker) for ticker in unique_tickers), return_exceptions=True)
     validated: list[TickerValidationResult] = []
     for result in results:
         if isinstance(result, BaseException):
