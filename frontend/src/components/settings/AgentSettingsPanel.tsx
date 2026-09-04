@@ -61,6 +61,12 @@ function buildChildrenMap(agents: AgentMeta[]): Map<string | null, AgentMeta[]> 
   return map
 }
 
+function changedAgents(current: AgentSettingsData, persisted: AgentSettingsData | null): Record<string, AgentSettingState> {
+  return Object.fromEntries(
+    Object.entries(current.agents).filter(([key, value]) => JSON.stringify(value) !== JSON.stringify(persisted?.agents[key])),
+  )
+}
+
 interface AgentNodeProps {
   agent: AgentMeta
   settings: AgentSettingsData
@@ -183,7 +189,7 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
   const meta = useMeta()
   const llmCatalog = useLlmCatalog()
   const [settings, setSettings] = useState<AgentSettingsData | null>(null)
-  const persistedSnapshot = useRef<string | null>(null)
+  const persistedSettings = useRef<AgentSettingsData | null>(null)
 
   const otherUserId = !serverScope && userId ? userId : 0
   const serverQuery = useSettingsGetServerAgents({ query: { enabled: serverScope } })
@@ -197,7 +203,7 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
     if (activeQuery.data) {
       const next = activeQuery.data as unknown as AgentSettingsData
       setSettings(next)
-      persistedSnapshot.current = JSON.stringify(next)
+      persistedSettings.current = next
     }
   }, [activeQuery.data])
 
@@ -208,11 +214,11 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
 
   const save = async () => {
     if (!settings) return
-    const currentSnapshot = JSON.stringify(settings)
-    if (currentSnapshot === persistedSnapshot.current) return
+    const agents = changedAgents(settings, persistedSettings.current)
+    if (Object.keys(agents).length === 0) return
 
     try {
-      const body = settings as unknown as Parameters<typeof saveOwn.mutateAsync>[0]['data']
+      const body = { agents } as unknown as Parameters<typeof saveOwn.mutateAsync>[0]['data']
       const response = serverScope
         ? await saveServer.mutateAsync({ data: body })
         : userId
@@ -220,7 +226,7 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
           : await saveOwn.mutateAsync({ data: body })
       const persisted = response as unknown as AgentSettingsData
       setSettings(persisted)
-      persistedSnapshot.current = JSON.stringify(persisted)
+      persistedSettings.current = persisted
       triggerMetaRefetch()
       notify('success', t('settings.agents_saved'))
     } catch (error: unknown) {
