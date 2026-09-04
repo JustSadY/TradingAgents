@@ -142,9 +142,16 @@ async def _fetch_indicator_histories(alerts) -> dict[str, object]:
     return dict(results)
 
 
-async def _deliver_alert_side_effects(db, alert, settings, current_value: float | None) -> None:
+async def _deliver_alert_side_effects(
+    db,
+    alert,
+    settings,
+    current_value: float | None,
+    *,
+    market_summary: str | None = None,
+) -> None:
     """Deliver an already-committed outbox item."""
-    summary = await _fetch_alert_market_summary(alert.ticker)
+    summary = market_summary if market_summary is not None else await _fetch_alert_market_summary(alert.ticker)
     if summary:
         _logger.info("Alert market summary for %s: %s", alert.ticker, summary)
 
@@ -220,17 +227,40 @@ async def _claim_alert(
     return True
 
 
+async def _prepare_outbox_market_summary(db, item_id: int) -> str | None:
+    """Read the delivery ticker, release the DB transaction, then do market I/O."""
+    item = await get_outbox_item(db, item_id)
+    if not item or item.status != "processing":
+        await db.rollback()
+        return None
+
+    alert = await get_alert_unscoped(db, item.alert_id)
+    ticker = str(alert.ticker) if alert and alert.ticker else ""
+    # The claim is already durable. End the read transaction before yfinance,
+    # news, or other external calls so a worker does not pin a DB connection or
+    # row lock while waiting on the network. The item is re-read FOR UPDATE
+    # immediately before the actual delivery mutation.
+    await db.commit()
+    return await _fetch_alert_market_summary(ticker) if ticker else ""
+
+
 async def _deliver_claimed_outbox_item(item_id: int, user_id: int | None) -> None:
     """Deliver one claimed item in an isolated tenant/system session."""
     async with _OUTBOX_SEMAPHORE:
         if user_id is None:
             async with trusted_background_session(BackgroundCapability.ALERT_OUTBOX) as system_db:
-                await _deliver_outbox_item(system_db, item_id)
+                summary = await _prepare_outbox_market_summary(system_db, item_id)
+                if summary is None:
+                    return
+                await _deliver_outbox_item(system_db, item_id, market_summary=summary)
             return
 
         async with AsyncSessionLocal() as delivery_db:
             await set_user_background_context(delivery_db, user_id)
-            await _deliver_outbox_item(delivery_db, item_id)
+            summary = await _prepare_outbox_market_summary(delivery_db, item_id)
+            if summary is None:
+                return
+            await _deliver_outbox_item(delivery_db, item_id, market_summary=summary)
 
 
 async def process_alert_outbox(limit: int = 50) -> None:
@@ -257,7 +287,7 @@ async def process_alert_outbox(limit: int = 50) -> None:
             _logger.error("Alert outbox delivery task failed id=%s: %s", item_id, result)
 
 
-async def _deliver_outbox_item(db, item_id: int) -> None:
+async def _deliver_outbox_item(db, item_id: int, *, market_summary: str | None = None) -> None:
     item = await get_outbox_item_for_update(db, item_id)
     if not item or item.status != "processing":
         return
@@ -271,7 +301,7 @@ async def _deliver_outbox_item(db, item_id: int) -> None:
 
             settings = await get_system_settings(db)
             value = float(item.current_value) if item.current_value is not None else None
-            await _deliver_alert_side_effects(db, alert, settings, value)
+            await _deliver_alert_side_effects(db, alert, settings, value, market_summary=market_summary)
             await complete_outbox_item(db, item, completed_at=datetime.now(UTC))
         await db.commit()
     except Exception as exc:
