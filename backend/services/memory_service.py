@@ -1,15 +1,15 @@
 """Long-term trading memory backed by Mem0 + PostgreSQL/pgvector.
 
-LangGraph state remains the short-lived analysis/session state.  This module is
+LangGraph state remains the short-lived analysis/session state. This module is
 only the durable semantic-memory boundary used by performance episodes and the
 optional analyst cross-examination memory.
 
 TradingAgents already decides exactly what a durable memory contains, so Mem0
-is used with ``infer=False``.  That keeps memory deterministic, avoids a second
+is used with ``infer=False``. That keeps memory deterministic, avoids a second
 LLM extraction pass, and makes the service a thin adapter instead of maintaining
 our own vector-store/embedding abstraction.
 
-Memory is best-effort.  Missing credentials, an unavailable Ollama/PostgreSQL
+Memory is best-effort. Missing credentials, an unavailable Ollama/PostgreSQL
 instance, or a Mem0 failure must never break an analysis run.
 """
 
@@ -33,6 +33,7 @@ _EPISODE_AGENT_ID = "trading-episodes"
 _QA_AGENT_ID = "trading-agent-qa"
 _SITUATION_MAX_CHARS = 4000
 _QA_TRANSCRIPT_MAX_CHARS = 6000
+_STORE_RESOLUTION_TTL_SECONDS = 30.0
 _SEARCH_CACHE_TTL_SECONDS = 120.0
 _SEARCH_CACHE_MAX_ENTRIES = 128
 
@@ -43,6 +44,13 @@ _SEARCH_CACHE_MAX_ENTRIES = 128
 # they cannot create duplicate Mem0 clients/connection pools for the same key.
 _store_cache: dict[tuple[Any, ...], Any] = {}
 _store_init_tasks: dict[tuple[Any, ...], asyncio.Task[Any]] = {}
+
+# Resolving the effective store requires opening an app DB session, loading the
+# user/settings rows, and decrypting a provider key. A single graph run may ask
+# for memory from multiple nodes, so keep successful resolutions briefly per
+# user. Explicit invalidation handles local settings/key writes; the short TTL
+# bounds staleness across separate worker processes.
+_user_store_cache: dict[int, tuple[float, Any]] = {}
 
 # Short-lived semantic-search cache. Research Manager and Portfolio Manager
 # commonly ask for the same episodic lessons in one run. The key stores only a
@@ -255,6 +263,20 @@ async def _get_or_build_mem0(
     return await asyncio.shield(task)
 
 
+def invalidate_user_memory_store_cache(user_id: int | None = None) -> None:
+    """Drop local Mem0 resolution/search state after settings or key changes."""
+    if user_id is None:
+        _user_store_cache.clear()
+        _search_cache.clear()
+        return
+
+    _user_store_cache.pop(int(user_id), None)
+    owner = _owner_id(user_id)
+    for key in tuple(_search_cache):
+        if len(key) > 1 and key[1] == owner:
+            _search_cache.pop(key, None)
+
+
 async def get_user_memory_store(user_id: int | None):
     """Resolve the user's Mem0 instance from current settings and encrypted keys.
 
@@ -265,6 +287,16 @@ async def get_user_memory_store(user_id: int | None):
     """
     if not user_id:
         return None
+
+    user_id = int(user_id)
+    cached = _user_store_cache.get(user_id)
+    now = monotonic()
+    if cached is not None:
+        expires_at, store = cached
+        if now <= expires_at:
+            return store
+        _user_store_cache.pop(user_id, None)
+
     try:
         from backend.core.config import get_settings
         from backend.core.database import AsyncSessionLocal
@@ -308,7 +340,7 @@ async def get_user_memory_store(user_id: int | None):
             ollama_base_url if embedder_kind == "ollama" else "",
             _secret_fingerprint(openai_key),
         )
-        return await _get_or_build_mem0(
+        store = await _get_or_build_mem0(
             cache_key,
             database_url=app_config.DATABASE_URL,
             embedder_kind=embedder_kind,
@@ -316,6 +348,8 @@ async def get_user_memory_store(user_id: int | None):
             openai_api_key=openai_key,
             ollama_base_url=ollama_base_url,
         )
+        _user_store_cache[user_id] = (monotonic() + _STORE_RESOLUTION_TTL_SECONDS, store)
+        return store
     except Exception as exc:  # noqa: BLE001 — memory must never break the pipeline
         _logger.warning("Could not resolve Mem0 memory for user_id=%s: %s", user_id, exc)
         return None
