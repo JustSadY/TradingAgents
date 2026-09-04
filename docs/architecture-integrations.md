@@ -125,15 +125,23 @@ required for analysis checkpointing. Schema setup is single-flight per DSN and
 only marked done once it has actually completed; see
 `docs/architecture/backend.md` for why.
 
-## Vector memory: Pinecone and pgvector
+## Durable memory: Mem0 + pgvector only
 
-Both memory backends remain supported:
+Mem0 OSS is the only durable semantic-memory backend. TradingAgents provides
+curated episode and Agent Q&A memories to Mem0 with `infer=False`, so there is
+no second LLM extraction pass. Mem0 stores vectors in PostgreSQL/pgvector and
+scopes entries with `user_id`, `agent_id`, and deterministic `run_id` values.
 
-- Pinecone is retained as a managed vector-memory option.
-- pgvector remains the self-hosted PostgreSQL option.
+OpenAI and Ollama are the supported embedding providers. OpenAI uses the
+user's encrypted OpenAI credential; Ollama uses the server-managed
+`OLLAMA_BASE_URL`. The former custom vector-store protocol, application-owned
+`memory_vectors` table, and hosted memory provider path are retired. Migration
+`0030` removes their persisted schema and settings.
 
-Alembic owns pgvector extension/table creation; request-time memory operations
-do not perform schema DDL.
+Mem0 owns creation and maintenance of its vector collection lazily. Alembic
+continues to require the PostgreSQL pgvector extension because Mem0 depends on
+it, but request-time application code does not manage a parallel custom memory
+table.
 
 ## Quantitative packages
 
@@ -191,7 +199,7 @@ Alembic enables tenant policies on application tables carrying `user_id`; authen
 
 Production is fail-closed. The web/worker connection must be a dedicated non-owner, `NOSUPERUSER`, `NOBYPASSRLS` role. `ENVIRONMENT=production` automatically makes runtime-role validation strict.
 
-The pgvector extension itself is provisioned by the database superuser before Alembic; Alembic owns the `memory_vectors` table and tenant schema changes. Docker pins `pgvector/pgvector:0.8.6-pg16`, while the Linux installer installs or builds the same pinned extension release.
+The pgvector extension is provisioned by the database superuser before Alembic and remains required by Mem0. Durable memory collections are owned by Mem0 rather than by the application ORM/Alembic schema. Docker pins `pgvector/pgvector:0.8.6-pg16`, while the Linux installer installs or builds the same pinned extension release.
 
 Migration credentials are excluded from the application `.env`/process. Linux deployment stores them root-only in `/etc/tradingagents/migration.env`; Docker exposes the owner credential only to prepare/migrate one-shot services. Production web/worker startup never runs DDL: it verifies `alembic_version` is already at repository head and refuses to start otherwise.
 
