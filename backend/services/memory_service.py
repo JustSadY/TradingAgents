@@ -1,35 +1,209 @@
-"""Episodic trading memory (vector-backed).
+"""Long-term trading memory backed by Mem0 + PostgreSQL/pgvector.
 
-Replaces SQL recency retrieval: instead of "the N most recent same-ticker
-analyses", an analysis is stored once its outcome is known (a *situation* embedded
-with its decision, realized alpha and the reflection/lesson), and future runs
-recall the most *similar* past situations — weighting losses — so the engine can
-avoid repeating an action that previously led to a drawdown.
+LangGraph state remains the short-lived analysis/session state.  This module is
+only the durable semantic-memory boundary used by performance episodes and the
+optional analyst cross-examination memory.
 
-Memory is off (these become no-ops returning "") when no store is configured.
+TradingAgents already decides exactly what a durable memory contains, so Mem0
+is used with ``infer=False``.  That keeps memory deterministic, avoids a second
+LLM extraction pass, and makes the service a thin adapter instead of maintaining
+our own vector-store/embedding abstraction.
+
+Memory is best-effort.  Missing credentials, an unavailable Ollama/PostgreSQL
+instance, or a Mem0 failure must never break an analysis run.
 """
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import logging
+import os
+import tempfile
 from datetime import UTC, datetime
-
-from backend.core.memory import MemoryRecord, MemoryStore, build_pgvector_store, build_pinecone_store
+from pathlib import Path
+from typing import Any
 
 _logger = logging.getLogger(__name__)
 
-_store_cache: dict[tuple, MemoryStore | None] = {}
+_SYSTEM_OWNER = "system"
+_EPISODE_AGENT_ID = "trading-episodes"
+_QA_AGENT_ID = "trading-agent-qa"
+_SITUATION_MAX_CHARS = 4000
+_QA_TRANSCRIPT_MAX_CHARS = 6000
+
+# Mem0 is intentionally lazy-imported so the application can still boot when
+# memory is not configured.  Instances are reused per effective DB/embedder
+# configuration; provider secrets are represented only by a short fingerprint
+# in the cache key.
+_store_cache: dict[tuple[Any, ...], Any] = {}
+
+_OPENAI_DIMS = {
+    "text-embedding-ada-002": 1536,
+    "text-embedding-3-small": 1536,
+    "text-embedding-3-large": 3072,
+}
+_OLLAMA_DIMS = {
+    "nomic-embed-text": 768,
+    "mxbai-embed-large": 1024,
+    "bge-m3": 1024,
+    "all-minilm": 384,
+}
 
 
-async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
-    """Build the calling user's own memory store from their settings + encrypted
-    keys. Returns None (memory off) when the user hasn't configured a store.
+def _owner_id(user_id: int | None) -> str:
+    return str(user_id) if user_id else _SYSTEM_OWNER
 
-    Everything is per-user. With the default ``memory_store='pinecone'`` the
-    Pinecone API key (provider "pinecone") gates memory, plus the OpenAI key
-    (provider "openai") when the OpenAI embedder is selected. With
-    ``memory_store='pgvector'`` episodes live in the app's own PostgreSQL and
-    only the OpenAI key (client-side embedding) is required.
+
+def _episode_id(user_id: int | None, ticker: str, trade_date: str) -> str:
+    return f"{_owner_id(user_id)}:{ticker}:{trade_date}"
+
+
+def _qa_id(user_id: int | None, ticker: str, trade_date: str) -> str:
+    return f"{_owner_id(user_id)}:{ticker}:{trade_date}:agent_qa"
+
+
+def _secret_fingerprint(secret: str | None) -> str:
+    if not secret:
+        return ""
+    return hashlib.sha256(secret.encode("utf-8")).hexdigest()[:12]
+
+
+def _embedding_dimensions(provider: str, model: str) -> int:
+    """Return the vector size used to create the Mem0 pgvector collection.
+
+    Mem0's pgvector adapter needs the dimension before the first embedding is
+    produced.  Keep the supported UI defaults explicit and use a conservative
+    provider default for custom model names.
+    """
+    normalized = model.split(":", 1)[0].strip().lower()
+    if provider == "ollama":
+        dims = _OLLAMA_DIMS.get(normalized)
+        if dims is None:
+            _logger.warning("Unknown Ollama memory embedding dimensions for %s; assuming 768", model)
+            return 768
+        return dims
+    dims = _OPENAI_DIMS.get(normalized)
+    if dims is None:
+        _logger.warning("Unknown OpenAI memory embedding dimensions for %s; assuming 1536", model)
+        return 1536
+    return dims
+
+
+def _mem0_connection_string(database_url: str) -> str | None:
+    """Translate SQLAlchemy async PostgreSQL URLs to psycopg-compatible URLs."""
+    url = (database_url or "").strip()
+    replacements = (
+        ("postgresql+asyncpg://", "postgresql://"),
+        ("postgresql+psycopg://", "postgresql://"),
+        ("postgresql+psycopg2://", "postgresql://"),
+        ("postgres://", "postgresql://"),
+    )
+    for source, target in replacements:
+        if url.startswith(source):
+            return target + url[len(source) :]
+    return url if url.startswith("postgresql://") else None
+
+
+def _collection_name(provider: str, model: str, dimensions: int) -> str:
+    # Different embedding models (even with the same dimensions) must never
+    # share a vector space.  The digest also keeps the SQL identifier compact.
+    digest = hashlib.sha256(f"{provider}:{model}:{dimensions}".encode()).hexdigest()[:12]
+    return f"tradingagents_mem0_{provider}_{digest}"
+
+
+def _build_mem0(
+    *,
+    database_url: str,
+    embedder_kind: str,
+    embed_model: str,
+    openai_api_key: str | None,
+    ollama_base_url: str,
+):
+    connection_string = _mem0_connection_string(database_url)
+    if not connection_string:
+        raise RuntimeError("Mem0 long-term memory requires PostgreSQL")
+
+    dimensions = _embedding_dimensions(embedder_kind, embed_model)
+    collection = _collection_name(embedder_kind, embed_model, dimensions)
+
+    # Telemetry is not needed for this internal adapter.  Mem0's Python OSS
+    # implementation also uses SQLite for mutation history, so keep that
+    # auxiliary file in a guaranteed-writable temp directory rather than the
+    # application source tree.
+    os.environ.setdefault("MEM0_TELEMETRY", "false")
+    mem0_dir = Path(os.environ.setdefault("MEM0_DIR", str(Path(tempfile.gettempdir()) / "tradingagents-mem0")))
+    mem0_dir.mkdir(parents=True, exist_ok=True)
+
+    from mem0 import Memory
+
+    if embedder_kind == "ollama":
+        embedder_config = {
+            "provider": "ollama",
+            "config": {
+                "model": embed_model,
+                "ollama_base_url": ollama_base_url,
+                "embedding_dims": dimensions,
+            },
+        }
+        # infer=False means this LLM is never called by TradingAgents.  Mem0
+        # still constructs an LLM adapter during initialization, so use the
+        # same local provider and avoid introducing a cloud-key requirement.
+        llm_config = {
+            "provider": "ollama",
+            "config": {
+                "model": "llama3.2:1b",
+                "ollama_base_url": ollama_base_url,
+                "temperature": 0,
+            },
+        }
+    else:
+        if not openai_api_key:
+            raise RuntimeError("OpenAI memory embedding requires an OpenAI API key")
+        embedder_config = {
+            "provider": "openai",
+            "config": {
+                "model": embed_model,
+                "api_key": openai_api_key,
+                "embedding_dims": dimensions,
+            },
+        }
+        llm_config = {
+            "provider": "openai",
+            "config": {
+                "model": "gpt-4.1-mini",
+                "api_key": openai_api_key,
+                "temperature": 0,
+            },
+        }
+
+    return Memory.from_config(
+        {
+            "vector_store": {
+                "provider": "pgvector",
+                "config": {
+                    "connection_string": connection_string,
+                    "collection_name": collection,
+                    "embedding_model_dims": dimensions,
+                    "hnsw": True,
+                    "minconn": 1,
+                    "maxconn": 5,
+                },
+            },
+            "embedder": embedder_config,
+            "llm": llm_config,
+            "history_db_path": str(mem0_dir / f"{collection}-history.db"),
+        }
+    )
+
+
+async def get_user_memory_store(user_id: int | None):
+    """Resolve the user's Mem0 instance from settings and encrypted keys.
+
+    ``memory_store``/Pinecone columns remain in the database temporarily for
+    backwards-compatible settings payloads, but the runtime now has one durable
+    backend: Mem0 OSS on the application's PostgreSQL/pgvector database.
+    Legacy ``pinecone`` embedder values are normalized to OpenAI.
     """
     if not user_id:
         return None
@@ -41,111 +215,132 @@ async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
         from backend.repositories.users import get_user_by_id
         from backend.services.user_service import get_user_api_key
 
-        fernet = get_settings().get_fernet()
+        app_config = get_settings()
+        connection_string = _mem0_connection_string(app_config.DATABASE_URL)
+        if not connection_string:
+            _logger.warning("Mem0 memory is disabled because DATABASE_URL is not PostgreSQL")
+            return None
+
+        fernet = app_config.get_fernet()
         async with AsyncSessionLocal() as db:
             user = await get_user_by_id(db, user_id)
             if not user:
                 return None
             await set_user_background_context(db, user_id)
-
             row = await get_app_settings(db, user_id)
-            store_kind = getattr(row, "memory_store", None) or "pinecone"
-            index = getattr(row, "pinecone_index", None) or "tradingagents-memory"
-            cloud = getattr(row, "pinecone_cloud", None) or "aws"
-            region = getattr(row, "pinecone_region", None) or "us-east-1"
-            embedder_kind = getattr(row, "memory_embedder", None) or "pinecone"
-            embed_model = getattr(row, "pinecone_embed_model", None) or "llama-text-embed-v2"
+
+            requested_embedder = (getattr(row, "memory_embedder", None) or "openai").strip().lower()
+            embedder_kind = "ollama" if requested_embedder == "ollama" else "openai"
             openai_embed_model = getattr(row, "memory_openai_embed_model", None) or "text-embedding-3-small"
             ollama_embed_model = getattr(row, "memory_ollama_embed_model", None) or "nomic-embed-text"
-
-            ollama_base_url = get_settings().OLLAMA_BASE_URL.rstrip("/")
-
-            if store_kind == "pgvector":
-                if embedder_kind == "ollama":
-                    openai_key = None
-                    pinecone_key = None
-                else:
-                    openai_key = get_user_api_key(user, "openai", fernet)
-                    if not openai_key:
-                        return None
-                    pinecone_key = None
-            else:
-                pinecone_key = get_user_api_key(user, "pinecone", fernet)
-                if not pinecone_key:
+            embed_model = ollama_embed_model if embedder_kind == "ollama" else openai_embed_model
+            openai_key = None
+            if embedder_kind == "openai":
+                openai_key = get_user_api_key(user, "openai", fernet)
+                if not openai_key:
                     return None
-                openai_key = get_user_api_key(user, "openai", fernet) if embedder_kind == "openai" else None
-                if embedder_kind == "openai" and not openai_key:
-                    return None
+
+        ollama_base_url = app_config.OLLAMA_BASE_URL.rstrip("/")
+        dimensions = _embedding_dimensions(embedder_kind, embed_model)
+        cache_key = (
+            connection_string,
+            embedder_kind,
+            embed_model,
+            dimensions,
+            ollama_base_url if embedder_kind == "ollama" else "",
+            _secret_fingerprint(openai_key),
+        )
+        if cache_key not in _store_cache:
+            _store_cache[cache_key] = await asyncio.to_thread(
+                _build_mem0,
+                database_url=app_config.DATABASE_URL,
+                embedder_kind=embedder_kind,
+                embed_model=embed_model,
+                openai_api_key=openai_key,
+                ollama_base_url=ollama_base_url,
+            )
+        return _store_cache[cache_key]
     except Exception as exc:  # noqa: BLE001 — memory must never break the pipeline
-        _logger.warning("Could not resolve memory store for user_id=%s: %s", user_id, exc)
+        _logger.warning("Could not resolve Mem0 memory for user_id=%s: %s", user_id, exc)
         return None
 
-    if store_kind == "pgvector":
-        if embedder_kind == "ollama":
-            cache_key = ("pgvector", "ollama", ollama_base_url, ollama_embed_model)
-            if cache_key not in _store_cache:
-                _store_cache[cache_key] = build_pgvector_store(
-                    ollama_base_url=ollama_base_url,
-                    ollama_embed_model=ollama_embed_model,
-                )
-        else:
-            cache_key = ("pgvector", openai_embed_model, openai_key)
-            if cache_key not in _store_cache:
-                _store_cache[cache_key] = build_pgvector_store(
-                    openai_api_key=openai_key,
-                    openai_embed_model=openai_embed_model,
-                )
-        return _store_cache[cache_key]
 
-    cache_key = (
-        "pinecone",
-        index,
-        cloud,
-        region,
-        embedder_kind,
-        embed_model,
-        openai_embed_model,
-        ollama_embed_model,
-        pinecone_key,
-        openai_key,
+async def _replace_memory(
+    store,
+    *,
+    owner: str,
+    agent_id: str,
+    run_id: str,
+    text: str,
+    metadata: dict[str, Any],
+) -> None:
+    """Idempotently replace one logical TradingAgents memory in Mem0."""
+    try:
+        await asyncio.to_thread(store.delete_all, user_id=owner, agent_id=agent_id, run_id=run_id)
+    except Exception as exc:  # duplicate avoidance is best-effort; writing is more important
+        _logger.debug("Mem0 pre-write delete failed for run_id=%s: %s", run_id, exc)
+
+    await asyncio.to_thread(
+        store.add,
+        text,
+        user_id=owner,
+        agent_id=agent_id,
+        run_id=run_id,
+        metadata=metadata,
+        infer=False,
     )
-    if cache_key not in _store_cache:
-        _store_cache[cache_key] = build_pinecone_store(
-            api_key=pinecone_key,
-            index_name=index,
-            cloud=cloud,
-            region=region,
-            embedder_kind=embedder_kind,
-            embed_model=embed_model,
-            openai_api_key=openai_key,
-            openai_embed_model=openai_embed_model,
-            ollama_base_url=ollama_base_url,
-            ollama_embed_model=ollama_embed_model,
-        )
-    return _store_cache[cache_key]
 
 
-_SYSTEM_OWNER = "system"
-_SITUATION_MAX_CHARS = 4000
-_QA_TRANSCRIPT_MAX_CHARS = 6000
+def _normalize_hits(payload: Any) -> list[dict[str, Any]]:
+    if isinstance(payload, dict):
+        rows = payload.get("results") or payload.get("memories") or []
+    elif isinstance(payload, list):
+        rows = payload
+    else:
+        rows = []
+    return [dict(row) for row in rows if isinstance(row, dict)]
 
 
-def _namespace(user_id: int | None) -> str:
-    return f"ep_user_{user_id}" if user_id else f"ep_{_SYSTEM_OWNER}"
+def _hit_metadata(hit: dict[str, Any]) -> dict[str, Any]:
+    metadata = dict(hit.get("metadata") or {})
+    # Mem0/vector-store versions have differed on whether custom payload fields
+    # are nested under metadata or returned at the top level.  Merge only known
+    # TradingAgents fields so the formatter remains version-tolerant.
+    for key in (
+        "ticker",
+        "trade_date",
+        "signal",
+        "decision",
+        "reflection",
+        "raw_return",
+        "alpha_return",
+        "outcome",
+        "observed_at",
+        "outcome_available_at",
+        "transcript",
+        "memory_type",
+        "memory_key",
+    ):
+        if key in hit and key not in metadata:
+            metadata[key] = hit[key]
+    return metadata
 
 
-def _qa_namespace(user_id: int | None) -> str:
-    return f"qa_user_{user_id}" if user_id else f"qa_{_SYSTEM_OWNER}"
+def _hit_score(hit: dict[str, Any]) -> float:
+    try:
+        return float(hit.get("score") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
-def _episode_id(user_id: int | None, ticker: str, trade_date: str) -> str:
-    owner = user_id if user_id else _SYSTEM_OWNER
-    return f"{owner}:{ticker}:{trade_date}"
-
-
-def _qa_id(user_id: int | None, ticker: str, trade_date: str) -> str:
-    owner = user_id if user_id else _SYSTEM_OWNER
-    return f"{owner}:{ticker}:{trade_date}:agent_qa"
+async def _search_memories(store, *, owner: str, agent_id: str, query: str, top_k: int) -> list[dict[str, Any]]:
+    payload = await asyncio.to_thread(
+        store.search,
+        query,
+        filters={"user_id": owner, "agent_id": agent_id},
+        top_k=top_k,
+    )
+    return _normalize_hits(payload)
 
 
 async def record_episode(
@@ -159,10 +354,9 @@ async def record_episode(
     raw_return: float | None,
     alpha_return: float | None,
     reflection: str,
-    store: MemoryStore | None = None,
+    store=None,
 ) -> bool:
-    """Store one completed, outcome-known analysis as an episode. Returns True if
-    written, False if memory is disabled. Best-effort: never raises."""
+    """Store one completed, outcome-known analysis as a curated Mem0 memory."""
     store = store or await get_user_memory_store(user_id)
     if store is None:
         return False
@@ -171,25 +365,31 @@ async def record_episode(
     text = (situation_text or decision or "")[:_SITUATION_MAX_CHARS]
     if reflection:
         text = f"{text}\n\nLesson: {reflection}"
-
-    record = MemoryRecord(
-        id=_episode_id(user_id, ticker, trade_date),
-        text=text,
-        metadata={
-            "ticker": ticker,
-            "trade_date": trade_date,
-            "signal": signal or "",
-            "decision": (decision or "")[:1500],
-            "reflection": reflection or "",
-            "raw_return": float(raw_return) if raw_return is not None else 0.0,
-            "alpha_return": float(alpha_return) if alpha_return is not None else 0.0,
-            "outcome": outcome,
-            "observed_at": datetime.now(UTC).isoformat(),
-            "outcome_available_at": datetime.now(UTC).isoformat(),
-        },
-    )
+    now = datetime.now(UTC).isoformat()
+    memory_key = _episode_id(user_id, ticker, trade_date)
+    metadata = {
+        "memory_key": memory_key,
+        "memory_type": "trading_episode",
+        "ticker": ticker,
+        "trade_date": trade_date,
+        "signal": signal or "",
+        "decision": (decision or "")[:1500],
+        "reflection": reflection or "",
+        "raw_return": float(raw_return) if raw_return is not None else 0.0,
+        "alpha_return": float(alpha_return) if alpha_return is not None else 0.0,
+        "outcome": outcome,
+        "observed_at": now,
+        "outcome_available_at": now,
+    }
     try:
-        await store.upsert(_namespace(user_id), [record])
+        await _replace_memory(
+            store,
+            owner=_owner_id(user_id),
+            agent_id=_EPISODE_AGENT_ID,
+            run_id=memory_key,
+            text=text,
+            metadata=metadata,
+        )
         return True
     except Exception as exc:  # noqa: BLE001 — memory must never break the pipeline
         _logger.warning("record_episode failed for %s %s: %s", ticker, trade_date, exc)
@@ -203,9 +403,9 @@ async def record_agent_qa(
     trade_date: str,
     situation_text: str,
     transcript: str,
-    store: MemoryStore | None = None,
+    store=None,
 ) -> bool:
-    """Store one cross-examination transcript in a separate semantic namespace."""
+    """Store one cross-examination transcript in a separate Mem0 agent scope."""
     if not transcript.strip():
         return False
     store = store or await get_user_memory_store(user_id)
@@ -215,19 +415,24 @@ async def record_agent_qa(
     observed_at = datetime.now(UTC).isoformat()
     situation = (situation_text or f"Cross-examination for {ticker}")[:_SITUATION_MAX_CHARS]
     transcript = transcript[:_QA_TRANSCRIPT_MAX_CHARS]
-    record = MemoryRecord(
-        id=_qa_id(user_id, ticker, trade_date),
-        text=f"{situation}\n\n{transcript}",
-        metadata={
-            "ticker": ticker,
-            "trade_date": trade_date,
-            "transcript": transcript,
-            "observed_at": observed_at,
-            "memory_type": "agent_qa",
-        },
-    )
+    memory_key = _qa_id(user_id, ticker, trade_date)
+    metadata = {
+        "memory_key": memory_key,
+        "memory_type": "agent_qa",
+        "ticker": ticker,
+        "trade_date": trade_date,
+        "transcript": transcript,
+        "observed_at": observed_at,
+    }
     try:
-        await store.upsert(_qa_namespace(user_id), [record])
+        await _replace_memory(
+            store,
+            owner=_owner_id(user_id),
+            agent_id=_QA_AGENT_ID,
+            run_id=memory_key,
+            text=f"{situation}\n\n{transcript}",
+            metadata=metadata,
+        )
         return True
     except Exception as exc:  # noqa: BLE001 — memory must never break the pipeline
         _logger.warning("record_agent_qa failed for %s %s: %s", ticker, trade_date, exc)
@@ -240,7 +445,7 @@ async def recall_agent_qa(
     situation_text: str,
     top_k: int = 3,
     as_of: str | None = None,
-    store: MemoryStore | None = None,
+    store=None,
 ) -> str:
     """Recall similar prior cross-examinations without leaking future transcripts."""
     store = store or await get_user_memory_store(user_id)
@@ -249,7 +454,13 @@ async def recall_agent_qa(
 
     query_limit = max(top_k, top_k * 5 if as_of else top_k)
     try:
-        hits = await store.query(_qa_namespace(user_id), situation_text, top_k=query_limit)
+        hits = await _search_memories(
+            store,
+            owner=_owner_id(user_id),
+            agent_id=_QA_AGENT_ID,
+            query=situation_text,
+            top_k=query_limit,
+        )
     except Exception as exc:  # noqa: BLE001 — Q&A memory is advisory
         _logger.warning("recall_agent_qa failed: %s", exc)
         return ""
@@ -260,7 +471,7 @@ async def recall_agent_qa(
         cutoff = parse_iso_date(as_of, field_name="as_of")
         safe_hits = []
         for hit in hits:
-            observed = hit.metadata.get("observed_at")
+            observed = _hit_metadata(hit).get("observed_at")
             if not observed:
                 continue
             try:
@@ -278,13 +489,14 @@ async def recall_agent_qa(
 
     parts = ["### Memory: similar prior analyst cross-examinations"]
     for hit in hits:
-        transcript = str(hit.metadata.get("transcript") or "").strip()
+        metadata = _hit_metadata(hit)
+        transcript = str(metadata.get("transcript") or "").strip()
         if not transcript:
             continue
-        ticker = hit.metadata.get("ticker", "?")
-        trade_date = hit.metadata.get("trade_date", "?")
+        ticker = metadata.get("ticker", "?")
+        trade_date = metadata.get("trade_date", "?")
         parts.append(
-            f"\n**{ticker} · {trade_date} · similarity {hit.score:.2f}**\n"
+            f"\n**{ticker} · {trade_date} · similarity {_hit_score(hit):.2f}**\n"
             f"{transcript[:_QA_TRANSCRIPT_MAX_CHARS]}"
         )
     return "\n".join(parts) if len(parts) > 1 else ""
@@ -296,26 +508,33 @@ async def recall_episode_lessons(
     situation_text: str,
     top_k: int = 5,
     as_of: str | None = None,
-    store: MemoryStore | None = None,
+    store=None,
 ) -> str:
-    """Return a formatted block of the most similar past episodes for injection
-    into a decision prompt, or "" if memory is disabled / nothing relevant.
-
-    Losses are listed first under an explicit "avoid repeating" header so the
-    model gives them weight."""
+    """Return similar outcome-known episodes, with losses shown first."""
     store = store or await get_user_memory_store(user_id)
     if store is None or not situation_text.strip():
         return ""
 
     query_limit = max(top_k, top_k * 5 if as_of else top_k)
-    hits = await store.query(_namespace(user_id), situation_text, top_k=query_limit)
+    try:
+        hits = await _search_memories(
+            store,
+            owner=_owner_id(user_id),
+            agent_id=_EPISODE_AGENT_ID,
+            query=situation_text,
+            top_k=query_limit,
+        )
+    except Exception as exc:  # noqa: BLE001 — memory is advisory
+        _logger.warning("recall_episode_lessons failed: %s", exc)
+        return ""
+
     if as_of:
         from backend.core.temporal import parse_iso_date
 
         cutoff = parse_iso_date(as_of, field_name="as_of")
         safe_hits = []
         for hit in hits:
-            available = hit.metadata.get("outcome_available_at")
+            available = _hit_metadata(hit).get("outcome_available_at")
             if not available:
                 # Outcome memories without a trustworthy availability timestamp
                 # are never eligible for historical replay.
@@ -332,29 +551,29 @@ async def recall_episode_lessons(
     if not hits:
         return ""
 
-    losses = [h for h in hits if h.metadata.get("outcome") == "loss"]
-    gains = [h for h in hits if h.metadata.get("outcome") != "loss"]
-
+    losses = [hit for hit in hits if _hit_metadata(hit).get("outcome") == "loss"]
+    gains = [hit for hit in hits if _hit_metadata(hit).get("outcome") != "loss"]
     parts: list[str] = ["### Memory: similar past situations"]
 
     if losses:
         parts.append("\n**Actions that previously led to a loss — do NOT repeat the same mistake:**")
-        for h in losses:
-            parts.append(_format_hit(h))
+        parts.extend(_format_hit(hit) for hit in losses)
     if gains:
         parts.append("\n**Actions that previously worked out:**")
-        for h in gains:
-            parts.append(_format_hit(h))
+        parts.extend(_format_hit(hit) for hit in gains)
 
     return "\n".join(parts)
 
 
-def _format_hit(h) -> str:
-    m = h.metadata
-    alpha = m.get("alpha_return", 0.0)
+def _format_hit(hit: dict[str, Any]) -> str:
+    metadata = _hit_metadata(hit)
+    try:
+        alpha = float(metadata.get("alpha_return", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        alpha = 0.0
     header = (
-        f"- {m.get('ticker', '?')} on {m.get('trade_date', '?')} "
-        f"({m.get('signal') or 'N/A'}, alpha {float(alpha):+.1%}, similarity {h.score:.2f})"
+        f"- {metadata.get('ticker', '?')} on {metadata.get('trade_date', '?')} "
+        f"({metadata.get('signal') or 'N/A'}, alpha {alpha:+.1%}, similarity {_hit_score(hit):.2f})"
     )
-    reflection = m.get("reflection")
+    reflection = metadata.get("reflection")
     return f"{header}\n  {reflection}" if reflection else header
