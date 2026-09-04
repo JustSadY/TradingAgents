@@ -5,14 +5,28 @@ from decimal import Decimal
 
 from sqlalchemy import asc, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from backend.core.money import safe_decimal
 from backend.models.order import Order
 from backend.models.portfolio import Portfolio
 from backend.models.user import User
-from backend.repositories.portfolio import get_simulation_portfolio
 
 _CLOSING_STATUSES = frozenset({"FILLED", "STOP_LOSS", "TAKE_PROFIT", "LIQUIDATED"})
+_PORTFOLIO_STATS_COLUMNS = (Portfolio.id, Portfolio.initial_capital)
+_ORDER_STATS_COLUMNS = (
+    Order.id,
+    Order.ticker,
+    Order.action,
+    Order.status,
+    Order.total_value,
+    Order.commission,
+    Order.entry_commission,
+    Order.side,
+    Order.realized_pnl,
+    Order.created_at,
+)
+
 
 def _is_closing_order(order: Order) -> bool:
     """Whether an order represents a completed position exit.
@@ -27,9 +41,11 @@ def _is_closing_order(order: Order) -> bool:
     action = (order.action or "").upper()
     return (side == "long" and action == "SELL") or (side == "short" and action == "BUY")
 
+
 def _closing_orders(orders: list[Order]) -> list[Order]:
     """Keep only terminal orders that actually close a long or short."""
     return [order for order in orders if _is_closing_order(order)]
+
 
 def _equity_max_drawdown_pct(initial_capital: Decimal, orders: list[Order]) -> float | None:
     """Return the negative peak-to-trough drawdown for realized trade equity.
@@ -53,6 +69,7 @@ def _equity_max_drawdown_pct(initial_capital: Decimal, orders: list[Order]) -> f
                 max_drawdown = drawdown
     return -float(max_drawdown)
 
+
 def _closing_cost_basis(order: Order, pnl: Decimal) -> Decimal:
     """Derive all-in entry capital from a closing order's fill and P&L.
 
@@ -71,8 +88,18 @@ def _closing_cost_basis(order: Order, pnl: Decimal) -> Decimal:
         entry_notional = exit_notional - pnl - entry_commission - exit_commission
     return entry_notional + entry_commission
 
+
 async def get_portfolio_stats(db: AsyncSession, user: User) -> dict:
-    portfolio: Portfolio | None = await get_simulation_portfolio(db, user_id=user.id)
+    # Statistics only need the portfolio identity and inception capital; avoid
+    # the normal portfolio helper because it eagerly loads every holding.
+    portfolio = (
+        await db.execute(
+            select(Portfolio)
+            .options(load_only(*_PORTFOLIO_STATS_COLUMNS))
+            .where(Portfolio.mode == "simulation", Portfolio.user_id == user.id)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
 
     if portfolio is None:
         return {
@@ -90,6 +117,7 @@ async def get_portfolio_stats(db: AsyncSession, user: User) -> dict:
 
     result = await db.execute(
         select(Order)
+        .options(load_only(*_ORDER_STATS_COLUMNS))
         .where(
             Order.portfolio_id == portfolio.id,
             Order.status.in_(_CLOSING_STATUSES),
