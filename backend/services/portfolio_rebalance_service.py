@@ -27,6 +27,7 @@ _logger = logging.getLogger(__name__)
 
 # The plan carries the score, issues and trades; only prose can be missing.
 _NO_NARRATIVE: dict = {"summary": "", "rationales": []}
+_REBALANCE_SECTOR_CONCURRENCY = 6
 
 async def get_rebalance_suggestions(db: AsyncSession, user: User) -> dict:
     from backend.services.mock_trading_service import get_portfolio_with_live_prices
@@ -62,9 +63,12 @@ async def get_rebalance_suggestions(db: AsyncSession, user: User) -> dict:
     return _merge(plan, narrative)
 
 async def _fetch_sectors(tickers: list[str]) -> dict[str, str]:
+    semaphore = asyncio.Semaphore(_REBALANCE_SECTOR_CONCURRENCY)
+
     async def _one(ticker: str) -> tuple[str, str]:
-        sector = await fetch_sector(ticker)
-        return ticker, sector
+        async with semaphore:
+            sector = await fetch_sector(ticker)
+            return ticker, sector
 
     pairs = await asyncio.gather(*[_one(t) for t in tickers], return_exceptions=False)
     return dict(pairs)
