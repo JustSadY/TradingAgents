@@ -6,7 +6,7 @@ from backend.core.database import get_db
 from backend.core.rls_context import set_request_admin_context, set_request_tenant_context
 from backend.core.security import decode_token_payload
 from backend.models.user import User
-from backend.repositories.permissions import get_user_page_permission, get_user_setting_permission
+from backend.repositories.permissions import get_user_page_permission, get_user_setting_permission, list_allowed_page_keys
 from backend.repositories.users import get_user_by_username
 from backend.schemas.tool_settings import ToolSettingsUpdate
 from backend.services.tool_access_service import get_user_access_overrides
@@ -113,9 +113,13 @@ def require_any_page(*page_keys: str):
         current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
     ) -> User:
-        for page_key in page_keys:
-            if await has_page_access(db, current_user, page_key):
-                return current_user
+        if current_user.is_admin or "settings" in page_keys:
+            return current_user
+
+        allowed_pages = await list_allowed_page_keys(db, current_user.id)
+        if allowed_pages.intersection(page_keys):
+            return current_user
+
         joined = ", ".join(page_keys)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
