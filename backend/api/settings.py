@@ -42,21 +42,24 @@ async def get_memory_status(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """The calling user's own vector-memory status (everything is per-user)."""
+    """Return the user's Mem0 + pgvector long-term-memory status."""
     target_user = current_user
     if user_id is not None and current_user.is_admin:
         target_user = await _require_target_user(db, user_id)
 
     providers = list_stored_api_key_providers(target_user)
     settings = await get_or_create_settings(db, target_user)
-    store_kind = getattr(settings, "memory_store", None) or "pinecone"
-    using_openai = store_kind == "pgvector" or settings.memory_embedder == "openai"
+    requested_embedder = (settings.memory_embedder or "openai").strip().lower()
+    embedder = "ollama" if requested_embedder == "ollama" else "openai"
+    using_openai = embedder == "openai"
     return {
-        "enabled": "openai" in providers if store_kind == "pgvector" else "pinecone" in providers,
-        "store": store_kind,
-        "embedder": "openai" if store_kind == "pgvector" else settings.memory_embedder,
-        "index": settings.pinecone_index,
-        "embed_model": settings.memory_openai_embed_model if using_openai else settings.pinecone_embed_model,
+        "enabled": not using_openai or "openai" in providers,
+        "store": "mem0-pgvector",
+        "embedder": embedder,
+        "index": None,
+        "embed_model": (
+            settings.memory_ollama_embed_model if embedder == "ollama" else settings.memory_openai_embed_model
+        ),
         "needs_openai_key": using_openai and "openai" not in providers,
         "agent_qa_enabled": settings.agent_qa_enabled,
     }
@@ -277,9 +280,9 @@ async def update_other_user_agents(
     admin: User = Depends(require_admin),
 ):
     target_user = await _require_target_user(db, user_id)
-    from backend.services.agent_settings_service import apply_agent_settings_update
+    from backend.services.agent_settings_service import apply_server_agent_settings_update
 
-    return await apply_agent_settings_update(db, target_user, body)
+    return await apply_server_agent_settings_update(db, target_user, body)
 
 
 @router.get("/agents/server", response_model=AgentSettingsRead)
