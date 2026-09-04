@@ -86,11 +86,11 @@ async def _fetch_close_series(ticker: str, period: str = "6mo"):
         _logger.warning("Indicator alert history fetch failed for %s: %s", ticker, exc)
         return None
 
-async def _check_indicator_alert(alert) -> tuple[bool, str]:
-    """Evaluate an RSI/MACD-cross alert. Returns ``(hit, detail)`` for logging."""
+
+def _evaluate_indicator_alert(alert, hist) -> tuple[bool, str]:
+    """Evaluate one indicator alert against an already-fetched close series."""
     from backend.services.indicator_service import calculate_macd, calculate_rsi
 
-    hist = await _fetch_close_series(alert.ticker)
     if hist is None or len(hist) < 30:
         return False, ""
 
@@ -119,6 +119,25 @@ async def _check_indicator_alert(alert) -> tuple[bool, str]:
         return hit, f"MACD-signal diff {prev_diff:.3f} -> {curr_diff:.3f}"
 
     return False, ""
+
+
+async def _check_indicator_alert(alert) -> tuple[bool, str]:
+    """Compatibility wrapper for evaluating a single indicator alert."""
+    hist = await _fetch_close_series(alert.ticker)
+    return _evaluate_indicator_alert(alert, hist)
+
+
+async def _fetch_indicator_histories(alerts) -> dict[str, object]:
+    """Fetch one close series per unique indicator ticker with bounded concurrency."""
+    tickers = list(dict.fromkeys(alert.ticker for alert in alerts))
+
+    async def _fetch_one(ticker: str):
+        async with _ALERT_SEMAPHORE:
+            return ticker, await _fetch_close_series(ticker)
+
+    results = await asyncio.gather(*[_fetch_one(ticker) for ticker in tickers])
+    return dict(results)
+
 
 async def _deliver_alert_side_effects(db, alert, settings, current_value: float | None) -> None:
     """Deliver an already-committed outbox item."""
@@ -290,9 +309,10 @@ async def check_price_alerts() -> None:
             )
             await _claim_alert_for_owner(alert.id, alert.user_id, float(price))
 
+    indicator_histories = await _fetch_indicator_histories(indicator_alerts) if indicator_alerts else {}
     for alert in indicator_alerts:
         try:
-            hit, detail = await _check_indicator_alert(alert)
+            hit, detail = _evaluate_indicator_alert(alert, indicator_histories.get(alert.ticker))
         except Exception as exc:  # noqa: BLE001
             _logger.warning("Indicator alert check failed for %s: %s", alert.ticker, exc)
             continue
