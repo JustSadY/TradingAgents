@@ -227,22 +227,23 @@ def history_json_from(value):
 
 
 async def prepare_graph_config(db: AsyncSession, user_id: int | None, config: dict) -> list[str]:
-    """Resolve the user's permitted analysts and inject runtime tool/agent
-    context + credentials into ``config``; returns the permitted analyst keys.
+    """Resolve permitted analysts and inject one consistent runtime snapshot.
 
-    Shared by the single- and multi-ticker orchestrators so the
-    security-sensitive agent-access filtering can't diverge between them.
+    ``build_global_runtime_context`` already includes the persisted agent-access
+    overrides used by tool enforcement. Reuse that same snapshot for analyst
+    filtering instead of issuing a second agent-access query at every analysis
+    start.
     """
     from backend.services.agent_settings_service import build_agent_runtime_context
-    from backend.services.tool_access_service import get_user_agent_access
     from backend.services.tool_settings_service import build_global_runtime_context
     from backend.trading_agents.agent_catalog import list_analysts
 
-    agent_access_map = await get_user_agent_access(db, user_id) if user_id else {}
+    runtime_tool_context = await build_global_runtime_context(db, user_id)
+    agent_access_map = runtime_tool_context.get("access", {}).get("agent_access", {}) if user_id else {}
     permitted_analysts = [a.key for a in list_analysts() if agent_access_map.get(a.key, True)]
 
     config["user_id"] = user_id
-    config["runtime_tool_context"] = await build_global_runtime_context(db, user_id)
+    config["runtime_tool_context"] = runtime_tool_context
     config["runtime_agent_context"] = await build_agent_runtime_context(db, user_id)
     inject_tool_credentials(config)
     return permitted_analysts
