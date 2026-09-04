@@ -105,6 +105,37 @@ def _tool_is_available(tool: BaseAgentTool, hierarchy) -> bool:
     return any(hierarchy.is_enabled(agent_key) for agent_key in tool.allowed_analysts)
 
 
+def _desired_tool_state(row: AgentToolSetting | None, update: Any, tool: BaseAgentTool) -> tuple[bool, dict[str, Any]]:
+    enabled = row.enabled if row is not None and row.enabled is not None else tool.default_enabled
+    if update.reset_enabled:
+        enabled = tool.default_enabled
+    elif update.enabled is not None:
+        enabled = update.enabled
+
+    current_settings = row.settings.copy() if row is not None else {}
+    if update.reset_settings:
+        for key in update.reset_settings:
+            current_settings.pop(key, None)
+    elif update.settings is not None:
+        validated = validate_tool_settings(tool, update.settings)
+
+        secret_keys = _secret_field_keys(tool)
+        for key in secret_keys & validated.keys():
+            value = validated[key]
+            if value == SECRET_UNCHANGED_SENTINEL:
+                validated.pop(key)
+            elif value:
+                validated[key] = encrypt_secret(value)
+
+        current_settings.update(validated)
+    return bool(enabled), current_settings
+
+
+def _is_default_tool_state(tool: BaseAgentTool, enabled: bool, settings: dict[str, Any], *, scope: str) -> bool:
+    defaults = tool.default_settings(scope=scope)
+    return enabled == tool.default_enabled and all(key in defaults and defaults[key] == value for key, value in settings.items())
+
+
 def _render_server_tool_settings(server_rows: dict[str, AgentToolSetting]) -> ToolSettingsRead:
     tools_map = {}
     for tool in registry.list():
@@ -191,6 +222,7 @@ async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSet
     user_rows_list = await _repo_get_user(db, user.id)
     user_rows = {row.tool_key: row for row in user_rows_list}
     agent_ctx = await build_agent_runtime_context(db, user.id)
+    dirty = False
 
     for tool_key, update in body.tools.items():
         tool = registry.get(tool_key)
@@ -198,19 +230,29 @@ async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSet
             raise ValueError(f"Unknown tool key '{tool_key}'.")
 
         _validate_tool_availability(tool, tool_key, agent_ctx)
+        row = user_rows.get(tool_key)
+        enabled, current_settings = _desired_tool_state(row, update, tool)
+
+        if row is None and _is_default_tool_state(tool, enabled, current_settings, scope="user"):
+            continue
+        if row is not None and row.enabled == enabled and row.settings == current_settings:
+            continue
 
         row = ensure_tool_setting(
             db,
-            row=user_rows.get(tool_key),
+            row=row,
             scope="user",
             user_id=user.id,
             tool_key=tool_key,
             default_enabled=tool.default_enabled,
         )
+        row.enabled = enabled
+        row.settings = current_settings
         user_rows[tool_key] = row
-        _apply_tool_setting_row_update(row, update, tool)
+        dirty = True
 
-    await db.flush()
+    if dirty:
+        await db.flush()
     # The updated ORM rows and agent context are already available. Rendering
     # from them avoids re-reading user tool rows and both agent-setting scopes.
     return await _render_user_tool_settings(db, user, user_rows, agent_ctx)
@@ -226,29 +268,9 @@ def _validate_tool_availability(tool: BaseAgentTool, tool_key: str, agent_ctx: d
 
 def _apply_tool_setting_row_update(row: AgentToolSetting, update: Any, tool: BaseAgentTool):
     """Apply enablement and settings updates to an AgentToolSetting row."""
-    if update.reset_enabled:
-        row.enabled = tool.default_enabled
-    elif update.enabled is not None:
-        row.enabled = update.enabled
-
-    current_settings = row.settings.copy()
-    if update.reset_settings:
-        for k in update.reset_settings:
-            current_settings.pop(k, None)
-    elif update.settings is not None:
-        validated = validate_tool_settings(tool, update.settings)
-
-        secret_keys = _secret_field_keys(tool)
-        for key in secret_keys & validated.keys():
-            value = validated[key]
-            if value == SECRET_UNCHANGED_SENTINEL:
-                validated.pop(key)
-            elif value:
-                validated[key] = encrypt_secret(value)
-
-        current_settings.update(validated)
-
-    row.settings = current_settings
+    enabled, settings = _desired_tool_state(row, update, tool)
+    row.enabled = enabled
+    row.settings = settings
 
 
 async def apply_server_tool_settings_update(db: AsyncSession, body: ToolSettingsUpdate) -> ToolSettingsRead:
@@ -256,24 +278,35 @@ async def apply_server_tool_settings_update(db: AsyncSession, body: ToolSettings
     from backend.repositories.tool_settings import get_server_tool_settings as _repo_get_server
 
     server_rows = {row.tool_key: row for row in await _repo_get_server(db)}
+    dirty = False
 
     for tool_key, update in body.tools.items():
         tool = registry.get(tool_key)
         if not tool:
             raise ValueError(f"Unknown tool key '{tool_key}'.")
 
+        row = server_rows.get(tool_key)
+        enabled, current_settings = _desired_tool_state(row, update, tool)
+        if row is None and _is_default_tool_state(tool, enabled, current_settings, scope="server"):
+            continue
+        if row is not None and row.enabled == enabled and row.settings == current_settings:
+            continue
+
         row = ensure_tool_setting(
             db,
-            row=server_rows.get(tool_key),
+            row=row,
             scope="server",
             user_id=None,
             tool_key=tool_key,
             default_enabled=tool.default_enabled,
         )
+        row.enabled = enabled
+        row.settings = current_settings
         server_rows[tool_key] = row
-        _apply_tool_setting_row_update(row, update, tool)
+        dirty = True
 
-    await db.flush()
+    if dirty:
+        await db.flush()
     return _render_server_tool_settings(server_rows)
 
 
