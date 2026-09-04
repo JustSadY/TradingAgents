@@ -155,6 +155,7 @@ async def _render_user_tool_settings(
     user: User,
     user_rows: dict[str, AgentToolSetting],
     agent_ctx: dict[str, Any],
+    access_snapshot: dict[str, dict] | None = None,
 ) -> ToolSettingsRead:
     """Render a user tool-settings response from already-loaded runtime state."""
     from backend.trading_agents.agents.hierarchy import AgentHierarchy
@@ -164,7 +165,7 @@ async def _render_user_tool_settings(
         tool_access_map = {}
         field_access_map = {}
     else:
-        access = await get_user_access_overrides(db, user.id)
+        access = access_snapshot if access_snapshot is not None else await get_user_access_overrides(db, user.id)
         tool_access_map = access["tool_access"]
         field_access_map = access["field_access"]
 
@@ -214,7 +215,13 @@ async def get_server_tool_settings(db: AsyncSession) -> ToolSettingsRead:
     return _render_server_tool_settings(server_rows)
 
 
-async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSettingsUpdate) -> ToolSettingsRead:
+async def apply_tool_settings_update(
+    db: AsyncSession,
+    user: User,
+    body: ToolSettingsUpdate,
+    *,
+    access_snapshot: dict[str, dict] | None = None,
+) -> ToolSettingsRead:
     from backend.repositories.tool_settings import ensure_tool_setting
     from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
     from backend.services.agent_settings_service import build_agent_runtime_context
@@ -253,9 +260,9 @@ async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSet
 
     if dirty:
         await db.flush()
-    # The updated ORM rows and agent context are already available. Rendering
-    # from them avoids re-reading user tool rows and both agent-setting scopes.
-    return await _render_user_tool_settings(db, user, user_rows, agent_ctx)
+    # The updated ORM rows, agent context, and permission snapshot are already
+    # available. Rendering from them avoids re-reading those request-local rows.
+    return await _render_user_tool_settings(db, user, user_rows, agent_ctx, access_snapshot)
 
 
 def _validate_tool_availability(tool: BaseAgentTool, tool_key: str, agent_ctx: dict):
