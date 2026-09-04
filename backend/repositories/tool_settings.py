@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.tool_settings import AgentToolSetting
@@ -16,6 +17,21 @@ async def get_server_tool_settings(db: AsyncSession):
 
 async def get_user_tool_settings(db: AsyncSession, user_id: int):
     return await get_tool_settings_by_scope(db, "user", user_id)
+
+
+async def get_runtime_tool_settings(db: AsyncSession, user_id: int | None):
+    """Load server and optional user tool-setting scopes in one round-trip."""
+    if user_id is None:
+        return await get_server_tool_settings(db)
+
+    stmt = select(AgentToolSetting).where(
+        or_(
+            and_(AgentToolSetting.scope == "server", AgentToolSetting.user_id.is_(None)),
+            and_(AgentToolSetting.scope == "user", AgentToolSetting.user_id == user_id),
+        )
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
 
 def ensure_tool_setting(
