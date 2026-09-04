@@ -4,8 +4,19 @@ from __future__ import annotations
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from backend.models.user import User
+
+_USER_LIST_COLUMNS = (
+    User.id,
+    User.username,
+    User.email,
+    User.display_name,
+    User.role,
+    User.is_active,
+    User.created_at,
+)
 
 
 async def get_user_by_username(db: AsyncSession, username: str) -> User | None:
@@ -43,8 +54,8 @@ async def email_exists(db: AsyncSession, email: str, exclude_user_id: int | None
 
 
 async def list_users(db: AsyncSession) -> list[User]:
-    """List all users ordered by ID."""
-    result = await db.execute(select(User).order_by(User.id))
+    """List all users ordered by ID without loading credentials or API-key ciphertext."""
+    result = await db.execute(select(User).options(load_only(*_USER_LIST_COLUMNS)).order_by(User.id))
     return list(result.scalars().all())
 
 
