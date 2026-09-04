@@ -10,12 +10,11 @@ policy the migrations do, instead of a copy of it.
 
 from typing import Any
 
-#: `memory_vectors` is owned by revision 7f8091a2b3c4. LangGraph creates and
-#: owns its checkpoint tables through an idempotent `setup()` that runs once per
-#: process, which is why they are deliberately not under Alembic.
+#: LangGraph creates and owns its checkpoint tables through an idempotent
+#: ``setup()`` that runs once per process, which is why they are deliberately
+#: not under Alembic.
 NON_ORM_TABLES = frozenset(
     {
-        "memory_vectors",
         "checkpoints",
         "checkpoint_blobs",
         "checkpoint_writes",
