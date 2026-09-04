@@ -81,7 +81,7 @@ ENCRYPTION_KEY=<fernet-key>
 
 `DB_PASSWORD` is required by the current `docker-compose.yml`. `METRICS_TOKEN` is optional; when empty, the backend `/metrics` endpoint stays disabled.
 
-Do not put LLM, Pinecone, Reddit, Alpha Vantage, or SearXNG credentials into `.env` unless a specific server-managed integration explicitly documents an environment variable. User/provider settings are normally configured in the Web UI.
+Do not put LLM, Reddit, Alpha Vantage, or SearXNG credentials into `.env` unless a specific server-managed integration explicitly documents an environment variable. User/provider settings are normally configured in the Web UI.
 
 ### Start the stack
 
