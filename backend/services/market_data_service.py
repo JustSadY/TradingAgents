@@ -11,7 +11,9 @@ _logger = logging.getLogger(__name__)
 
 _BATCH_PRICE_TIMEOUT_SEC = 10.0
 _SINGLE_PRICE_TIMEOUT_SEC = 6.0
+_INDIVIDUAL_PRICE_CONCURRENCY = 8
 _YAHOO_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+
 
 async def get_live_price(ticker: str) -> float | None:
     """Fetch live price for a single ticker. Falls back to history if Yahoo REST query fails."""
@@ -53,6 +55,7 @@ async def get_live_price(ticker: str) -> float | None:
         _logger.warning("Price fetch fallback timed out for %s after %.1fs", ticker, _SINGLE_PRICE_TIMEOUT_SEC)
         return None
 
+
 async def get_live_prices_batch(tickers: list[str]) -> dict[str, float]:
     """Fetch live prices for multiple tickers in a single batch call."""
     if not tickers:
@@ -71,6 +74,7 @@ async def get_live_prices_batch(tickers: list[str]) -> dict[str, float]:
             prices.update(await _fetch_individual_fallbacks(still_missing))
 
     return prices
+
 
 async def _fetch_yahoo_quotes_rest(unique_tickers: list[str]) -> dict[str, float]:
     """Fetch multiple quotes from Yahoo REST API."""
@@ -94,6 +98,7 @@ async def _fetch_yahoo_quotes_rest(unique_tickers: list[str]) -> dict[str, float
     except Exception as exc:
         _logger.warning("Direct batch query failed for %s: %s", unique_tickers, exc)
     return prices
+
 
 async def _fetch_yfinance_download_fallback(missing: list[str]) -> dict[str, float]:
     """Fallback batch yfinance download."""
@@ -122,6 +127,7 @@ async def _fetch_yfinance_download_fallback(missing: list[str]) -> dict[str, flo
         _logger.warning("Batch fallback download timed out for %s", missing)
         return {}
 
+
 def _parse_yfinance_batch_data(close_data, missing_symbols: list[str]) -> dict[str, float]:
     """Parse pandas data from yf.download."""
     parsed = {}
@@ -144,10 +150,17 @@ def _parse_yfinance_batch_data(close_data, missing_symbols: list[str]) -> dict[s
             parsed[missing_symbols[0]] = val
     return parsed
 
+
 async def _fetch_individual_fallbacks(still_missing: list[str]) -> dict[str, float]:
-    """Final individual fallback for any remaining missing tickers."""
+    """Final individual fallback without opening an unbounded client burst."""
+    semaphore = asyncio.Semaphore(_INDIVIDUAL_PRICE_CONCURRENCY)
+
+    async def _one(symbol: str) -> float | None:
+        async with semaphore:
+            return await get_live_price(symbol)
+
     prices = {}
-    fallbacks = await asyncio.gather(*[get_live_price(symbol) for symbol in still_missing], return_exceptions=True)
+    fallbacks = await asyncio.gather(*(_one(symbol) for symbol in still_missing), return_exceptions=True)
     for symbol, fetched in zip(still_missing, fallbacks, strict=True):
         if isinstance(fetched, BaseException) or fetched is None:
             continue
@@ -155,6 +168,7 @@ async def _fetch_individual_fallbacks(still_missing: list[str]) -> dict[str, flo
         if math.isfinite(val) and val > 0:
             prices[symbol] = val
     return prices
+
 
 async def get_historical_data(ticker: str, start_date: str, end_date: str):
     """Fetch historical OHLCV data for a ticker."""
@@ -186,6 +200,7 @@ async def get_historical_data(ticker: str, start_date: str, end_date: str):
     except Exception:
         _logger.exception("Historical data fetch for %s failed", ticker)
         raise
+
 
 async def calculate_returns(
     ticker: str, start_date: str, holding_days: int = 5, benchmark: str = "SPY"
@@ -231,6 +246,7 @@ async def calculate_returns(
 
     return await asyncio.to_thread(_fetch)
 
+
 async def get_benchmark_return(
     benchmark: str = "SPY",
     period: str = "1y",
@@ -275,6 +291,7 @@ async def get_benchmark_return(
             return None
 
     return await asyncio.to_thread(_fetch)
+
 
 async def get_live_prices_details_batch(tickers: list[str]) -> dict[str, dict[str, float]]:
     """Fetch live prices and daily change percentage for multiple tickers in a single batch call."""
