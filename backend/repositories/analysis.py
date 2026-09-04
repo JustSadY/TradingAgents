@@ -6,13 +6,31 @@ from sqlalchemy import delete, select, update
 from sqlalchemy import desc as _desc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import defer
+from sqlalchemy.orm import load_only
 
 from backend.models.analysis import AnalysisResult
 from backend.models.portfolio_analysis import MultiTickerAnalysis
 from backend.repositories.common import scope_to_user
 
 _logger = logging.getLogger(__name__)
+
+_ANALYSIS_LIST_COLUMNS = (
+    AnalysisResult.id,
+    AnalysisResult.ticker,
+    AnalysisResult.trade_date,
+    AnalysisResult.asset_type,
+    AnalysisResult.signal,
+    AnalysisResult.duration_seconds,
+    AnalysisResult.triggered_by,
+    AnalysisResult.created_at,
+    AnalysisResult.chart_annotations,
+    AnalysisResult.llm_provider,
+    AnalysisResult.llm_model,
+    AnalysisResult.preset_name,
+    AnalysisResult.raw_return,
+    AnalysisResult.alpha_return,
+    AnalysisResult.holding_days,
+)
 
 
 async def _rollback_after_write_error(db: AsyncSession) -> None:
@@ -53,15 +71,13 @@ async def list_analyses(
     limit: int = 20,
     offset: int = 0,
 ) -> list[AnalysisResult]:
+    # History cards need only the compact AnalysisListItem surface. Avoid
+    # transferring the large analyst reports, debate histories and strategy
+    # JSON payloads for every row merely to render a list page.
     q = (
         select(AnalysisResult)
         .where(AnalysisResult.status == "completed")
-        .options(
-            defer(AnalysisResult.bull_history),
-            defer(AnalysisResult.bear_history),
-            defer(AnalysisResult.investment_debate_history),
-            defer(AnalysisResult.risk_debate_history),
-        )
+        .options(load_only(*_ANALYSIS_LIST_COLUMNS))
         .order_by(_desc(AnalysisResult.created_at))
         .limit(limit)
         .offset(offset)
