@@ -150,27 +150,27 @@ describe('Settings', () => {
   })
 
   it('renders and saves strategy continuity controls from the risk settings permission', async () => {
+    const initialSettings = {
+      strategy_learning_enabled: true,
+      decision_stability_mode: 'shadow',
+      decision_stability_min_quality: 70,
+      decision_stability_min_confidence: 0.65,
+      decision_stability_min_evidence_groups: 2,
+      reversal_verifier_enabled: true,
+      confidence_calibration_enabled: false,
+      regime_aware_weighting_enabled: false,
+      fallback_llm_chain: [],
+      webhook_events: [],
+    }
     vi.mocked(axios.get).mockImplementation((url: string) => {
-      if (url === '/api/settings') {
-        return Promise.resolve({ data: {
-          strategy_learning_enabled: true,
-          decision_stability_mode: 'shadow',
-          decision_stability_min_quality: 70,
-          decision_stability_min_confidence: 0.65,
-          decision_stability_min_evidence_groups: 2,
-          reversal_verifier_enabled: true,
-          confidence_calibration_enabled: false,
-          regime_aware_weighting_enabled: false,
-          fallback_llm_chain: [],
-          webhook_events: [],
-        } })
-      }
+      if (url === '/api/settings') return Promise.resolve({ data: initialSettings })
       if (url === '/api/presets') return Promise.resolve({ data: [] })
       if (url === '/api/users/me/setting-permissions') return Promise.resolve({ data: { allowed_settings: ['risk'] } })
       if (url === '/api/cron/status') return Promise.resolve({ data: null })
       if (url === '/api/settings/llm-catalog') return Promise.resolve({ data: {} })
       return Promise.resolve({ data: {} })
     })
+    vi.mocked(axios.put).mockResolvedValue({ data: { ...initialSettings, decision_stability_mode: 'enforce' } })
 
     renderWithQuery(<Settings />)
 
@@ -184,18 +184,38 @@ describe('Settings', () => {
     fireEvent.click(screen.getByRole('button', { name: /Save/ }))
 
     await waitFor(() => {
-      // The generated client sends the body as config.data via axios(config).
+      // Only the changed field is sent; unchanged settings no longer generate
+      // redundant DB writes or settings_updated events.
       expect(axios.put).toHaveBeenCalledWith(
         '/api/settings',
-        expect.objectContaining({
-          data: expect.objectContaining({
-            decision_stability_mode: 'enforce',
-            decision_stability_min_quality: 70,
-            decision_stability_min_confidence: 0.65,
-            decision_stability_min_evidence_groups: 2,
-          }),
-        }),
+        expect.objectContaining({ data: { decision_stability_mode: 'enforce' } }),
       )
     })
+  })
+
+  it('skips the settings PUT when Save has no settings changes', async () => {
+    vi.mocked(axios.get).mockImplementation((url: string) => {
+      if (url === '/api/settings') {
+        return Promise.resolve({ data: {
+          output_language: 'English',
+          investor_persona: 'conservative',
+          benchmark_ticker: null,
+          fallback_llm_chain: [],
+          webhook_events: [],
+        } })
+      }
+      if (url === '/api/presets') return Promise.resolve({ data: [] })
+      if (url === '/api/users/me/setting-permissions') return Promise.resolve({ data: { allowed_settings: ['general'] } })
+      if (url === '/api/cron/status') return Promise.resolve({ data: null })
+      if (url === '/api/settings/llm-catalog') return Promise.resolve({ data: {} })
+      return Promise.resolve({ data: {} })
+    })
+
+    renderWithQuery(<Settings />)
+    await screen.findByText('settings.row_output_language')
+    fireEvent.click(screen.getByRole('button', { name: /Save/ }))
+
+    await screen.findByText('settings.save_button_saved')
+    expect(axios.put).not.toHaveBeenCalled()
   })
 })
