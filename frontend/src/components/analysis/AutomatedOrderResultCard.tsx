@@ -56,6 +56,12 @@ export function AutomatedOrderResultCard({ result }: { result: AnalysisOrderResu
                 <span className="font-mono text-slate-100">${result.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             )}
+            {result.orderId && (
+              <div className="col-span-2 min-w-0">
+                <span className="block text-slate-500 uppercase tracking-wide font-semibold">{t('orders.col_broker_order_id')}</span>
+                <span title={result.orderId} className="block font-mono text-amber-100 truncate">{result.orderId}</span>
+              </div>
+            )}
           </div>
           {explanation && <p className="border-t border-white/[0.07] pt-2 text-[11px] leading-relaxed text-slate-300">{explanation}</p>}
         </>
