@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import uuid
 from decimal import Decimal, InvalidOperation
 
 from backend.core.config import is_live_trading_enabled
@@ -57,6 +58,20 @@ def _validated_fill_details(raw_price, raw_quantity, *, requested_quantity):
     if (quantity > 0) != (price > 0):
         return None, None, "broker_fill_details_invalid"
     return (price if price > 0 else None), (quantity if quantity > 0 else None), ""
+
+
+def _analysis_client_order_id(request: OrderRequest, action: str) -> str | None:
+    """Stable Alpaca correlation id for the one auto-order owned by an analysis.
+
+    A lost HTTP response must not turn a retry into a second broker order.  The
+    analysis row is the durable execution identity, so derive a compact UUID5
+    from it. Direct/manual adapter calls without an analysis id retain Alpaca's
+    normal server-generated client id behavior.
+    """
+    if request.analysis_id is None:
+        return None
+    seed = f"tradingagents:{request.analysis_id}:{request.ticker.strip().upper()}:{action}"
+    return f"ta-{uuid.uuid5(uuid.NAMESPACE_URL, seed)}"
 
 
 class AlpacaTrader(BaseTraderInterface):
@@ -184,10 +199,12 @@ class AlpacaTrader(BaseTraderInterface):
                 reason_code="invalid_quantity",
             )
 
+        client_order_id = _analysis_client_order_id(request, action)
         submission_started = False
         known_order_id = ""
         known_filled_price = None
         known_filled_qty = None
+        trading = None
         try:
             from alpaca.trading.enums import OrderClass, OrderSide, TimeInForce
             from alpaca.trading.requests import MarketOrderRequest, StopLossRequest, TakeProfitRequest
@@ -199,6 +216,8 @@ class AlpacaTrader(BaseTraderInterface):
                 "side": OrderSide.BUY if action == "BUY" else OrderSide.SELL,
                 "time_in_force": TimeInForce.DAY,
             }
+            if client_order_id:
+                kwargs["client_order_id"] = client_order_id
             if request.stop_loss and request.take_profit:
                 kwargs["order_class"] = OrderClass.BRACKET
                 kwargs["take_profit"] = TakeProfitRequest(limit_price=float(request.take_profit))
@@ -279,6 +298,58 @@ class AlpacaTrader(BaseTraderInterface):
             )
         except Exception:
             _logger.exception("alpaca-py order placement failed")
+
+            # If submit_order lost its response, the deterministic client id is
+            # the safest way to ask Alpaca whether the order actually exists.
+            # A confirmed lookup can turn an ambiguous timeout into a concrete
+            # terminal result without ever submitting a second order.
+            if submission_started and not known_order_id and client_order_id and trading is not None:
+                try:
+                    recovered = await asyncio.to_thread(trading.get_order_by_client_id, client_order_id)
+                    recovered_id = str(getattr(recovered, "id", "") or "")
+                    recovered_status = _value(getattr(recovered, "status", "UNKNOWN")).upper()
+                    recovered_price = getattr(recovered, "filled_avg_price", None)
+                    recovered_qty = getattr(recovered, "filled_qty", None)
+                    safe_price, safe_qty, fill_reason = _validated_fill_details(
+                        recovered_price,
+                        recovered_qty,
+                        requested_quantity=quantity,
+                    )
+                    reason_code = fill_reason
+                    if fill_reason:
+                        recovered_status = "RECONCILIATION_REQUIRED"
+                    elif recovered_status not in _TERMINAL:
+                        recovered_status = "RECONCILIATION_REQUIRED"
+                        reason_code = "broker_order_still_open"
+                    elif recovered_status == "FILLED" and (safe_price is None or safe_qty is None):
+                        recovered_status = "RECONCILIATION_REQUIRED"
+                        reason_code = "broker_fill_details_missing"
+
+                    return OrderResult(
+                        order_id=recovered_id or f"client:{client_order_id}",
+                        status=recovered_status,
+                        filled_price=safe_price,
+                        filled_quantity=safe_qty,
+                        message=(
+                            "Broker submission was recovered by client order id; reconcile before retrying."
+                            if recovered_status == "RECONCILIATION_REQUIRED"
+                            else f"Alpaca order status: {recovered_status}"
+                        ),
+                        reason_code=reason_code,
+                        external_submission=True,
+                    )
+                except Exception as recovery_exc:
+                    _logger.warning(
+                        "Could not recover uncertain Alpaca submission by client_order_id=%s: %s",
+                        client_order_id,
+                        recovery_exc,
+                    )
+                    # Preserve a durable, explicitly typed reference in the
+                    # existing external-order audit field. No production code
+                    # treats this value as a broker UUID, and the prefix makes
+                    # the distinction unambiguous to operators.
+                    known_order_id = f"client:{client_order_id}"
+
             status = "RECONCILIATION_REQUIRED" if submission_started else "REJECTED"
             safe_filled_price, safe_filled_qty, _fill_reason = _validated_fill_details(
                 known_filled_price,
