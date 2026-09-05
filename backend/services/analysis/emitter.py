@@ -111,13 +111,20 @@ class AnalysisEmitter:
 
         ``complete`` means that the AI report was persisted; it must not be
         interpreted as an assertion that an order was filled. This separate
-        event gives the client an explicit filled/skipped/rejected/error
-        result, while retaining broker-specific detail for an order history.
-        Values may be ``Decimal`` instances, so convert them at this wire
-        boundary instead of relying on a JSON encoder implementation.
+        event gives the client an explicit filled/skipped/rejected/error or
+        reconciliation-required result, while retaining broker-specific detail
+        for order history. Values may be ``Decimal`` instances, so convert them
+        at this wire boundary instead of relying on a JSON encoder implementation.
         """
 
-        if outcome not in {"filled", "skipped", "rejected", "error"}:
+        normalized_broker_status = (broker_status or "").strip().upper()
+        if normalized_broker_status == "RECONCILIATION_REQUIRED":
+            # A broker request may have escaped the local transaction even when
+            # its exact fill/audit state is unknown. Calling that "rejected"
+            # invites an unsafe retry; expose the operational state explicitly.
+            outcome = "reconciliation_required"
+
+        if outcome not in {"filled", "skipped", "rejected", "error", "reconciliation_required"}:
             raise ValueError(f"Unsupported order outcome: {outcome}")
 
         def _number(value: object | None) -> float | None:
