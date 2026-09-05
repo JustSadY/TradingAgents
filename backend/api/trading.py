@@ -113,6 +113,7 @@ async def create_order(
         user=_,
         leverage=req.leverage,
             allow_short=req.allow_short,
+            release_before_price_io=True,
         )
     except svc.AnalysisOwnershipError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
