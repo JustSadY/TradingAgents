@@ -119,7 +119,7 @@ describe('Orders', () => {
 
     renderPage()
 
-    expect(await screen.findByText('CANCELED · PARTIAL FILL')).toBeInTheDocument()
+    expect(await screen.findByText('CANCELED · Partial fill')).toBeInTheDocument()
     expect(screen.getByText('alpaca-partial-123')).toBeInTheDocument()
   })
 
