@@ -70,6 +70,76 @@ async def test_alpaca_submit_exception_is_reconciliation_required_not_rejected(m
 
 
 @pytest.mark.asyncio
+async def test_alpaca_submit_timeout_recovers_by_deterministic_client_order_id(monkeypatch):
+    from backend.services.execution.alpaca import AlpacaTrader
+
+    class Trading:
+        client_order_id = None
+
+        def submit_order(self, broker_request):
+            self.client_order_id = broker_request.client_order_id
+            raise TimeoutError("submit response lost")
+
+        def get_order_by_client_id(self, client_order_id):
+            assert client_order_id == self.client_order_id
+            return SimpleNamespace(
+                id="alpaca-recovered-42",
+                status="FILLED",
+                filled_avg_price="101.5",
+                filled_qty="1",
+            )
+
+    trading = Trading()
+    trader = AlpacaTrader(db=object(), mode="simulation")
+
+    async def clients():
+        return trading, object()
+
+    monkeypatch.setattr(trader, "_clients", clients)
+
+    result = await trader.place_order(_request(analysis_id=42))
+
+    assert trading.client_order_id is not None
+    assert trading.client_order_id.startswith("ta-")
+    assert result.status == "FILLED"
+    assert result.order_id == "alpaca-recovered-42"
+    assert result.filled_price == Decimal("101.5")
+    assert result.filled_quantity == Decimal("1")
+    assert result.external_submission is True
+
+
+@pytest.mark.asyncio
+async def test_alpaca_failed_client_lookup_preserves_durable_client_reference(monkeypatch):
+    from backend.services.execution.alpaca import AlpacaTrader
+
+    class Trading:
+        client_order_id = None
+
+        def submit_order(self, broker_request):
+            self.client_order_id = broker_request.client_order_id
+            raise TimeoutError("submit response lost")
+
+        def get_order_by_client_id(self, client_order_id):
+            assert client_order_id == self.client_order_id
+            raise TimeoutError("client-id reconciliation also unavailable")
+
+    trading = Trading()
+    trader = AlpacaTrader(db=object(), mode="simulation")
+
+    async def clients():
+        return trading, object()
+
+    monkeypatch.setattr(trader, "_clients", clients)
+
+    result = await trader.place_order(_request(analysis_id=43))
+
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert result.reason_code == "broker_submission_uncertain"
+    assert result.order_id == f"client:{trading.client_order_id}"
+    assert result.external_submission is True
+
+
+@pytest.mark.asyncio
 async def test_alpaca_poll_failure_preserves_known_broker_identity_and_fill(monkeypatch):
     from backend.services import execution
     from backend.services.execution.alpaca import AlpacaTrader
