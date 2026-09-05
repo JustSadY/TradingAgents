@@ -181,6 +181,54 @@ async def test_alert_dispatch_reuses_one_durable_analysis_identity(monkeypatch, 
 
 
 @pytest.mark.asyncio
+async def test_alert_dispatch_without_its_staged_row_never_relaunches_canonical_job(monkeypatch, db, test_user):
+    from backend.core import database
+    from backend.models.analysis import AnalysisResult
+    from backend.services import analysis_queue, analysis_service
+
+    stable_task_id = analysis_queue._alert_task_id(
+        user_id=test_user.id,
+        ticker="NVDA",
+        trade_date="2026-09-05",
+    )
+    db.add(
+        AnalysisResult(
+            user_id=test_user.id,
+            ticker="NVDA",
+            trade_date="2026-09-05",
+            asset_type="stock",
+            task_id=stable_task_id,
+            status="completed",
+            triggered_by="alert",
+        )
+    )
+    await db.flush()
+
+    @asynccontextmanager
+    async def same_session():
+        yield db
+
+    discard = AsyncMock()
+    register = AsyncMock()
+    monkeypatch.setattr(database, "AsyncSessionLocal", same_session)
+    monkeypatch.setattr(analysis_service, "discard_queued_task", discard)
+    monkeypatch.setattr(analysis_service, "register_queued_task", register)
+
+    resolved, should_dispatch = await analysis_queue._prepare_alert_dispatch_identity(
+        task_id="missing-random-staged-row",
+        ticker="NVDA",
+        trade_date="2026-09-05",
+        asset_type="stock",
+        user=test_user,
+    )
+
+    assert resolved == stable_task_id
+    assert should_dispatch is False
+    discard.assert_awaited_once_with("missing-random-staged-row", test_user.id)
+    register.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_failed_alert_queue_submission_removes_unowned_queued_row(monkeypatch, db, test_user):
     from backend.core import database
     from backend.models.analysis import AnalysisResult
