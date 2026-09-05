@@ -60,16 +60,17 @@ def _validated_fill_details(raw_price, raw_quantity, *, requested_quantity):
     return (price if price > 0 else None), (quantity if quantity > 0 else None), ""
 
 
-def _analysis_client_order_id(request: OrderRequest, action: str) -> str | None:
-    """Stable Alpaca correlation id for the one auto-order owned by an analysis.
+def _client_order_id(request: OrderRequest, action: str) -> str:
+    """Return an Alpaca client correlation id for every submitted order.
 
-    A lost HTTP response must not turn a retry into a second broker order.  The
-    analysis row is the durable execution identity, so derive a compact UUID5
-    from it. Direct/manual adapter calls without an analysis id retain Alpaca's
-    normal server-generated client id behavior.
+    Analysis-originated orders use a deterministic UUID5 so retries for the
+    same durable analysis identity cannot silently become a second broker
+    order. Manual/direct adapter calls have no durable request key, so they use
+    a UUID4; that still gives a lost submit response an immediate recovery key
+    and a durable audit reference.
     """
     if request.analysis_id is None:
-        return None
+        return f"ta-manual-{uuid.uuid4()}"
     seed = f"tradingagents:{request.analysis_id}:{request.ticker.strip().upper()}:{action}"
     return f"ta-{uuid.uuid5(uuid.NAMESPACE_URL, seed)}"
 
@@ -208,7 +209,7 @@ class AlpacaTrader(BaseTraderInterface):
                 reason_code="invalid_quantity",
             )
 
-        client_order_id = _analysis_client_order_id(request, action)
+        client_order_id = _client_order_id(request, action)
         submission_started = False
         known_order_id = ""
         known_filled_price = None
@@ -224,9 +225,8 @@ class AlpacaTrader(BaseTraderInterface):
                 "qty": float(quantity),
                 "side": OrderSide.BUY if action == "BUY" else OrderSide.SELL,
                 "time_in_force": TimeInForce.DAY,
+                "client_order_id": client_order_id,
             }
-            if client_order_id:
-                kwargs["client_order_id"] = client_order_id
             if request.stop_loss and request.take_profit:
                 kwargs["order_class"] = OrderClass.BRACKET
                 kwargs["take_profit"] = TakeProfitRequest(limit_price=float(request.take_profit))
@@ -312,11 +312,11 @@ class AlpacaTrader(BaseTraderInterface):
         except Exception:
             _logger.exception("alpaca-py order placement failed")
 
-            # If submit_order lost its response, the deterministic client id is
-            # the safest way to ask Alpaca whether the order actually exists.
-            # A confirmed lookup can turn an ambiguous timeout into a concrete
-            # terminal result without ever submitting a second order.
-            if submission_started and not known_order_id and client_order_id and trading is not None:
+            # If submit_order lost its response, the client id is the safest way
+            # to ask Alpaca whether the order actually exists. A confirmed
+            # lookup can turn an ambiguous timeout into a concrete terminal
+            # result without ever submitting a second order.
+            if submission_started and not known_order_id and trading is not None:
                 try:
                     recovered = await asyncio.to_thread(trading.get_order_by_client_id, client_order_id)
                     recovered_id = str(getattr(recovered, "id", "") or "")
@@ -390,7 +390,16 @@ class AlpacaTrader(BaseTraderInterface):
             return False
         try:
             trading, _market = await self._clients()
-            await asyncio.to_thread(trading.cancel_order_by_id, order_id)
+            broker_order_id = str(order_id or "").strip()
+            if broker_order_id.startswith("client:"):
+                client_order_id = broker_order_id.removeprefix("client:").strip()
+                if not client_order_id:
+                    return False
+                recovered = await asyncio.to_thread(trading.get_order_by_client_id, client_order_id)
+                broker_order_id = str(getattr(recovered, "id", "") or "")
+            if not broker_order_id:
+                return False
+            await asyncio.to_thread(trading.cancel_order_by_id, broker_order_id)
             return True
         except Exception as exc:
             _logger.warning("alpaca-py cancellation failed for %s: %s", order_id, exc)
