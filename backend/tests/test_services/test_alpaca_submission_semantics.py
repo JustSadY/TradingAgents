@@ -121,3 +121,22 @@ async def test_alpaca_filled_without_fill_details_requires_reconciliation(monkey
     assert result.status == "RECONCILIATION_REQUIRED"
     assert result.reason_code == "broker_fill_details_missing"
     assert result.external_submission is True
+
+
+@pytest.mark.asyncio
+async def test_alpaca_positions_failure_never_looks_like_an_empty_account(monkeypatch):
+    from backend.services.execution.alpaca import AlpacaTrader
+
+    class Trading:
+        def get_all_positions(self):
+            raise TimeoutError("positions endpoint unavailable")
+
+    trader = AlpacaTrader(db=object(), mode="simulation")
+
+    async def clients():
+        return Trading(), object()
+
+    monkeypatch.setattr(trader, "_clients", clients)
+
+    with pytest.raises(RuntimeError, match="refusing to assume an empty account"):
+        await trader.get_positions()
