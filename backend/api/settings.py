@@ -120,6 +120,9 @@ async def test_webhook(
     current_user: User = Depends(get_current_user),
 ):
     await enforce_setting_section_permission(db, current_user, "webhooks")
+    # Permission reads are complete. DNS validation and the delivery probe are
+    # external I/O and must not pin a request DB connection while they run.
+    await db.commit()
     try:
         await resolve_webhook_target(body.url)
     except ValueError as e:
