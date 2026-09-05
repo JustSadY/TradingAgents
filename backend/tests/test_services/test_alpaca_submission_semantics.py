@@ -124,6 +124,71 @@ async def test_alpaca_filled_without_fill_details_requires_reconciliation(monkey
 
 
 @pytest.mark.asyncio
+async def test_alpaca_invalid_fill_values_require_reconciliation(monkeypatch):
+    from backend.services.execution.alpaca import AlpacaTrader
+
+    class Trading:
+        def submit_order(self, _request):
+            return SimpleNamespace(
+                id="alpaca-invalid-fill",
+                status="FILLED",
+                filled_avg_price="NaN",
+                filled_qty="1",
+            )
+
+    trader = AlpacaTrader(db=object(), mode="simulation")
+
+    async def clients():
+        return Trading(), object()
+
+    monkeypatch.setattr(trader, "_clients", clients)
+
+    result = await trader.place_order(_request())
+
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert result.reason_code == "broker_fill_details_invalid"
+    assert result.filled_price is None
+    assert result.filled_quantity is None
+
+
+@pytest.mark.asyncio
+async def test_alpaca_order_still_open_after_cancel_attempt_requires_reconciliation(monkeypatch):
+    from backend.services import execution
+    from backend.services.execution.alpaca import AlpacaTrader
+
+    class Trading:
+        cancel_calls = 0
+
+        def submit_order(self, _request):
+            return SimpleNamespace(id="alpaca-open", status="NEW", filled_avg_price=None, filled_qty="0")
+
+        def get_order_by_id(self, _order_id):
+            return SimpleNamespace(id="alpaca-open", status="NEW", filled_avg_price=None, filled_qty="0")
+
+        def cancel_order_by_id(self, _order_id):
+            self.cancel_calls += 1
+
+    trading = Trading()
+    trader = AlpacaTrader(db=object(), mode="simulation")
+
+    async def clients():
+        return trading, object()
+
+    async def no_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(trader, "_clients", clients)
+    monkeypatch.setattr(execution.alpaca.asyncio, "sleep", no_sleep)
+
+    result = await trader.place_order(_request())
+
+    assert trading.cancel_calls == 1
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert result.reason_code == "broker_order_still_open"
+    assert result.external_submission is True
+
+
+@pytest.mark.asyncio
 async def test_alpaca_positions_failure_never_looks_like_an_empty_account(monkeypatch):
     from backend.services.execution.alpaca import AlpacaTrader
 
@@ -182,6 +247,8 @@ async def test_alpaca_finite_negative_cash_is_preserved_for_margin_accounts(monk
                 status="ACTIVE",
                 trading_blocked=False,
                 account_blocked=False,
+                trade_suspended_by_user=False,
+                shorting_enabled=True,
             )
 
     trader = AlpacaTrader(db=object(), mode="simulation")
@@ -195,6 +262,38 @@ async def test_alpaca_finite_negative_cash_is_preserved_for_margin_accounts(monk
 
     assert snapshot["cash"] == -25.5
     assert snapshot["equity"] == 1000.0
+    assert snapshot["shorting_enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_alpaca_user_trade_suspension_is_treated_as_trading_blocked(monkeypatch):
+    from backend.services.execution.alpaca import AlpacaTrader
+
+    class Trading:
+        def get_account(self):
+            return SimpleNamespace(
+                cash="1000",
+                buying_power="1000",
+                equity="1000",
+                portfolio_value="1000",
+                status="ACTIVE",
+                trading_blocked=False,
+                account_blocked=False,
+                trade_suspended_by_user=True,
+                shorting_enabled=True,
+            )
+
+    trader = AlpacaTrader(db=object(), mode="simulation")
+
+    async def clients():
+        return Trading(), object()
+
+    monkeypatch.setattr(trader, "_clients", clients)
+
+    snapshot = await trader.get_account_snapshot()
+
+    assert snapshot["trade_suspended_by_user"] is True
+    assert snapshot["trading_blocked"] is True
 
 
 @pytest.mark.asyncio
@@ -224,3 +323,35 @@ async def test_alpaca_non_finite_position_valuation_fails_closed(monkeypatch):
 
     with pytest.raises(RuntimeError, match="refusing to assume an empty account"):
         await trader.get_positions()
+
+
+@pytest.mark.asyncio
+async def test_alpaca_short_position_has_negative_signed_quantity(monkeypatch):
+    from backend.services.execution.alpaca import AlpacaTrader
+
+    class Trading:
+        def get_all_positions(self):
+            return [
+                SimpleNamespace(
+                    symbol="NVDA",
+                    qty="2",
+                    side="short",
+                    avg_entry_price="100",
+                    current_price="95",
+                    market_value="190",
+                    unrealized_pl="10",
+                )
+            ]
+
+    trader = AlpacaTrader(db=object(), mode="simulation")
+
+    async def clients():
+        return Trading(), object()
+
+    monkeypatch.setattr(trader, "_clients", clients)
+
+    positions = await trader.get_positions()
+
+    assert positions["NVDA"]["quantity"] == 2.0
+    assert positions["NVDA"]["signed_quantity"] == -2.0
+    assert positions["NVDA"]["side"] == "short"
