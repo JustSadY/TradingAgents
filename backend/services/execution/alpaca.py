@@ -120,14 +120,29 @@ class AlpacaTrader(BaseTraderInterface):
                 filled_price=None,
                 filled_quantity=None,
                 message="Live Alpaca trading is disabled by server configuration.",
+                reason_code="live_trading_disabled",
             )
-        if request.quantity <= 0:
+
+        action = str(request.action or "").strip().upper()
+        if action not in {"BUY", "SELL"}:
             return OrderResult(
                 order_id="",
                 status="REJECTED",
                 filled_price=None,
                 filled_quantity=None,
-                message="Order quantity must be positive",
+                message="Order action must be BUY or SELL.",
+                reason_code="invalid_action",
+            )
+
+        quantity = safe_decimal(request.quantity)
+        if not quantity.is_finite() or quantity <= 0:
+            return OrderResult(
+                order_id="",
+                status="REJECTED",
+                filled_price=None,
+                filled_quantity=None,
+                message="Order quantity must be a positive finite number.",
+                reason_code="invalid_quantity",
             )
 
         submission_started = False
@@ -138,8 +153,8 @@ class AlpacaTrader(BaseTraderInterface):
             trading, _market = await self._clients()
             kwargs = {
                 "symbol": request.ticker.upper(),
-                "qty": float(request.quantity),
-                "side": OrderSide.BUY if request.action.upper() == "BUY" else OrderSide.SELL,
+                "qty": float(quantity),
+                "side": OrderSide.BUY if action == "BUY" else OrderSide.SELL,
                 "time_in_force": TimeInForce.DAY,
             }
             if request.stop_loss and request.take_profit:
