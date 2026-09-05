@@ -193,7 +193,12 @@ async def _allocation_snapshot(db, *, portfolio) -> dict | None:
     from backend.services.mock_trading_service import get_portfolio_with_live_prices
 
     try:
-        snapshot = await get_portfolio_with_live_prices(db, portfolio_id=portfolio.id, read_only=True)
+        snapshot = await get_portfolio_with_live_prices(
+            db,
+            portfolio_id=portfolio.id,
+            read_only=True,
+            release_before_price_io=True,
+        )
     except Exception as exc:  # noqa: BLE001 — target allocation must not use stale equity
         _logger.warning("Could not read portfolio equity for final allocation sizing: %s", exc)
         return None
@@ -299,7 +304,12 @@ async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, quantity, 
 
     if snapshot is None:
         try:
-            snapshot = await get_portfolio_with_live_prices(db, portfolio_id=portfolio.id, read_only=True)
+            snapshot = await get_portfolio_with_live_prices(
+                db,
+                portfolio_id=portfolio.id,
+                read_only=True,
+                release_before_price_io=True,
+            )
         except Exception as exc:  # noqa: BLE001 — risk data unavailable must not open exposure
             _logger.warning("Risk snapshot failed for %s; skipping new order: %s", ticker, exc)
             _record_skip("risk_snapshot_unavailable")
@@ -671,7 +681,12 @@ async def place_signal_order(
             else:
                 from backend.services.mock_trading_service import get_portfolio_with_live_prices
 
-                snapshot = await get_portfolio_with_live_prices(db, portfolio_id=portfolio.id, read_only=True)
+                snapshot = await get_portfolio_with_live_prices(
+                    db,
+                    portfolio_id=portfolio.id,
+                    read_only=True,
+                    release_before_price_io=True,
+                )
             current_equity = _safe_float(snapshot.get("total_value")) if isinstance(snapshot, dict) else None
             if current_equity is None:
                 raise ValueError("snapshot has no finite total_value")
@@ -931,8 +946,31 @@ async def place_signal_order(
     )
     result = await trader.place_order(request)
     if sys_broker == "alpaca":
-        await _persist_broker_order(db, portfolio=portfolio, request=request, result=result, side=position_side)
+        try:
+            await _persist_broker_order(db, portfolio=portfolio, request=request, result=result, side=position_side)
+        except Exception:
+            # The broker request already escaped PostgreSQL and cannot be undone.
+            # Never collapse an audit-write failure into a generic execution
+            # error/rejection: the operator must reconcile the broker account
+            # before another order can safely be attempted.
+            await db.rollback()
+            _logger.exception(
+                "Broker order returned but local audit persistence failed ticker=%s external_order_id=%s",
+                ticker,
+                result.order_id,
+            )
+            result.status = "RECONCILIATION_REQUIRED"
+            result.reason_code = "broker_audit_persist_failed"
+            result.message = (
+                "The broker order may be live, but its local audit record could not be persisted. "
+                "Reconcile the Alpaca account before retrying."
+            )
+            result.external_submission = True
+            return result
+
         # Refresh the local audit balances from the broker after submission when possible.
+        # AlpacaTrader releases/commits the audit transaction before this network
+        # request, making the order record durable even if refresh later fails.
         get_snapshot = getattr(trader, "get_account_snapshot", None)
         if callable(get_snapshot):
             refreshed = await get_snapshot()
