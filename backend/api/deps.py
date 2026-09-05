@@ -74,6 +74,12 @@ async def get_current_user(
     from backend.core.log_handler import current_user_id
 
     current_user_id.set(user.id)
+    # Authentication has fully materialized the User object and RLS context is
+    # stored in AsyncSession.info. End the authentication transaction so a
+    # handler whose first operation is network/LLM work does not inherit a
+    # pinned DB connection. The RLS after_begin hook reapplies the same logical
+    # context when the handler later opens its own transaction.
+    await db.commit()
     return user
 
 
@@ -100,6 +106,10 @@ def require_page(page_key: str):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access to page '{page_key}' is not permitted",
             )
+        # Non-admin permission checks open a fresh transaction after auth.
+        # Release it before entering the endpoint for the same connection-life
+        # reason as get_current_user above.
+        await db.commit()
         return current_user
 
     return _check
@@ -118,6 +128,7 @@ def require_any_page(*page_keys: str):
 
         allowed_pages = await list_allowed_page_keys(db, current_user.id)
         if allowed_pages.intersection(page_keys):
+            await db.commit()
             return current_user
 
         joined = ", ".join(page_keys)
