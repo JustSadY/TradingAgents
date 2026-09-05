@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+from decimal import Decimal, InvalidOperation
 
 from backend.core.config import is_live_trading_enabled
 from backend.core.database import AsyncSessionLocal
@@ -28,13 +29,28 @@ def _finite_float(value, *, field: str) -> float:
     return parsed
 
 
+def _broker_decimal(value) -> Decimal:
+    if value is None or value == "":
+        return Decimal("0")
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise ValueError("Alpaca returned an invalid decimal value") from exc
+    if not parsed.is_finite():
+        raise ValueError("Alpaca returned a non-finite decimal value")
+    return parsed
+
+
 def _validated_fill_details(raw_price, raw_quantity, *, requested_quantity):
     """Return safe broker fill values plus an inconsistency reason, if any."""
-    price = safe_decimal(raw_price)
-    quantity = safe_decimal(raw_quantity)
-    requested = safe_decimal(requested_quantity)
+    try:
+        price = _broker_decimal(raw_price)
+        quantity = _broker_decimal(raw_quantity)
+        requested = _broker_decimal(requested_quantity)
+    except ValueError:
+        return None, None, "broker_fill_details_invalid"
 
-    if not price.is_finite() or not quantity.is_finite() or price < 0 or quantity < 0:
+    if price < 0 or quantity < 0 or requested <= 0:
         return None, None, "broker_fill_details_invalid"
     if quantity > requested:
         return None, None, "broker_fill_details_invalid"
@@ -283,6 +299,7 @@ class AlpacaTrader(BaseTraderInterface):
         try:
             trading, _market = await self._clients()
             account = await asyncio.to_thread(trading.get_account)
+            trade_suspended = bool(getattr(account, "trade_suspended_by_user", False))
             return {
                 "cash": _finite_float(getattr(account, "cash", 0.0), field="account cash"),
                 "buying_power": _finite_float(getattr(account, "buying_power", 0.0), field="account buying power"),
@@ -291,8 +308,10 @@ class AlpacaTrader(BaseTraderInterface):
                     getattr(account, "portfolio_value", 0.0), field="account portfolio value"
                 ),
                 "status": _value(getattr(account, "status", "")),
-                "trading_blocked": bool(getattr(account, "trading_blocked", False)),
+                "trading_blocked": bool(getattr(account, "trading_blocked", False)) or trade_suspended,
                 "account_blocked": bool(getattr(account, "account_blocked", False)),
+                "trade_suspended_by_user": trade_suspended,
+                "shorting_enabled": bool(getattr(account, "shorting_enabled", False)),
             }
         except Exception as exc:
             _logger.warning("alpaca-py account request failed: %s", exc)
@@ -333,7 +352,7 @@ class AlpacaTrader(BaseTraderInterface):
                 result[symbol] = {
                     "ticker": symbol,
                     "quantity": quantity,
-                    "signed_quantity": qty,
+                    "signed_quantity": -quantity if side == "short" else quantity,
                     "side": side,
                     "avg_price": avg_price,
                     "current_price": current_price,
