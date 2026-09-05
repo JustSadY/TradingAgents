@@ -284,7 +284,7 @@ class AlpacaTrader(BaseTraderInterface):
             return result
         except Exception as exc:
             _logger.warning("alpaca-py positions request failed: %s", exc)
-            return {}
+            raise RuntimeError("Alpaca positions are unavailable; refusing to assume an empty account.") from exc
 
     async def close(self) -> None:
         if self._is_local_db and self._db is not None:
