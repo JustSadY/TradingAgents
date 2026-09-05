@@ -27,7 +27,7 @@ const analysis = {
 
 
     'analysis.rerun.title': 'Existing Analysis Found',
-    'analysis.rerun.body': 'An analysis for {ticker} on {date} date already exists. A new analysis will consume more API credits.',
+    'analysis.rerun.body': 'An analysis for {ticker} on {date} already exists. A new analysis will consume more API credits.',
 
 
     'analysis.log.title': 'Live Log',
