@@ -119,9 +119,15 @@ async def _prepare_alert_dispatch_identity(
             .all()
         )
         current = next((row for row in rows if row.task_id == task_id), None)
-        canonical = rows[0] if rows else current
+        canonical = rows[0] if rows else None
 
-        if canonical is not None and current is not None and canonical.id != current.id:
+        if current is None:
+            # Alert dispatch is allowed only for the exact durable row that was
+            # staged immediately before this call. Never enqueue a deterministic
+            # job merely because another matching historical/canonical row
+            # exists, and never launch work with no AnalysisResult lease at all.
+            should_dispatch = False
+        elif canonical is not None and canonical.id != current.id:
             # The outbox is retrying work that already has a durable analysis
             # row. Remove only this newly staged duplicate; the canonical job
             # remains untouched regardless of whether it is queued, running,
@@ -129,7 +135,7 @@ async def _prepare_alert_dispatch_identity(
             await db.delete(current)
             await db.commit()
             should_dispatch = False
-        elif current is not None:
+        else:
             current.task_id = stable_task_id
             try:
                 await db.commit()
@@ -148,7 +154,7 @@ async def _prepare_alert_dispatch_identity(
     await discard_queued_task(task_id, user.id)
     if not should_dispatch:
         _logger.info(
-            "Skipping duplicate alert analysis dispatch user=%s ticker=%s trade_date=%s",
+            "Skipping duplicate/orphan alert analysis dispatch user=%s ticker=%s trade_date=%s",
             user.id,
             ticker,
             trade_date,
