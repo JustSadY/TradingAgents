@@ -14,6 +14,9 @@ describe('normalizedOrderOutcome', () => {
     ['filled', 'filled'],
     ['executed', 'filled'],
     ['success', 'filled'],
+    ['partially_filled', 'partially_filled'],
+    ['partially-filled', 'partially_filled'],
+    ['partially filled', 'partially_filled'],
     ['skipped', 'skipped'],
     ['no_trade', 'skipped'],
     ['no-trade', 'skipped'],
@@ -65,6 +68,32 @@ describe('readOrderResult', () => {
     expect(result?.outcome).toBe('reconciliation_required')
     expect(result?.reason).toBe('broker_submission_uncertain')
     expect(result?.message).toBe('Reconcile the broker account before retrying.')
+  })
+
+  it('upgrades a terminal broker cancellation when some quantity already filled', () => {
+    const result = readOrderResult({
+      outcome: 'rejected',
+      broker_status: 'CANCELED',
+      ticker: 'NVDA',
+      filled_quantity: 2,
+      filled_price: 100,
+    }, '')
+
+    expect(result?.outcome).toBe('partially_filled')
+    expect(result?.quantity).toBe(2)
+    expect(result?.price).toBe(100)
+  })
+
+  it('keeps a zero-fill broker cancellation rejected', () => {
+    const result = readOrderResult({
+      outcome: 'rejected',
+      broker_status: 'CANCELED',
+      ticker: 'NVDA',
+      filled_quantity: 0,
+    }, '')
+
+    expect(result?.outcome).toBe('rejected')
+    expect(result?.quantity).toBeUndefined()
   })
 
   it('falls back to the filled_* fields when the plain ones are absent', () => {
@@ -146,6 +175,7 @@ describe('orderResultLogLine', () => {
 
   it.each([
     ['filled', '✓'],
+    ['partially_filled', '⚠'],
     ['skipped', '⚠'],
     ['reconciliation_required', '⚠'],
     ['rejected', '❌'],
