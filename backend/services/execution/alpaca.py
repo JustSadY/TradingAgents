@@ -29,6 +29,7 @@ class AlpacaTrader(BaseTraderInterface):
         initial_capital: float = 100_000.0,
         db=None,
         mode: str = "simulation",
+        release_db_before_network: bool = False,
     ):
         if db is None:
             db = AsyncSessionLocal()
@@ -39,6 +40,7 @@ class AlpacaTrader(BaseTraderInterface):
         self._portfolio_id = portfolio_id
         self._initial_capital = initial_capital
         self._mode = mode
+        self._release_db_before_network = release_db_before_network
 
     @property
     def mode(self) -> str:
@@ -65,6 +67,15 @@ class AlpacaTrader(BaseTraderInterface):
         secret = get_user_api_key(owner, "alpaca_secret", fernet)
         if not key or not secret:
             raise ValueError("Alpaca API credentials missing or invalid. Set them in Owner Profile.")
+
+        if self._release_db_before_network:
+            # Every public broker method calls _clients() immediately before
+            # entering alpaca-py network I/O. End whatever short DB phase was
+            # needed to load credentials/config/audit state so a slow broker
+            # request never pins a SQL connection or row lock. Alpaca side
+            # effects cannot be transactionally rolled back with PostgreSQL;
+            # making the DB boundary explicit is safer than pretending they can.
+            await self._db.commit()
         return key, secret
 
     async def _clients(self):
