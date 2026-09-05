@@ -31,9 +31,9 @@ const ACTION_BADGES: Record<string, string> = {
   SELL: 'bg-rose-500/10 text-rose-400 border border-rose-500/15',
 }
 
-function displayOrderStatus(order: OrderRead): { label: string; badgeKey: string } {
+function displayOrderStatus(order: OrderRead, partialFillLabel: string): { label: string; badgeKey: string } {
   if ((order.status === 'CANCELED' || order.status === 'EXPIRED') && order.quantity_filled > 0) {
-    return { label: `${order.status} · PARTIAL FILL`, badgeKey: 'PARTIALLY_FILLED' }
+    return { label: `${order.status} · ${partialFillLabel}`, badgeKey: 'PARTIALLY_FILLED' }
   }
   return { label: order.status, badgeKey: order.status }
 }
@@ -256,7 +256,7 @@ export default function Orders() {
       align: 'center',
       headerAlign: 'center',
       renderCell: ({ row }) => {
-        const status = displayOrderStatus(row)
+        const status = displayOrderStatus(row, t('orders.status.partial_fill'))
         return <span className={`inline-flex items-center text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${STATUS_BADGES[status.badgeKey] || 'text-slate-300'}`}>{status.label}</span>
       },
     },
