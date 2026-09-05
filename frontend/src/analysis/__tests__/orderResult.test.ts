@@ -20,6 +20,9 @@ describe('normalizedOrderOutcome', () => {
     ['rejected', 'rejected'],
     ['blocked', 'rejected'],
     ['denied', 'rejected'],
+    ['reconciliation_required', 'reconciliation_required'],
+    ['reconciliation-required', 'reconciliation_required'],
+    ['reconciliation required', 'reconciliation_required'],
     ['error', 'error'],
     ['failed', 'error'],
     ['  FILLED  ', 'filled'],
@@ -48,6 +51,20 @@ describe('readOrderResult', () => {
 
   it('accepts the legacy status field, so a rolling deploy is harmless', () => {
     expect(readOrderResult({ status: 'no_trade', ticker: 'AAPL' }, '')?.outcome).toBe('skipped')
+  })
+
+  it('upgrades an older rejected outcome when broker status requires reconciliation', () => {
+    const result = readOrderResult({
+      outcome: 'rejected',
+      broker_status: 'RECONCILIATION_REQUIRED',
+      ticker: 'NVDA',
+      reason_code: 'broker_submission_uncertain',
+      message: 'Reconcile the broker account before retrying.',
+    }, '')
+
+    expect(result?.outcome).toBe('reconciliation_required')
+    expect(result?.reason).toBe('broker_submission_uncertain')
+    expect(result?.message).toBe('Reconcile the broker account before retrying.')
   })
 
   it('falls back to the filled_* fields when the plain ones are absent', () => {
@@ -130,6 +147,7 @@ describe('orderResultLogLine', () => {
   it.each([
     ['filled', '✓'],
     ['skipped', '⚠'],
+    ['reconciliation_required', '⚠'],
     ['rejected', '❌'],
     ['error', '❌'],
   ] as const)('marks %s with %s', (outcome, marker) => {
