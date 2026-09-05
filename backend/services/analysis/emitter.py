@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from collections import Counter
 from typing import Any
 
@@ -122,9 +123,10 @@ class AnalysisEmitter:
             if value is None:
                 return None
             try:
-                return float(value)
+                parsed = float(value)
             except (TypeError, ValueError):
                 return None
+            return parsed if math.isfinite(parsed) else None
 
         filled_quantity_number = _number(filled_quantity)
         normalized_broker_status = (broker_status or "").strip().upper()
