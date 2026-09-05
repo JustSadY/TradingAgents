@@ -87,7 +87,7 @@ describe('Orders', () => {
     expect(screen.getByText('Status')).toBeInTheDocument()
   })
 
-  it('surfaces reconciliation state and broker order id', async () => {
+  it('surfaces reconciliation state and broker reference', async () => {
     mocks.ordersQuery.data = [{
       ...mockOrder,
       broker: 'alpaca',
@@ -95,14 +95,14 @@ describe('Orders', () => {
       quantity_filled: 0,
       price_per_share: null,
       total_value: null,
-      external_order_id: 'alpaca-reconcile-123',
+      external_order_id: 'client:ta-reconcile-123',
     }]
 
     renderPage()
 
     expect(await screen.findByText('RECONCILIATION_REQUIRED')).toBeInTheDocument()
-    expect(screen.getByText('alpaca-reconcile-123')).toBeInTheDocument()
-    expect(screen.getByText('Broker Order ID')).toBeInTheDocument()
+    expect(screen.getByText('client:ta-reconcile-123')).toBeInTheDocument()
+    expect(screen.getByText('Broker Reference')).toBeInTheDocument()
   })
 
   it('does not hide a partial fill behind a terminal cancellation', async () => {
