@@ -17,6 +17,7 @@ export type AnalysisOrderResult = {
   ticker: string
   quantity?: number
   price?: number
+  orderId?: string
   reason?: string
   message?: string
   analysisId?: number
@@ -88,6 +89,7 @@ export function readOrderResult(value: unknown, fallbackTicker: string): Analysi
   const rawTicker = typeof value.ticker === 'string' ? value.ticker.trim().toUpperCase() : ''
   const ticker = rawTicker || fallbackTicker.trim().toUpperCase()
   if (!ticker) return null
+  const orderId = typeof value.order_id === 'string' && value.order_id.trim() ? value.order_id.trim() : undefined
 
   return {
     outcome,
@@ -99,6 +101,7 @@ export function readOrderResult(value: unknown, fallbackTicker: string): Analysi
       : isFiniteNumeric(value.filled_price) && value.filled_price >= 0
         ? value.filled_price
         : undefined,
+    orderId,
     reason: typeof value.reason === 'string' && value.reason.trim()
       ? value.reason.trim()
       : typeof value.reason_code === 'string' && value.reason_code.trim()
@@ -113,7 +116,8 @@ export function readOrderResult(value: unknown, fallbackTicker: string): Analysi
 export function sameOrderResult(left: AnalysisOrderResult | null, right: AnalysisOrderResult): boolean {
   return !!left && left.outcome === right.outcome && left.action === right.action &&
     left.ticker === right.ticker && left.quantity === right.quantity && left.price === right.price &&
-    left.reason === right.reason && left.message === right.message && left.analysisId === right.analysisId
+    left.orderId === right.orderId && left.reason === right.reason && left.message === right.message &&
+    left.analysisId === right.analysisId
 }
 
 export function orderActionLabel(action: AnalysisOrderResult['action'], t: (key: string) => string): string | null {
@@ -138,6 +142,7 @@ export function orderResultLogLine(result: AnalysisOrderResult, t: (key: string)
     `${marker} ${t('analysis.order.log_prefix')}`,
     t(`analysis.order.outcome.${result.outcome}`),
     details.join(' '),
+    result.orderId ? `${t('orders.col_broker_order_id')}: ${result.orderId}` : null,
     reason,
   ].filter((part): part is string => !!part).join(' — ')
 }
