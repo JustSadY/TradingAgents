@@ -477,10 +477,19 @@ def _performance_start_date(portfolio: Portfolio, now: datetime | None = None) -
 
 async def get_performance(db: AsyncSession, user=None) -> dict:
     portfolio = await get_or_create_sim_portfolio(db, user=user)
-    portfolio_data = await get_portfolio_with_live_prices(db, user=user, portfolio_id=portfolio.id, read_only=True)
+    portfolio_data = await get_portfolio_with_live_prices(
+        db,
+        user=user,
+        portfolio_id=portfolio.id,
+        read_only=True,
+        release_before_price_io=True,
+    )
 
     from backend.services.market_data_service import get_benchmark_return
 
+    # Empty portfolios have no price batch, so explicitly release any lazy
+    # get-or-create/read transaction before the independent benchmark request.
+    await db.commit()
     spy_return_pct = await get_benchmark_return("SPY", start_date=_performance_start_date(portfolio))
 
     return {
