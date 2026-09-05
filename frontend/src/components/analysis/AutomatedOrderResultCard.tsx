@@ -8,7 +8,7 @@ export function AutomatedOrderResultCard({ result }: { result: AnalysisOrderResu
   const outcome = result?.outcome
   const presentation = outcome === 'filled'
     ? { Icon: CheckCircle, panel: 'border-emerald-500/25 bg-emerald-500/[0.06]', icon: 'text-emerald-400', text: 'text-emerald-200' }
-    : outcome === 'skipped'
+    : outcome === 'skipped' || outcome === 'reconciliation_required'
       ? { Icon: AlertTriangle, panel: 'border-amber-500/25 bg-amber-500/[0.06]', icon: 'text-amber-400', text: 'text-amber-100' }
       : outcome
         ? { Icon: AlertCircle, panel: 'border-rose-500/25 bg-rose-500/[0.06]', icon: 'text-rose-400', text: 'text-rose-100' }
