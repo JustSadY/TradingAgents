@@ -660,6 +660,13 @@ async def place_signal_order(
             message="Short selling is disabled, so this new short order was not sent.",
             include_skip_result=include_skip_result,
         )
+    if sys_broker == "alpaca" and intent == "open_short" and not bool((broker_account or {}).get("shorting_enabled")):
+        _logger.info("Alpaca shorting is disabled for the broker account; skipping new short signal for %s", ticker)
+        return _skipped_order(
+            reason_code="broker_shorting_disabled",
+            message="The broker account is not enabled for short selling; no order was sent.",
+            include_skip_result=include_skip_result,
+        )
     opening_exposure = intent in {"open_long", "open_short"}
     if execution_action == "reduce_only" and opening_exposure:
         return _skipped_order(
@@ -719,8 +726,8 @@ async def place_signal_order(
             initial_capital=float(safe_decimal(portfolio.initial_capital)),
             db=db,
         )
-    price = float(safe_decimal(await trader.get_current_price(ticker)))
-    if price <= 0:
+    price = _safe_float(await trader.get_current_price(ticker))
+    if price is None or price <= 0:
         _logger.warning("No price available for %s; skipping order execution", ticker)
         return _skipped_order(
             reason_code="price_unavailable",
