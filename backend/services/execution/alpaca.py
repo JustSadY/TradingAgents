@@ -402,7 +402,9 @@ class AlpacaTrader(BaseTraderInterface):
             account = await asyncio.to_thread(trading.get_account)
             account_status = _value(getattr(account, "status", "")).upper()
             trade_suspended = bool(getattr(account, "trade_suspended_by_user", False))
-            status_allows_trading = account_status in {"ACTIVE", "PAPER_ONLY"}
+            status_allows_trading = account_status == "ACTIVE" or (
+                self._mode != "live" and account_status == "PAPER_ONLY"
+            )
             return {
                 "cash": _finite_float(getattr(account, "cash", 0.0), field="account cash"),
                 "buying_power": _finite_float(getattr(account, "buying_power", 0.0), field="account buying power"),
