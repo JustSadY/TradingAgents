@@ -9,7 +9,7 @@ import { isRecord } from '../utils/isRecord'
  * is the boundary where that event becomes something the UI can render.
  */
 
-export type OrderOutcome = 'filled' | 'skipped' | 'rejected' | 'error'
+export type OrderOutcome = 'filled' | 'skipped' | 'rejected' | 'error' | 'reconciliation_required'
 
 export type AnalysisOrderResult = {
   outcome: OrderOutcome
@@ -41,6 +41,10 @@ export function normalizedOrderOutcome(value: unknown): OrderOutcome | null {
     case 'blocked':
     case 'denied':
       return 'rejected'
+    case 'reconciliation_required':
+    case 'reconciliation-required':
+    case 'reconciliation required':
+      return 'reconciliation_required'
     case 'error':
     case 'failed':
       return 'error'
@@ -54,10 +58,17 @@ export function normalizedOrderOutcome(value: unknown): OrderOutcome | null {
  * intentionally emits a small, transport-safe payload, but old workers used
  * `status` rather than `outcome`; accepting both makes reconnect/replay and
  * rolling deployment harmless without treating arbitrary payloads as fills.
+ *
+ * Rolling deployments may also pair an older emitter (outcome=rejected) with
+ * a newer execution service that already sends broker_status. Preserve the
+ * stronger broker reconciliation state whenever that detail is present.
  */
 export function readOrderResult(value: unknown, fallbackTicker: string): AnalysisOrderResult | null {
   if (!isRecord(value)) return null
-  const outcome = normalizedOrderOutcome(value.outcome ?? value.status)
+  const brokerStatus = typeof value.broker_status === 'string' ? value.broker_status.trim().toUpperCase() : ''
+  const outcome = brokerStatus === 'RECONCILIATION_REQUIRED'
+    ? 'reconciliation_required'
+    : normalizedOrderOutcome(value.outcome ?? value.status)
   if (!outcome) return null
 
   const rawAction = typeof value.action === 'string' ? value.action.trim().toUpperCase() : ''
@@ -103,7 +114,11 @@ export function orderActionLabel(action: AnalysisOrderResult['action'], t: (key:
 }
 
 export function orderResultLogLine(result: AnalysisOrderResult, t: (key: string) => string): string {
-  const marker = result.outcome === 'filled' ? '✓' : result.outcome === 'skipped' ? '⚠' : '❌'
+  const marker = result.outcome === 'filled'
+    ? '✓'
+    : result.outcome === 'skipped' || result.outcome === 'reconciliation_required'
+      ? '⚠'
+      : '❌'
   const details = [
     orderActionLabel(result.action, t),
     result.quantity !== undefined ? String(result.quantity) : null,
