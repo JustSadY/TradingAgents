@@ -32,7 +32,12 @@ _REBALANCE_SECTOR_CONCURRENCY = 6
 async def get_rebalance_suggestions(db: AsyncSession, user: User) -> dict:
     from backend.services.mock_trading_service import get_portfolio_with_live_prices
 
-    portfolio = await get_portfolio_with_live_prices(db, user=user, read_only=True)
+    portfolio = await get_portfolio_with_live_prices(
+        db,
+        user=user,
+        read_only=True,
+        release_before_price_io=True,
+    )
     holdings = portfolio.get("holdings") or []
 
     if not holdings:
