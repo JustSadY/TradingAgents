@@ -710,6 +710,7 @@ async def _tool_confirm_pending_action(
                     action=payload["action"],
                     quantity=float(payload["quantity"]),
                     user=user,
+                    release_before_price_io=True,
                 )
                 await action_db.commit()
                 filled = float(result.get("quantity", payload["quantity"]))
