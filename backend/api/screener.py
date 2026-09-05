@@ -35,14 +35,8 @@ async def scan(
     """Score a ticker universe and return the strongest candidates."""
     return ScreenResponse(results=await run_screen(universe=body.tickers, top_n=body.top_n))
 
-@router.post("/scan-watchlist", response_model=ScreenResponse, responses={400: {"description": "Watchlist is empty"}})
-@limiter.limit("10/minute")
-async def scan_watchlist(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_page("screener")),
-):
-    """Score the caller's saved watchlist tickers."""
+
+async def _scan_saved_watchlist(db: AsyncSession, current_user: User) -> dict:
     from backend.services.settings_service import get_or_create_settings
 
     settings = await get_or_create_settings(db, current_user)
@@ -54,3 +48,14 @@ async def scan_watchlist(
     # from the ORM row, so release the request transaction first.
     await db.commit()
     return {"results": await run_screen(universe=watchlist, top_n=len(watchlist))}
+
+
+@router.post("/scan-watchlist", response_model=ScreenResponse, responses={400: {"description": "Watchlist is empty"}})
+@limiter.limit("10/minute")
+async def scan_watchlist(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_page("screener")),
+):
+    """Score the caller's saved watchlist tickers."""
+    return await _scan_saved_watchlist(db, current_user)
