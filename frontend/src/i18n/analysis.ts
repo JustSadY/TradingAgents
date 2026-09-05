@@ -27,7 +27,7 @@ const analysis = {
 
 
     'analysis.rerun.title': 'Existing Analysis Found',
-    'analysis.rerun.body': 'An analysis for {ticker} on {date} already exists. A new analysis will consume more API credits.',
+    'analysis.rerun.body': 'An analysis for {ticker} on {date} date already exists. A new analysis will consume more API credits.',
 
 
     'analysis.log.title': 'Live Log',
@@ -70,6 +70,7 @@ const analysis = {
     'analysis.order.pending_description': 'No execution outcome has been received. Check Orders before assuming an order was placed.',
     'analysis.order.log_prefix': 'Order result',
     'analysis.order.outcome.filled': 'Order filled',
+    'analysis.order.outcome.partially_filled': 'Order partially filled',
     'analysis.order.outcome.skipped': 'Order skipped',
     'analysis.order.outcome.rejected': 'Order rejected',
     'analysis.order.outcome.reconciliation_required': 'Broker reconciliation required',
@@ -309,6 +310,7 @@ const analysis = {
     'analysis.order.pending_description': 'İşlem sonucu henüz alınmadı. Bir emrin gerçekleştiğini varsaymadan önce Emir Geçmişi’ni kontrol edin.',
     'analysis.order.log_prefix': 'Emir sonucu',
     'analysis.order.outcome.filled': 'Emir gerçekleşti',
+    'analysis.order.outcome.partially_filled': 'Emir kısmen gerçekleşti',
     'analysis.order.outcome.skipped': 'Emir atlandı',
     'analysis.order.outcome.rejected': 'Emir reddedildi',
     'analysis.order.outcome.reconciliation_required': 'Broker uzlaştırması gerekli',
