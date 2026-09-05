@@ -154,6 +154,10 @@ async def apply_settings_update(
     if webhook_url:
         from backend.services.notification_service import resolve_webhook_target
 
+        # Settings/permission reads are complete and fields have not been
+        # mutated yet. DNS/SSRF validation can block on network resolution, so
+        # release the DB connection before it starts.
+        await db.commit()
         await resolve_webhook_target(webhook_url)
 
     for field, value in changed_fields.items():
@@ -215,6 +219,9 @@ async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
     if "webhook_url" in changed_field_names and fields.get("webhook_url"):
         from backend.services.notification_service import resolve_webhook_target
 
+        # Same boundary as direct settings updates: no preset mutation has been
+        # applied yet, so release DB state before DNS/SSRF validation.
+        await db.commit()
         await resolve_webhook_target(fields["webhook_url"])
 
     for key in changed_field_names:
