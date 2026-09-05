@@ -34,4 +34,14 @@ def get_trader(
             mode=mode,
             release_db_before_network=True,
         )
+    if cls is SimulationTrader:
+        # The orchestrator's pre-order phase is read-only. Let quote/snapshot
+        # lookups release that transaction, while direct SimulationTrader
+        # construction retains the historical manual transaction behaviour.
+        return cls(
+            portfolio_id=portfolio_id,
+            initial_capital=initial_capital,
+            db=db,
+            release_db_before_network=True,
+        )
     return cls(portfolio_id=portfolio_id, initial_capital=initial_capital, db=db)
