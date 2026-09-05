@@ -98,7 +98,7 @@ async def chat(db: AsyncSession, user: User, message: str) -> dict:
         _logger.warning("Assistant client initialization failed: %s", e)
         raise HTTPException(status_code=400, detail="Assistant model could not be initialized.") from e
 
-    final_content = await _run_tool_loop(llm_with_tools, lc_messages, tool_map)
+    final_content = await _run_tool_loop(db, llm_with_tools, lc_messages, tool_map)
 
     await assistant_repo.add_message(db, user.id, "user", message)
     assistant_msg = await assistant_repo.add_message(db, user.id, "assistant", final_content)
@@ -130,12 +130,17 @@ async def _prepare_lc_messages(db: AsyncSession, user: User, message: str, setti
     lc_messages.append(HumanMessage(content=message))
     return lc_messages
 
-async def _run_tool_loop(llm_with_tools, lc_messages: list, tool_map: dict) -> str:
+async def _run_tool_loop(db: AsyncSession, llm_with_tools, lc_messages: list, tool_map: dict) -> str:
     from langchain_core.messages import ToolMessage
 
     action_tool_used = False
     action_tools = {"run_stock_analysis", "create_price_alert", "place_paper_order", "confirm_pending_action"}
     for _ in range(_MAX_TOOL_LOOP):
+        # Initial settings/history/runtime reads and any DB-backed tool from the
+        # previous round are complete at this point. Never pin the request's
+        # pool connection while an LLM call is in flight. PostgreSQL RLS context
+        # is session-local and is reapplied automatically on the next transaction.
+        await db.commit()
         try:
             response = await llm_with_tools.ainvoke(lc_messages)
         except Exception as e:
@@ -284,21 +289,33 @@ async def _tool_get_portfolio_summary(db: AsyncSession, user: User, allowed_page
         if not portfolio:
             return "No portfolio found. The user has not started paper trading yet."
 
-        lines = [
-            f"Cash available: ${float(portfolio.cash_available):,.2f}",
-            f"Total balance: ${float(portfolio.current_balance):,.2f}",
+        cash_available = float(portfolio.cash_available)
+        current_balance = float(portfolio.current_balance)
+        holdings = [
+            {
+                "ticker": h.ticker,
+                "quantity": float(h.quantity),
+                "avg_buy_price": float(h.avg_buy_price),
+                "unrealized_pnl": float(h.unrealized_pnl),
+            }
+            for h in portfolio.holdings
         ]
-        if portfolio.holdings:
-            tickers = [h.ticker for h in portfolio.holdings]
+        lines = [
+            f"Cash available: ${cash_available:,.2f}",
+            f"Total balance: ${current_balance:,.2f}",
+        ]
+        if holdings:
+            tickers = [h["ticker"] for h in holdings]
+            await db.commit()
             prices = await get_live_prices_batch(tickers)
-            lines.append(f"\nHoldings ({len(portfolio.holdings)}):")
-            for h in portfolio.holdings:
-                price = prices.get(h.ticker)
+            lines.append(f"\nHoldings ({len(holdings)}):")
+            for h in holdings:
+                price = prices.get(h["ticker"])
                 price_str = f"${price:,.2f}" if price else "N/A"
-                pnl = float(h.unrealized_pnl)
+                pnl = h["unrealized_pnl"]
                 pnl_str = f"+${pnl:,.2f}" if pnl >= 0 else f"-${abs(pnl):,.2f}"
                 lines.append(
-                    f"  {h.ticker}: {float(h.quantity):.4f} shares @ avg ${float(h.avg_buy_price):,.2f} | "
+                    f"  {h['ticker']}: {h['quantity']:.4f} shares @ avg ${h['avg_buy_price']:,.2f} | "
                     f"current {price_str} | P&L {pnl_str}"
                 )
         else:
@@ -413,9 +430,10 @@ async def _tool_get_watchlist(db: AsyncSession, user: User, allowed_pages: set[s
         from backend.services.settings_service import get_or_create_settings as _get_settings
 
         s = await _get_settings(db, user)
-        tickers = s.watchlist if isinstance(s.watchlist, list) else []
+        tickers = list(s.watchlist) if isinstance(s.watchlist, list) else []
         if not tickers:
             return "Watchlist is empty."
+        await db.commit()
         prices = await get_live_prices_batch(tickers)
         lines = [f"  {t}: ${prices[t]:,.2f}" if t in prices else f"  {t}: N/A" for t in tickers]
         return "Watchlist:\n" + "\n".join(lines)
