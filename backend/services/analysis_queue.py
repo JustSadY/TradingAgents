@@ -20,9 +20,12 @@ _logger = logging.getLogger(__name__)
 
 _arq_pool = None
 _INLINE_TASKS: set[asyncio.Task] = set()
+_INLINE_ANALYSIS_TASKS: dict[str, asyncio.Task] = {}
+
 
 def queue_mode() -> str:
     return get_settings().ANALYSIS_QUEUE_MODE.strip().lower()
+
 
 async def get_arq_pool():
     global _arq_pool
@@ -33,6 +36,7 @@ async def get_arq_pool():
         _arq_pool = await create_pool(RedisSettings.from_dsn(get_settings().REDIS_URL))
     return _arq_pool
 
+
 async def close_arq_pool() -> None:
     global _arq_pool
     if _arq_pool is not None:
@@ -40,6 +44,13 @@ async def close_arq_pool() -> None:
 
         await close_pool_or_client(_arq_pool, _logger, "arq pool")
         _arq_pool = None
+
+
+def _forget_inline_analysis(task_id: str, task: asyncio.Task) -> None:
+    _INLINE_TASKS.discard(task)
+    if _INLINE_ANALYSIS_TASKS.get(task_id) is task:
+        _INLINE_ANALYSIS_TASKS.pop(task_id, None)
+
 
 async def dispatch_analysis(
     background_tasks,
@@ -54,22 +65,42 @@ async def dispatch_analysis(
 ) -> None:
     if queue_mode() == "worker":
         pool = await get_arq_pool()
+        # arq de-duplicates jobs by _job_id. The analysis task id is already
+        # globally unique and durable in AnalysisResult, so use the same value
+        # for queue identity as well. A retry may safely call dispatch again
+        # without creating a second worker execution for the same analysis.
         await pool.enqueue_job(
-            "run_analysis_job", ticker, trade_date, asset_type, user.id if user else None, task_id, triggered_by
+            "run_analysis_job",
+            ticker,
+            trade_date,
+            asset_type,
+            user.id if user else None,
+            task_id,
+            triggered_by,
+            _job_id=task_id,
         )
         return
     from backend.services.analysis_service import run_analysis_task
 
     if background_tasks is not None:
+        # FastAPI BackgroundTasks does not expose a durable task handle. Request
+        # handlers generate a fresh task_id per call, so duplicate suppression
+        # is needed only for direct inline dispatch where retries can reuse one.
         background_tasks.add_task(
             run_analysis_task, ticker, trade_date, asset_type, settings, task_id, user, triggered_by
         )
     else:
+        existing = _INLINE_ANALYSIS_TASKS.get(task_id)
+        if existing is not None and not existing.done():
+            _logger.info("Skipping duplicate inline analysis dispatch task=%s", task_id)
+            return
         task = asyncio.create_task(
             run_analysis_task(ticker, trade_date, asset_type, settings, task_id, user, triggered_by)
         )
         _INLINE_TASKS.add(task)
-        task.add_done_callback(_INLINE_TASKS.discard)
+        _INLINE_ANALYSIS_TASKS[task_id] = task
+        task.add_done_callback(lambda done, tid=task_id: _forget_inline_analysis(tid, done))
+
 
 async def dispatch_portfolio_analysis(
     background_tasks,
