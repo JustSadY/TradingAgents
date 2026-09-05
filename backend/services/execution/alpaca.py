@@ -130,6 +130,7 @@ class AlpacaTrader(BaseTraderInterface):
                 message="Order quantity must be positive",
             )
 
+        submission_started = False
         try:
             from alpaca.trading.enums import OrderClass, OrderSide, TimeInForce
             from alpaca.trading.requests import MarketOrderRequest, StopLossRequest, TakeProfitRequest
@@ -152,6 +153,11 @@ class AlpacaTrader(BaseTraderInterface):
                 if request.take_profit:
                     kwargs["take_profit"] = TakeProfitRequest(limit_price=float(request.take_profit))
 
+            # From this point onward the broker may have accepted the order even
+            # if the client later sees a timeout/transport exception. Treat every
+            # post-submit failure as reconciliation-required instead of falsely
+            # reporting a safe local rejection.
+            submission_started = True
             order = await asyncio.to_thread(trading.submit_order, MarketOrderRequest(**kwargs))
             order_id = str(getattr(order, "id", "") or "")
             status = _value(getattr(order, "status", "UNKNOWN")).upper()
@@ -187,15 +193,23 @@ class AlpacaTrader(BaseTraderInterface):
                 filled_price=safe_decimal(filled_price),
                 filled_quantity=safe_decimal(filled_qty),
                 message=f"Alpaca order status: {status}",
+                external_submission=True,
             )
         except Exception:
             _logger.exception("alpaca-py order placement failed")
+            status = "RECONCILIATION_REQUIRED" if submission_started else "REJECTED"
             return OrderResult(
                 order_id="",
-                status="REJECTED",
+                status=status,
                 filled_price=None,
                 filled_quantity=None,
-                message="Broker order request failed. Review server logs and reconcile the broker account.",
+                message=(
+                    "Broker submission outcome is uncertain; reconcile the Alpaca account before retrying."
+                    if submission_started
+                    else "Broker order request failed before submission. Review server logs."
+                ),
+                reason_code="broker_submission_uncertain" if submission_started else "broker_request_failed",
+                external_submission=submission_started,
             )
 
     async def cancel_order(self, order_id: str) -> bool:
