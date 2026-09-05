@@ -185,6 +185,9 @@ class AlpacaTrader(BaseTraderInterface):
             )
 
         submission_started = False
+        known_order_id = ""
+        known_filled_price = None
+        known_filled_qty = None
         try:
             from alpaca.trading.enums import OrderClass, OrderSide, TimeInForce
             from alpaca.trading.requests import MarketOrderRequest, StopLossRequest, TakeProfitRequest
@@ -215,9 +218,12 @@ class AlpacaTrader(BaseTraderInterface):
             submission_started = True
             order = await asyncio.to_thread(trading.submit_order, broker_request)
             order_id = str(getattr(order, "id", "") or "")
+            known_order_id = order_id
             status = _value(getattr(order, "status", "UNKNOWN")).upper()
             filled_price = getattr(order, "filled_avg_price", None)
             filled_qty = getattr(order, "filled_qty", None)
+            known_filled_price = filled_price
+            known_filled_qty = filled_qty
 
             for _ in range(20):
                 if status in _TERMINAL:
@@ -227,6 +233,8 @@ class AlpacaTrader(BaseTraderInterface):
                 status = _value(getattr(order, "status", status)).upper()
                 filled_price = getattr(order, "filled_avg_price", filled_price)
                 filled_qty = getattr(order, "filled_qty", filled_qty)
+                known_filled_price = filled_price
+                known_filled_qty = filled_qty
 
             if status not in _TERMINAL:
                 try:
@@ -238,6 +246,8 @@ class AlpacaTrader(BaseTraderInterface):
                 status = _value(getattr(order, "status", status)).upper()
                 filled_price = getattr(order, "filled_avg_price", filled_price)
                 filled_qty = getattr(order, "filled_qty", filled_qty)
+                known_filled_price = filled_price
+                known_filled_qty = filled_qty
 
             safe_filled_price, safe_filled_qty, fill_reason = _validated_fill_details(
                 filled_price,
@@ -270,11 +280,16 @@ class AlpacaTrader(BaseTraderInterface):
         except Exception:
             _logger.exception("alpaca-py order placement failed")
             status = "RECONCILIATION_REQUIRED" if submission_started else "REJECTED"
+            safe_filled_price, safe_filled_qty, _fill_reason = _validated_fill_details(
+                known_filled_price,
+                known_filled_qty,
+                requested_quantity=quantity,
+            )
             return OrderResult(
-                order_id="",
+                order_id=known_order_id,
                 status=status,
-                filled_price=None,
-                filled_quantity=None,
+                filled_price=safe_filled_price if submission_started else None,
+                filled_quantity=safe_filled_qty if submission_started else None,
                 message=(
                     "Broker submission outcome is uncertain; reconcile the Alpaca account before retrying."
                     if submission_started
