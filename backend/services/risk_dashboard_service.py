@@ -323,6 +323,9 @@ async def get_risk_dashboard(db: AsyncSession, user: User) -> dict:
     total_equity = _prepare_holdings(holdings)
     tickers = [h["ticker"] for h in holdings]
 
+    # The portfolio snapshot may leave a read transaction open. Release its
+    # connection before the slower history/sector provider fan-out below.
+    await db.commit()
     ticker_hist, spy_returns, sector_map = await _fetch_market_data(tickers)
 
     holdings_risk, portfolio_beta, portfolio_volatility, ticker_returns = _build_holdings_risk(
