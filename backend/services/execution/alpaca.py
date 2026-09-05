@@ -153,12 +153,13 @@ class AlpacaTrader(BaseTraderInterface):
                 if request.take_profit:
                     kwargs["take_profit"] = TakeProfitRequest(limit_price=float(request.take_profit))
 
-            # From this point onward the broker may have accepted the order even
-            # if the client later sees a timeout/transport exception. Treat every
-            # post-submit failure as reconciliation-required instead of falsely
-            # reporting a safe local rejection.
+            # Construct and validate the SDK request entirely locally first. A
+            # validation error here proves nothing was submitted and is safe to
+            # report as a rejection. Only flip the uncertainty flag immediately
+            # before entering submit_order, where a timeout may hide acceptance.
+            broker_request = MarketOrderRequest(**kwargs)
             submission_started = True
-            order = await asyncio.to_thread(trading.submit_order, MarketOrderRequest(**kwargs))
+            order = await asyncio.to_thread(trading.submit_order, broker_request)
             order_id = str(getattr(order, "id", "") or "")
             status = _value(getattr(order, "status", "UNKNOWN")).upper()
             filled_price = getattr(order, "filled_avg_price", None)
@@ -184,8 +185,10 @@ class AlpacaTrader(BaseTraderInterface):
                 filled_price = getattr(order, "filled_avg_price", filled_price)
                 filled_qty = getattr(order, "filled_qty", filled_qty)
 
+            reason_code = ""
             if status == "FILLED" and (not filled_price or not filled_qty):
                 status = "RECONCILIATION_REQUIRED"
+                reason_code = "broker_fill_details_missing"
 
             return OrderResult(
                 order_id=order_id,
@@ -193,6 +196,7 @@ class AlpacaTrader(BaseTraderInterface):
                 filled_price=safe_decimal(filled_price),
                 filled_quantity=safe_decimal(filled_qty),
                 message=f"Alpaca order status: {status}",
+                reason_code=reason_code,
                 external_submission=True,
             )
         except Exception:
