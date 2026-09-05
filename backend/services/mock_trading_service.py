@@ -328,6 +328,7 @@ async def execute_order(
     stop_loss: float | None = None,
     take_profit: float | None = None,
     allow_short: bool = False,
+    release_before_price_io: bool = False,
 ) -> dict:
     from backend.core.l10n import get_message
     from backend.repositories.analysis import get_analysis_by_id
@@ -347,6 +348,12 @@ async def execute_order(
 
     lev = clamp_leverage(leverage, DEFAULT_MAX_LEVERAGE)
 
+    if release_before_price_io:
+        # Ownership/language reads are complete and no order mutation has begun.
+        # Direct request paths can release the DB connection while market-data
+        # I/O runs. Orchestrated callers keep the default False so a wider
+        # transaction is never committed implicitly.
+        await db.commit()
     price_val = await get_live_price(ticker)
     if price_val is None or not math.isfinite(price_val) or price_val <= 0:
         raise ValueError(get_message("invalid_price", lang, ticker=ticker))
