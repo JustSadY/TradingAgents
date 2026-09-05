@@ -315,7 +315,12 @@ async def get_risk_dashboard(db: AsyncSession, user: User) -> dict:
     """Calculate portfolio risk metrics from current open holdings."""
     from backend.services.mock_trading_service import get_portfolio_with_live_prices
 
-    portfolio_data: dict = await get_portfolio_with_live_prices(db, user=user, read_only=True)
+    portfolio_data: dict = await get_portfolio_with_live_prices(
+        db,
+        user=user,
+        read_only=True,
+        release_before_price_io=True,
+    )
     holdings: list[dict] = portfolio_data.get("holdings", [])
     if not holdings:
         return dict(_EMPTY_DASHBOARD)
