@@ -89,7 +89,12 @@ async def get_portfolio(
     db: AsyncSession = Depends(get_db),
     _=Depends(require_page("trading")),
 ):
-    return await svc.get_portfolio_with_live_prices(db, user=_, read_only=True)
+    return await svc.get_portfolio_with_live_prices(
+        db,
+        user=_,
+        read_only=True,
+        release_before_price_io=True,
+    )
 
 @router.post("/order", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
 async def create_order(
