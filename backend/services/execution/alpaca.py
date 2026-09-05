@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 
 from backend.core.config import is_live_trading_enabled
 from backend.core.database import AsyncSessionLocal
@@ -18,6 +19,13 @@ _TERMINAL = {"FILLED", "CANCELED", "REJECTED", "EXPIRED"}
 
 def _value(value) -> str:
     return str(getattr(value, "value", value) or "")
+
+
+def _finite_float(value, *, field: str) -> float:
+    parsed = float(value or 0.0)
+    if not math.isfinite(parsed):
+        raise ValueError(f"Alpaca returned non-finite {field}")
+    return parsed
 
 
 class AlpacaTrader(BaseTraderInterface):
@@ -100,7 +108,7 @@ class AlpacaTrader(BaseTraderInterface):
             request = StockLatestTradeRequest(symbol_or_symbols=ticker.upper())
             result = await asyncio.to_thread(market.get_stock_latest_trade, request)
             trade = result.get(ticker.upper()) if isinstance(result, dict) else None
-            price = float(getattr(trade, "price", 0.0) or 0.0)
+            price = _finite_float(getattr(trade, "price", 0.0), field=f"{ticker} latest-trade price")
             if price > 0:
                 return price
         except Exception as exc:
@@ -247,10 +255,12 @@ class AlpacaTrader(BaseTraderInterface):
             trading, _market = await self._clients()
             account = await asyncio.to_thread(trading.get_account)
             return {
-                "cash": float(getattr(account, "cash", 0.0) or 0.0),
-                "buying_power": float(getattr(account, "buying_power", 0.0) or 0.0),
-                "equity": float(getattr(account, "equity", 0.0) or 0.0),
-                "portfolio_value": float(getattr(account, "portfolio_value", 0.0) or 0.0),
+                "cash": _finite_float(getattr(account, "cash", 0.0), field="account cash"),
+                "buying_power": _finite_float(getattr(account, "buying_power", 0.0), field="account buying power"),
+                "equity": _finite_float(getattr(account, "equity", 0.0), field="account equity"),
+                "portfolio_value": _finite_float(
+                    getattr(account, "portfolio_value", 0.0), field="account portfolio value"
+                ),
                 "status": _value(getattr(account, "status", "")),
                 "trading_blocked": bool(getattr(account, "trading_blocked", False)),
                 "account_blocked": bool(getattr(account, "account_blocked", False)),
@@ -268,18 +278,38 @@ class AlpacaTrader(BaseTraderInterface):
             positions = await asyncio.to_thread(trading.get_all_positions)
             result: dict[str, dict] = {}
             for pos in positions:
-                symbol = str(getattr(pos, "symbol", "")).upper()
-                qty = float(getattr(pos, "qty", 0.0) or 0.0)
-                side = _value(getattr(pos, "side", "short" if qty < 0 else "long")).lower()
+                symbol = str(getattr(pos, "symbol", "") or "").strip().upper()
+                if not symbol:
+                    raise ValueError("Alpaca returned a position without a symbol")
+
+                qty = _finite_float(getattr(pos, "qty", 0.0), field=f"{symbol} quantity")
+                side = _value(getattr(pos, "side", "")).lower()
+                if side not in {"long", "short"}:
+                    raise ValueError(f"Alpaca returned invalid {symbol} position side {side!r}")
+
+                quantity = abs(qty)
+                if quantity == 0:
+                    continue
+                avg_price = _finite_float(getattr(pos, "avg_entry_price", 0.0), field=f"{symbol} average price")
+                current_price = _finite_float(getattr(pos, "current_price", 0.0), field=f"{symbol} current price")
+                market_value = abs(
+                    _finite_float(getattr(pos, "market_value", 0.0), field=f"{symbol} market value")
+                )
+                unrealized_pnl = _finite_float(
+                    getattr(pos, "unrealized_pl", 0.0), field=f"{symbol} unrealized PnL"
+                )
+                if avg_price <= 0 or current_price <= 0 or market_value <= 0:
+                    raise ValueError(f"Alpaca returned incomplete valuation data for {symbol}")
+
                 result[symbol] = {
                     "ticker": symbol,
-                    "quantity": abs(qty),
+                    "quantity": quantity,
                     "signed_quantity": qty,
                     "side": side,
-                    "avg_price": float(getattr(pos, "avg_entry_price", 0.0) or 0.0),
-                    "current_price": float(getattr(pos, "current_price", 0.0) or 0.0),
-                    "market_value": abs(float(getattr(pos, "market_value", 0.0) or 0.0)),
-                    "unrealized_pnl": float(getattr(pos, "unrealized_pl", 0.0) or 0.0),
+                    "avg_price": avg_price,
+                    "current_price": current_price,
+                    "market_value": market_value,
+                    "unrealized_pnl": unrealized_pnl,
                 }
             return result
         except Exception as exc:
