@@ -74,6 +74,15 @@ def _analysis_client_order_id(request: OrderRequest, action: str) -> str | None:
     return f"ta-{uuid.uuid5(uuid.NAMESPACE_URL, seed)}"
 
 
+def _terminal_consistency(status: str, filled_price, filled_quantity) -> str:
+    """Return a reconciliation reason for impossible terminal status/fill pairs."""
+    if status == "FILLED" and (filled_price is None or filled_quantity is None):
+        return "broker_fill_details_missing"
+    if status == "REJECTED" and filled_quantity is not None:
+        return "broker_status_fill_conflict"
+    return ""
+
+
 class AlpacaTrader(BaseTraderInterface):
     """Paper/live broker adapter backed exclusively by ``alpaca-py``."""
 
@@ -237,6 +246,8 @@ class AlpacaTrader(BaseTraderInterface):
             submission_started = True
             order = await asyncio.to_thread(trading.submit_order, broker_request)
             order_id = str(getattr(order, "id", "") or "")
+            if not order_id:
+                raise RuntimeError("Alpaca submit response did not include an order id")
             known_order_id = order_id
             status = _value(getattr(order, "status", "UNKNOWN")).upper()
             filled_price = getattr(order, "filled_avg_price", None)
@@ -279,9 +290,11 @@ class AlpacaTrader(BaseTraderInterface):
             elif status not in _TERMINAL:
                 status = "RECONCILIATION_REQUIRED"
                 reason_code = "broker_order_still_open"
-            elif status == "FILLED" and (safe_filled_price is None or safe_filled_qty is None):
-                status = "RECONCILIATION_REQUIRED"
-                reason_code = "broker_fill_details_missing"
+            else:
+                terminal_reason = _terminal_consistency(status, safe_filled_price, safe_filled_qty)
+                if terminal_reason:
+                    status = "RECONCILIATION_REQUIRED"
+                    reason_code = terminal_reason
 
             return OrderResult(
                 order_id=order_id,
@@ -321,9 +334,11 @@ class AlpacaTrader(BaseTraderInterface):
                     elif recovered_status not in _TERMINAL:
                         recovered_status = "RECONCILIATION_REQUIRED"
                         reason_code = "broker_order_still_open"
-                    elif recovered_status == "FILLED" and (safe_price is None or safe_qty is None):
-                        recovered_status = "RECONCILIATION_REQUIRED"
-                        reason_code = "broker_fill_details_missing"
+                    else:
+                        terminal_reason = _terminal_consistency(recovered_status, safe_price, safe_qty)
+                        if terminal_reason:
+                            recovered_status = "RECONCILIATION_REQUIRED"
+                            reason_code = terminal_reason
 
                     return OrderResult(
                         order_id=recovered_id or f"client:{client_order_id}",
