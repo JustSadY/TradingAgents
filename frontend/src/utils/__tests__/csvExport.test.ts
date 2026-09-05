@@ -80,7 +80,7 @@ describe('exportPortfolioCSV', () => {
 })
 
 describe('exportOrdersCSV', () => {
-  it('exports broker order ids for reconciliation', async () => {
+  it('exports broker references for reconciliation', async () => {
     const click = vi.fn()
     document.createElement = vi.fn(() => ({
       href: '',
@@ -103,7 +103,7 @@ describe('exportOrdersCSV', () => {
         price_per_share: null,
         total_value: null,
         realized_pnl: null,
-        external_order_id: 'alpaca-reconcile-123',
+        external_order_id: 'client:ta-reconcile-123',
         ai_signal: 'Bullish',
         status: 'RECONCILIATION_REQUIRED',
         created_at: '2026-07-18T00:00:00Z',
@@ -113,8 +113,8 @@ describe('exportOrdersCSV', () => {
     expect(click).toHaveBeenCalledTimes(1)
     expect(exportedBlob).toBeInstanceOf(Blob)
     const csv = await exportedBlob!.text()
-    expect(csv).toContain('Broker Order ID')
-    expect(csv).toContain('alpaca-reconcile-123')
+    expect(csv).toContain('Broker Reference')
+    expect(csv).toContain('client:ta-reconcile-123')
     expect(csv).toContain('RECONCILIATION_REQUIRED')
   })
 })
