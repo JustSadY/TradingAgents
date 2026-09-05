@@ -70,6 +70,44 @@ async def test_alpaca_submit_exception_is_reconciliation_required_not_rejected(m
 
 
 @pytest.mark.asyncio
+async def test_alpaca_poll_failure_preserves_known_broker_identity_and_fill(monkeypatch):
+    from backend.services import execution
+    from backend.services.execution.alpaca import AlpacaTrader
+
+    class Trading:
+        def submit_order(self, _request):
+            return SimpleNamespace(
+                id="alpaca-known-42",
+                status="PARTIALLY_FILLED",
+                filled_avg_price="100",
+                filled_qty="0.25",
+            )
+
+        def get_order_by_id(self, _order_id):
+            raise TimeoutError("poll response lost")
+
+    trader = AlpacaTrader(db=object(), mode="simulation")
+
+    async def clients():
+        return Trading(), object()
+
+    async def no_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(trader, "_clients", clients)
+    monkeypatch.setattr(execution.alpaca.asyncio, "sleep", no_sleep)
+
+    result = await trader.place_order(_request())
+
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert result.reason_code == "broker_submission_uncertain"
+    assert result.external_submission is True
+    assert result.order_id == "alpaca-known-42"
+    assert result.filled_price == Decimal("100")
+    assert result.filled_quantity == Decimal("0.25")
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("request", "reason_code"),
     [
