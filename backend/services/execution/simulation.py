@@ -14,8 +14,15 @@ from .base import BaseTraderInterface, OrderRequest, OrderResult
 
 _logger = logging.getLogger(__name__)
 
+
 class SimulationTrader(BaseTraderInterface):
-    def __init__(self, portfolio_id: int = 1, initial_capital: float = 100_000.0, db=None):
+    def __init__(
+        self,
+        portfolio_id: int = 1,
+        initial_capital: float = 100_000.0,
+        db=None,
+        release_db_before_network: bool = False,
+    ):
         if db is None:
             db = AsyncSessionLocal()
             self._is_local_db = True
@@ -24,6 +31,7 @@ class SimulationTrader(BaseTraderInterface):
         self._db = db
         self._portfolio_id = portfolio_id
         self._initial_capital = initial_capital
+        self._release_db_before_network = release_db_before_network
 
     @property
     def mode(self) -> str:
@@ -34,6 +42,11 @@ class SimulationTrader(BaseTraderInterface):
         return "simulation"
 
     async def get_current_price(self, ticker: str) -> float | None:
+        if self._release_db_before_network:
+            # The orchestrator has only read configuration/position state at
+            # this point. End that read phase before a potentially slow quote
+            # lookup; the actual simulated order starts a fresh transaction.
+            await self._db.commit()
         return await _get_price(ticker)
 
     async def place_order(self, request: OrderRequest) -> OrderResult:
@@ -51,6 +64,7 @@ class SimulationTrader(BaseTraderInterface):
                 stop_loss=getattr(request, "stop_loss", None),
                 take_profit=getattr(request, "take_profit", None),
                 allow_short=getattr(request, "allow_short", False),
+                release_before_price_io=self._release_db_before_network,
             )
             return OrderResult(
                 order_id=str(res["order_id"]),
@@ -80,7 +94,12 @@ class SimulationTrader(BaseTraderInterface):
         return portfolio.cash_available
 
     async def get_positions(self) -> dict[str, dict]:
-        portfolio_data = await get_portfolio_with_live_prices(self._db, portfolio_id=self._portfolio_id, read_only=True)
+        portfolio_data = await get_portfolio_with_live_prices(
+            self._db,
+            portfolio_id=self._portfolio_id,
+            read_only=True,
+            release_before_price_io=self._release_db_before_network,
+        )
         res = {}
         for h in portfolio_data.get("holdings", []):
             res[h["ticker"]] = {
