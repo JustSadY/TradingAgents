@@ -429,36 +429,79 @@ async def run_analysis_task(
                 )
             else:
                 try:
-                    result = await place_signal_order(
-                        db,
-                        ticker=ticker,
-                        row=order_context,
-                        settings=settings,
-                        user=user,
-                        include_skip_result=True,
+                    # Once broker submission begins it may outlive cancellation
+                    # of this runner. Shield the actual order coroutine so a
+                    # cancellation cannot abandon an in-flight broker request
+                    # and then incorrectly roll back/announce it as unsent.
+                    order_task = asyncio.create_task(
+                        place_signal_order(
+                            db,
+                            ticker=ticker,
+                            row=order_context,
+                            settings=settings,
+                            user=user,
+                            include_skip_result=True,
+                        )
                     )
-                    if await task_store.is_cancel_requested(task_id):
+                    cancelled_during_order = False
+                    try:
+                        result = await asyncio.shield(order_task)
+                    except asyncio.CancelledError:
+                        cancelled_during_order = True
+                        result = await order_task
+
+                    cancellation_requested = cancelled_during_order or await task_store.is_cancel_requested(task_id)
+                    external_submission = bool(getattr(result, "external_submission", False))
+                    if cancellation_requested and not external_submission:
+                        # Simulation/local execution is still only staged in the
+                        # SQL transaction and can be honestly undone.
                         await db.rollback()
                         await _emit_auto_order_result(
                             emitter,
                             row=order_context,
                             ticker=ticker,
                             outcome="skipped",
-                            message="Analysis was cancelled before the automatic order could be committed.",
+                            message="Analysis was cancelled before the automatic order was committed.",
                             reason_code="cancelled",
                         )
                     else:
+                        # Broker submissions are irreversible from the SQL side.
+                        # Persist their audit result even when cancellation came
+                        # in after submit, then surface the real broker outcome.
                         await db.commit()
-                        await _emit_auto_order_result(emitter, row=order_context, ticker=ticker, result=result)
+                        if cancellation_requested and external_submission:
+                            _logger.warning(
+                                "Cancellation arrived after external broker submission task=%s ticker=%s; preserving broker outcome",
+                                task_id,
+                                ticker,
+                            )
+                            broker_message = (
+                                (getattr(result, "message", "") or "").rstrip()
+                                + " Cancellation arrived after broker submission; the broker outcome was retained for reconciliation."
+                            ).strip()
+                            await _emit_auto_order_result(
+                                emitter,
+                                row=order_context,
+                                ticker=ticker,
+                                result=result,
+                                message=broker_message,
+                            )
+                        else:
+                            await _emit_auto_order_result(emitter, row=order_context, ticker=ticker, result=result)
                 except asyncio.CancelledError:
+                    # A second cancellation can still interrupt cleanup. At
+                    # this point no completed OrderResult is available, so fail
+                    # closed locally; broker-side uncertain submissions are
+                    # converted to RECONCILIATION_REQUIRED by the Alpaca adapter
+                    # when its shielded order coroutine gets to finish.
                     await db.rollback()
                     await _emit_auto_order_result(
                         emitter,
                         row=order_context,
                         ticker=ticker,
                         outcome="skipped",
-                        message="Analysis was cancelled before the automatic order could be committed.",
-                        reason_code="cancelled",
+                        message="Automatic order cleanup was interrupted by cancellation.",
+                        reason_code="cancelled_during_order_cleanup",
                     )
                     raise
                 except Exception as exc:
