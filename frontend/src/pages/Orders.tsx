@@ -20,12 +20,22 @@ const STATUS_BADGES: Record<string, string> = {
   FILLED: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
   REJECTED: 'bg-rose-500/10 text-rose-400 border border-rose-500/20',
   PARTIALLY_FILLED: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
+  RECONCILIATION_REQUIRED: 'bg-amber-500/10 text-amber-300 border border-amber-500/30',
+  CANCELED: 'bg-slate-500/10 text-slate-400 border border-slate-500/20',
+  EXPIRED: 'bg-slate-500/10 text-slate-400 border border-slate-500/20',
   PENDING: 'bg-slate-500/10 text-slate-400 border border-slate-500/20',
 }
 
 const ACTION_BADGES: Record<string, string> = {
   BUY: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15',
   SELL: 'bg-rose-500/10 text-rose-400 border border-rose-500/15',
+}
+
+function displayOrderStatus(order: OrderRead): { label: string; badgeKey: string } {
+  if ((order.status === 'CANCELED' || order.status === 'EXPIRED') && order.quantity_filled > 0) {
+    return { label: `${order.status} · PARTIAL FILL`, badgeKey: 'PARTIALLY_FILLED' }
+  }
+  return { label: order.status, badgeKey: order.status }
 }
 
 // ── Trade Journal Modal ────────────────────────────────────────────────────────
@@ -242,12 +252,24 @@ export default function Orders() {
     {
       field: 'status',
       headerName: t('orders.col_status'),
-      minWidth: 96,
+      minWidth: 150,
       align: 'center',
       headerAlign: 'center',
+      renderCell: ({ row }) => {
+        const status = displayOrderStatus(row)
+        return <span className={`inline-flex items-center text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${STATUS_BADGES[status.badgeKey] || 'text-slate-300'}`}>{status.label}</span>
+      },
+    },
+    {
+      field: 'external_order_id',
+      headerName: t('orders.col_broker_order_id'),
+      minWidth: 150,
+      flex: 1,
       renderCell: ({ value }) => {
-        const status = String(value ?? '')
-        return <span className={`inline-flex items-center text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${STATUS_BADGES[status] || 'text-slate-300'}`}>{status}</span>
+        const orderId = String(value || '')
+        return orderId
+          ? <span title={orderId} className="font-mono text-[10px] text-amber-200 truncate max-w-full">{orderId}</span>
+          : <span className="text-slate-600">—</span>
       },
     },
     {
