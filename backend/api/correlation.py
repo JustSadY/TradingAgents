@@ -27,4 +27,8 @@ async def get_correlation(
     holdings = await get_active_holdings(db, portfolio.id)
     tickers = [h.ticker for h in holdings]
 
+    # Only primitive ticker symbols are needed from this point on. Historical
+    # price/correlation work is external I/O, so release the request connection
+    # before entering that provider fan-out.
+    await db.commit()
     return await compute_correlation_matrix(tickers, period)
