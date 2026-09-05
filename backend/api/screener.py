@@ -49,4 +49,8 @@ async def scan_watchlist(
     watchlist = list(getattr(settings, "watchlist", None) or [])
     if not watchlist:
         raise HTTPException(status_code=400, detail="Watchlist is empty")
+
+    # Screening performs slow provider I/O; the watchlist is already detached
+    # from the ORM row, so release the request transaction first.
+    await db.commit()
     return {"results": await run_screen(universe=watchlist, top_n=len(watchlist))}
