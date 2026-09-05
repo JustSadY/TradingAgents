@@ -113,8 +113,12 @@ async def get_portfolio_with_live_prices(
     user=None,
     portfolio_id: int | None = None,
     read_only: bool = False,
+    release_before_price_io: bool = False,
 ) -> dict:
     from backend.repositories.portfolio import get_portfolio_by_id, get_simulation_portfolio
+
+    if release_before_price_io and not read_only:
+        raise ValueError("release_before_price_io requires read_only=True")
 
     user_id = getattr(user, "id", None) if user is not None else None
 
@@ -131,6 +135,14 @@ async def get_portfolio_with_live_prices(
     tickers = [h.ticker for h in portfolio.holdings]
     prices: dict[str, float] = {}
     if tickers:
+        if release_before_price_io:
+            # Explicit opt-in only: some callers run this helper inside a wider
+            # order transaction and must not commit it here. Pure read paths can
+            # release the pool connection once the eager-loaded ORM state needed
+            # below has been materialized. AsyncSessionLocal uses
+            # expire_on_commit=False, and RLS context is reapplied on the next
+            # transaction if the caller later returns to the database.
+            await db.commit()
         prices = await get_live_prices_batch(tickers)
 
     now = datetime.now(UTC)
