@@ -176,6 +176,9 @@ async def _resolve_tickers(db: AsyncSession, user: User, tickers: str | None) ->
 
         settings = await get_or_create_settings(db, user)
         raw_list = list(getattr(settings, "watchlist", None) or [])
+        # The watchlist is now detached from the ORM row. Release the request
+        # transaction before the slower yfinance fan-out in the caller.
+        await db.commit()
 
     cleaned: list[str] = []
     seen: set[str] = set()
