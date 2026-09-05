@@ -19,6 +19,7 @@ under a single Uvicorn process. To support high concurrent LLM runs:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import socket
@@ -237,6 +238,27 @@ async def _emit_cancelled_task(task_id: str, *, close: bool = True) -> None:
         if close:
             await emitter.close()
 
+
+def _canonical_order_signal(row) -> str | None:
+    """Return the same canonical rating that the execution orchestrator trades."""
+    raw = getattr(row, "portfolio_decision_json", None)
+    decision = raw if isinstance(raw, dict) else None
+    if decision is None and isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError):
+            parsed = None
+        decision = parsed if isinstance(parsed, dict) else None
+
+    if decision is not None:
+        rating = str(decision.get("rating", "") or "").strip()
+        if rating:
+            return rating
+
+    fallback = str(getattr(row, "signal", "") or "").strip()
+    return fallback or None
+
+
 async def _emit_auto_order_result(
     emitter: AnalysisEmitter,
     *,
@@ -253,11 +275,12 @@ async def _emit_auto_order_result(
     separate from the analysis terminal event: otherwise a valid report looks
     like it either filled an order or failed entirely.
     """
+    signal = _canonical_order_signal(row)
     action = None
     try:
         from backend.core.constants import SIGNAL_TO_ACTION
 
-        action = SIGNAL_TO_ACTION.get(getattr(row, "signal", None))
+        action = SIGNAL_TO_ACTION.get(signal)
     except Exception:
         pass
 
@@ -277,7 +300,7 @@ async def _emit_auto_order_result(
             analysis_id=int(row.id),
             ticker=ticker,
             action=action,
-            signal=getattr(row, "signal", None),
+            signal=signal,
             outcome=outcome,
             broker_status=broker_status,
             order_id=getattr(result, "order_id", None) if result else None,
