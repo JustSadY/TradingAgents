@@ -28,6 +28,21 @@ def _finite_float(value, *, field: str) -> float:
     return parsed
 
 
+def _validated_fill_details(raw_price, raw_quantity, *, requested_quantity):
+    """Return safe broker fill values plus an inconsistency reason, if any."""
+    price = safe_decimal(raw_price)
+    quantity = safe_decimal(raw_quantity)
+    requested = safe_decimal(requested_quantity)
+
+    if not price.is_finite() or not quantity.is_finite() or price < 0 or quantity < 0:
+        return None, None, "broker_fill_details_invalid"
+    if quantity > requested:
+        return None, None, "broker_fill_details_invalid"
+    if (quantity > 0) != (price > 0):
+        return None, None, "broker_fill_details_invalid"
+    return (price if price > 0 else None), (quantity if quantity > 0 else None), ""
+
+
 class AlpacaTrader(BaseTraderInterface):
     """Paper/live broker adapter backed exclusively by ``alpaca-py``."""
 
@@ -208,17 +223,31 @@ class AlpacaTrader(BaseTraderInterface):
                 filled_price = getattr(order, "filled_avg_price", filled_price)
                 filled_qty = getattr(order, "filled_qty", filled_qty)
 
-            reason_code = ""
-            if status == "FILLED" and (not filled_price or not filled_qty):
+            safe_filled_price, safe_filled_qty, fill_reason = _validated_fill_details(
+                filled_price,
+                filled_qty,
+                requested_quantity=quantity,
+            )
+            reason_code = fill_reason
+            if fill_reason:
+                status = "RECONCILIATION_REQUIRED"
+            elif status not in _TERMINAL:
+                status = "RECONCILIATION_REQUIRED"
+                reason_code = "broker_order_still_open"
+            elif status == "FILLED" and (safe_filled_price is None or safe_filled_qty is None):
                 status = "RECONCILIATION_REQUIRED"
                 reason_code = "broker_fill_details_missing"
 
             return OrderResult(
                 order_id=order_id,
                 status=status,
-                filled_price=safe_decimal(filled_price),
-                filled_quantity=safe_decimal(filled_qty),
-                message=f"Alpaca order status: {status}",
+                filled_price=safe_filled_price,
+                filled_quantity=safe_filled_qty,
+                message=(
+                    "Broker order state is not safely terminal; reconcile the Alpaca account before retrying."
+                    if status == "RECONCILIATION_REQUIRED"
+                    else f"Alpaca order status: {status}"
+                ),
                 reason_code=reason_code,
                 external_submission=True,
             )
