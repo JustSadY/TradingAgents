@@ -150,6 +150,10 @@ async def run_backtest(
         user_settings = await get_or_create_settings(db, _)
         benchmark_ticker = getattr(user_settings, "benchmark_ticker", None) or "SPY"
 
+    # Authentication/settings reads are complete. Historical OHLCV loading is
+    # independent network/file-provider I/O, so do not pin a request connection
+    # while the backtest prepares its price window.
+    await db.commit()
     res = await run_backtest_simulation(
         db,
         ticker=req.ticker,
