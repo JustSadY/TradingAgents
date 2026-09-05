@@ -140,3 +140,87 @@ async def test_alpaca_positions_failure_never_looks_like_an_empty_account(monkey
 
     with pytest.raises(RuntimeError, match="refusing to assume an empty account"):
         await trader.get_positions()
+
+
+@pytest.mark.asyncio
+async def test_alpaca_non_finite_account_snapshot_fails_closed(monkeypatch):
+    from backend.services.execution.alpaca import AlpacaTrader
+
+    class Trading:
+        def get_account(self):
+            return SimpleNamespace(
+                cash="1000",
+                buying_power="2000",
+                equity="NaN",
+                portfolio_value="1000",
+                status="ACTIVE",
+                trading_blocked=False,
+                account_blocked=False,
+            )
+
+    trader = AlpacaTrader(db=object(), mode="simulation")
+
+    async def clients():
+        return Trading(), object()
+
+    monkeypatch.setattr(trader, "_clients", clients)
+
+    assert await trader.get_account_snapshot() == {}
+
+
+@pytest.mark.asyncio
+async def test_alpaca_finite_negative_cash_is_preserved_for_margin_accounts(monkeypatch):
+    from backend.services.execution.alpaca import AlpacaTrader
+
+    class Trading:
+        def get_account(self):
+            return SimpleNamespace(
+                cash="-25.50",
+                buying_power="500",
+                equity="1000",
+                portfolio_value="1000",
+                status="ACTIVE",
+                trading_blocked=False,
+                account_blocked=False,
+            )
+
+    trader = AlpacaTrader(db=object(), mode="simulation")
+
+    async def clients():
+        return Trading(), object()
+
+    monkeypatch.setattr(trader, "_clients", clients)
+
+    snapshot = await trader.get_account_snapshot()
+
+    assert snapshot["cash"] == -25.5
+    assert snapshot["equity"] == 1000.0
+
+
+@pytest.mark.asyncio
+async def test_alpaca_non_finite_position_valuation_fails_closed(monkeypatch):
+    from backend.services.execution.alpaca import AlpacaTrader
+
+    class Trading:
+        def get_all_positions(self):
+            return [
+                SimpleNamespace(
+                    symbol="NVDA",
+                    qty="2",
+                    side="long",
+                    avg_entry_price="100",
+                    current_price="NaN",
+                    market_value="200",
+                    unrealized_pl="0",
+                )
+            ]
+
+    trader = AlpacaTrader(db=object(), mode="simulation")
+
+    async def clients():
+        return Trading(), object()
+
+    monkeypatch.setattr(trader, "_clients", clients)
+
+    with pytest.raises(RuntimeError, match="refusing to assume an empty account"):
+        await trader.get_positions()
