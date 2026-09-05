@@ -113,7 +113,7 @@ class TestPortfolioAPI:
             status="RECONCILIATION_REQUIRED",
             price_per_share=None,
             total_value=None,
-            external_order_id="alpaca-reconcile-123",
+            external_order_id="client:ta-reconcile-123",
         )
         db.add(order)
         await db.flush()
@@ -124,7 +124,7 @@ class TestPortfolioAPI:
         assert len(data) == 1
         assert data[0]["ticker"] == "AAPL"
         assert data[0]["status"] == "RECONCILIATION_REQUIRED"
-        assert data[0]["external_order_id"] == "alpaca-reconcile-123"
+        assert data[0]["external_order_id"] == "client:ta-reconcile-123"
 
     async def test_list_orders_filter_ticker(self, auth_client: AsyncClient, db: AsyncSession, test_user):
         portfolio = _make_portfolio(test_user.id)
