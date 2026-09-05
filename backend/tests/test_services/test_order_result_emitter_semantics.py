@@ -57,3 +57,34 @@ async def test_reconciliation_status_takes_precedence_over_fill_shape(monkeypatc
 
     assert events[0]["outcome"] == "reconciliation_required"
     assert events[0]["status"] == "reconciliation_required"
+
+
+@pytest.mark.asyncio
+async def test_order_event_drops_non_finite_numeric_values(monkeypatch):
+    from backend.services.analysis import emitter as emitter_module
+
+    events: list[dict] = []
+
+    async def publish_event(_task_id: str, event: dict) -> None:
+        events.append(event)
+
+    monkeypatch.setattr(emitter_module, "publish_event", publish_event)
+    emitter = emitter_module.AnalysisEmitter("finite-wire-values")
+
+    await emitter.emit_order_result(
+        analysis_id=44,
+        ticker="NVDA",
+        action="BUY",
+        signal="Buy",
+        outcome="rejected",
+        broker_status="CANCELED",
+        filled_quantity=Decimal("NaN"),
+        filled_price=Decimal("Infinity"),
+        commission=float("-inf"),
+    )
+
+    event = events[0]
+    assert event["outcome"] == "rejected"
+    assert event["filled_quantity"] is None
+    assert event["filled_price"] is None
+    assert event["commission"] is None
