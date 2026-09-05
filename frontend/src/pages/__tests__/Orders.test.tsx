@@ -22,6 +22,7 @@ const mockOrder = {
   leverage: 1,
   side: 'long',
   realized_pnl: 0,
+  external_order_id: null,
   analysis_id: null,
   ai_signal: 'Buy',
   created_at: '2024-01-01T00:00:00Z',
@@ -84,6 +85,42 @@ describe('Orders', () => {
     expect(await screen.findByText('AAPL')).toBeInTheDocument()
     expect(screen.getByText('Symbol')).toBeInTheDocument()
     expect(screen.getByText('Status')).toBeInTheDocument()
+  })
+
+  it('surfaces reconciliation state and broker reference', async () => {
+    mocks.ordersQuery.data = [{
+      ...mockOrder,
+      broker: 'alpaca',
+      status: 'RECONCILIATION_REQUIRED',
+      quantity_filled: 0,
+      price_per_share: null,
+      total_value: null,
+      external_order_id: 'client:ta-reconcile-123',
+    }]
+
+    renderPage()
+
+    expect(await screen.findByText('RECONCILIATION_REQUIRED')).toBeInTheDocument()
+    expect(screen.getByText('client:ta-reconcile-123')).toBeInTheDocument()
+    expect(screen.getByText('Broker Reference')).toBeInTheDocument()
+  })
+
+  it('does not hide a partial fill behind a terminal cancellation', async () => {
+    mocks.ordersQuery.data = [{
+      ...mockOrder,
+      broker: 'alpaca',
+      status: 'CANCELED',
+      quantity_requested: 10,
+      quantity_filled: 2,
+      price_per_share: 150,
+      total_value: 300,
+      external_order_id: 'alpaca-partial-123',
+    }]
+
+    renderPage()
+
+    expect(await screen.findByText('CANCELED · Partial fill')).toBeInTheDocument()
+    expect(screen.getByText('alpaca-partial-123')).toBeInTheDocument()
   })
 
   it('renders the shared loading state', () => {

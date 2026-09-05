@@ -1,17 +1,80 @@
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import delete, desc, select
+from sqlalchemy import delete, desc, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
+from sqlalchemy.orm.util import identity_key
 
 from backend.models.order import Order
 from backend.models.portfolio import Holding, Portfolio
 from backend.repositories.common import scope_to_user
 
+_PORTFOLIO_LIST_COLUMNS = (
+    Portfolio.id,
+    Portfolio.mode,
+    Portfolio.broker,
+    Portfolio.initial_capital,
+    Portfolio.current_balance,
+    Portfolio.cash_available,
+    Portfolio.status,
+    Portfolio.created_at,
+    Portfolio.updated_at,
+)
+_HOLDING_LIST_COLUMNS = (
+    Holding.id,
+    Holding.ticker,
+    Holding.quantity,
+    Holding.avg_buy_price,
+    Holding.current_price,
+    Holding.unrealized_pnl,
+    Holding.side,
+    Holding.leverage,
+    Holding.margin_used,
+    Holding.borrowed_amount,
+    Holding.liquidation_price,
+    Holding.stop_loss,
+    Holding.take_profit,
+    Holding.updated_at,
+    Holding.opened_at,
+)
+_ORDER_LIST_COLUMNS = (
+    Order.id,
+    Order.portfolio_id,
+    Order.broker,
+    Order.ticker,
+    Order.action,
+    Order.quantity_requested,
+    Order.quantity_filled,
+    Order.status,
+    Order.price_per_share,
+    Order.total_value,
+    Order.commission,
+    Order.leverage,
+    Order.side,
+    Order.realized_pnl,
+    Order.analysis_id,
+    Order.ai_signal,
+    Order.created_at,
+    Order.executed_at,
+)
+
+
+def _cached_portfolio_with_holdings(db: AsyncSession, portfolio_id: int, user=None) -> Portfolio | None:
+    """Reuse an already-loaded portfolio only when its holdings collection is ready."""
+    cached = db.identity_map.get(identity_key(Portfolio, portfolio_id))
+    if cached is None or "holdings" in inspect(cached).unloaded:
+        return None
+    if user is not None and not getattr(user, "is_admin", False) and cached.user_id != user.id:
+        return None
+    return cached
+
 
 async def get_portfolio_by_id(db: AsyncSession, portfolio_id: int, user=None) -> Portfolio | None:
+    cached = _cached_portfolio_with_holdings(db, portfolio_id, user=user)
+    if cached is not None:
+        return cached
     q = select(Portfolio).where(Portfolio.id == portfolio_id).options(selectinload(Portfolio.holdings))
     q = scope_to_user(q, Portfolio, user)
     result = await db.execute(q)
@@ -46,6 +109,7 @@ async def get_or_create_simulation_portfolio(
                     cash_available=initial_capital,
                     status="active",
                     user_id=user_id,
+                    holdings=[],
                 )
                 db.add(portfolio)
                 await db.flush()
@@ -53,7 +117,9 @@ async def get_or_create_simulation_portfolio(
             portfolio = await get_simulation_portfolio(db, user_id=user_id)
             if portfolio is None:
                 raise
-    await db.refresh(portfolio, ["holdings"])
+    # Existing rows already arrive with holdings select-in loaded, and a newly
+    # created portfolio starts with an explicitly initialized empty collection.
+    # Avoid an extra relationship refresh on this hot get-or-create path.
     return portfolio
 
 
@@ -66,8 +132,14 @@ async def lock_portfolio_for_update(db: AsyncSession, portfolio_id: int) -> Port
 
 
 async def list_simulation_portfolios_for_update(db: AsyncSession) -> list[Portfolio]:
+    # The position monitor immediately reads every holding. Load all holdings in
+    # one secondary query so the subsequent per-portfolio snapshot can reuse the
+    # identity-mapped objects instead of issuing two queries per portfolio.
     result = await db.execute(
-        select(Portfolio).where(Portfolio.mode == "simulation").with_for_update(skip_locked=True)
+        select(Portfolio)
+        .where(Portfolio.mode == "simulation")
+        .options(selectinload(Portfolio.holdings))
+        .with_for_update(skip_locked=True)
     )
     return list(result.scalars().all())
 
@@ -126,13 +198,16 @@ async def get_holding(db: AsyncSession, portfolio_id: int, ticker: str) -> Holdi
     return result.scalar_one_or_none()
 
 async def list_portfolios(db: AsyncSession, user=None) -> list[Portfolio]:
-    q = select(Portfolio).options(selectinload(Portfolio.holdings))
+    q = select(Portfolio).options(
+        load_only(*_PORTFOLIO_LIST_COLUMNS),
+        selectinload(Portfolio.holdings).load_only(*_HOLDING_LIST_COLUMNS),
+    )
     q = scope_to_user(q, Portfolio, user)
     result = await db.execute(q)
     return list(result.scalars().all())
 
 async def list_holdings(db: AsyncSession, user=None, mode: str | None = None) -> list[Holding]:
-    q = select(Holding).join(Portfolio)
+    q = select(Holding).options(load_only(*_HOLDING_LIST_COLUMNS)).join(Portfolio)
     q = scope_to_user(q, Portfolio, user)
     if mode:
         q = q.where(Portfolio.mode == mode)
@@ -161,7 +236,13 @@ async def list_orders(
     limit: int = 50,
     offset: int = 0,
 ) -> list[Order]:
-    q = select(Order).order_by(desc(Order.created_at)).limit(limit).offset(offset)
+    q = (
+        select(Order)
+        .options(load_only(*_ORDER_LIST_COLUMNS))
+        .order_by(desc(Order.created_at))
+        .limit(limit)
+        .offset(offset)
+    )
     need_portfolio_join = (user and not getattr(user, "is_admin", False)) or mode
     if need_portfolio_join:
         q = q.join(Portfolio)

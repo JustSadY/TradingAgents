@@ -1,0 +1,41 @@
+from __future__ import annotations
+
+from backend.repositories import strategy_context
+
+
+class _Result:
+    def scalar_one_or_none(self):
+        return None
+
+
+class _CaptureDB:
+    def __init__(self) -> None:
+        self.statements = []
+
+    async def execute(self, statement):
+        self.statements.append(statement)
+        return _Result()
+
+
+def _select_clause(statement) -> str:
+    sql = str(statement.compile(compile_kwargs={"literal_binds": True})).lower()
+    return sql.split(" from ", 1)[0]
+
+
+async def test_strategy_decision_lookup_excludes_analysis_detail_payloads() -> None:
+    db = _CaptureDB()
+
+    await strategy_context.get_last_accepted_analysis(
+        db,
+        user_id=7,
+        ticker="AAPL",
+        asset_type="stock",
+    )
+
+    select_clause = _select_clause(db.statements[0])
+    assert "analysis_results.id" in select_clause
+    assert "analysis_results.portfolio_decision_json" in select_clause
+    assert "analysis_results.market_report" not in select_clause
+    assert "analysis_results.final_decision" not in select_clause
+    assert "analysis_results.strategy_after_json" not in select_clause
+    assert "analysis_results.risk_debate_history" not in select_clause

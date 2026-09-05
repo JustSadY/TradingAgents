@@ -124,6 +124,45 @@ async def list_triggered_auto_analyze_alerts(db: AsyncSession) -> list[PriceAler
     return list(result.scalars().all())
 
 
+async def existing_alert_analysis_keys(
+    db: AsyncSession,
+    keys: set[tuple[str, str, int | None]],
+) -> set[tuple[str, str, int | None]]:
+    """Return alert-analysis identities already persisted using one query.
+
+    Recovery used to issue one ``EXISTS`` query per triggered alert. The broad
+    SQL predicates below keep the query portable across PostgreSQL and SQLite;
+    the exact tuple membership check in Python removes any cross-product rows.
+    """
+    if not keys:
+        return set()
+
+    tickers = {ticker for ticker, _trade_date, _user_id in keys}
+    trade_dates = {trade_date for _ticker, trade_date, _user_id in keys}
+    user_ids = {user_id for _ticker, _trade_date, user_id in keys if user_id is not None}
+    include_system = any(user_id is None for _ticker, _trade_date, user_id in keys)
+
+    user_filters = []
+    if user_ids:
+        user_filters.append(AnalysisResult.user_id.in_(user_ids))
+    if include_system:
+        user_filters.append(AnalysisResult.user_id.is_(None))
+
+    query = (
+        select(AnalysisResult.ticker, AnalysisResult.trade_date, AnalysisResult.user_id)
+        .where(AnalysisResult.triggered_by == "alert")
+        .where(AnalysisResult.ticker.in_(tickers))
+        .where(AnalysisResult.trade_date.in_(trade_dates))
+        .where(or_(*user_filters))
+    )
+    rows = (await db.execute(query)).all()
+    return {
+        (str(ticker), str(trade_date), user_id)
+        for ticker, trade_date, user_id in rows
+        if (str(ticker), str(trade_date), user_id) in keys
+    }
+
+
 async def alert_analysis_exists(
     db: AsyncSession,
     *,

@@ -57,12 +57,7 @@ class AppSettings(Base):
     webhook_events: Mapped[list[str]] = mapped_column(JSON, default=lambda: ["analysis_complete"], nullable=False)
     active_preset_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
-    memory_store: Mapped[str] = mapped_column(String(20), default="pinecone")
-    pinecone_index: Mapped[str] = mapped_column(String(100), default="tradingagents-memory")
-    pinecone_cloud: Mapped[str] = mapped_column(String(20), default="aws")
-    pinecone_region: Mapped[str] = mapped_column(String(30), default="us-east-1")
-    memory_embedder: Mapped[str] = mapped_column(String(20), default="pinecone")
-    pinecone_embed_model: Mapped[str] = mapped_column(String(60), default="llama-text-embed-v2")
+    memory_embedder: Mapped[str] = mapped_column(String(20), default="openai")
     memory_openai_embed_model: Mapped[str] = mapped_column(String(60), default="text-embedding-3-small")
     memory_ollama_embed_model: Mapped[str] = mapped_column(String(60), default="nomic-embed-text")
     agent_qa_enabled: Mapped[bool] = mapped_column(Boolean, default=True)

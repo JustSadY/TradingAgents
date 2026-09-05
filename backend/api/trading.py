@@ -89,7 +89,12 @@ async def get_portfolio(
     db: AsyncSession = Depends(get_db),
     _=Depends(require_page("trading")),
 ):
-    return await svc.get_portfolio_with_live_prices(db, user=_, read_only=True)
+    return await svc.get_portfolio_with_live_prices(
+        db,
+        user=_,
+        read_only=True,
+        release_before_price_io=True,
+    )
 
 @router.post("/order", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
 async def create_order(
@@ -108,6 +113,7 @@ async def create_order(
         user=_,
         leverage=req.leverage,
             allow_short=req.allow_short,
+            release_before_price_io=True,
         )
     except svc.AnalysisOwnershipError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -144,6 +150,10 @@ async def run_backtest(
         user_settings = await get_or_create_settings(db, _)
         benchmark_ticker = getattr(user_settings, "benchmark_ticker", None) or "SPY"
 
+    # Authentication/settings reads are complete. Historical OHLCV loading is
+    # independent network/file-provider I/O, so do not pin a request connection
+    # while the backtest prepares its price window.
+    await db.commit()
     res = await run_backtest_simulation(
         db,
         ticker=req.ticker,

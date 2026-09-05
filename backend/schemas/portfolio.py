@@ -60,6 +60,7 @@ class OrderRead(BaseModel):
     leverage: float = 1.0
     side: str = "long"
     realized_pnl: float = 0.0
+    external_order_id: str | None
     analysis_id: int | None
     ai_signal: str
     created_at: datetime

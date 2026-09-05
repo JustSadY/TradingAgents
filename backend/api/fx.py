@@ -15,6 +15,7 @@ _logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 3600
 _cache: TTLCache = TTLCache(maxsize=1, ttl=_CACHE_TTL)
+_cache_fill_lock = asyncio.Lock()
 
 SUPPORTED_CURRENCIES = {
     "USD": 1.0,
@@ -26,6 +27,7 @@ SUPPORTED_CURRENCIES = {
     "AUD": "AUDUSD=X",
     "CHF": "CHFUSD=X",
 }
+
 
 async def _fetch_rates() -> dict[str, float]:
     """Fetch current FX rates vs USD using yfinance. Returns {currency: rate_vs_usd}."""
@@ -44,7 +46,6 @@ async def _fetch_rates() -> dict[str, float]:
             return symbol, None
 
     pairs = await asyncio.gather(*[_one(sym) for sym in symbols])
-
     sym_to_rate = dict(pairs)
 
     rates: dict[str, float] = {"USD": 1.0}
@@ -57,6 +58,24 @@ async def _fetch_rates() -> dict[str, float]:
 
     return rates
 
+
+async def _get_cached_rates() -> dict[str, float]:
+    """Return the cached FX snapshot, allowing only one concurrent cache fill."""
+    cached = _cache.get("rates")
+    if cached is not None:
+        return cached
+
+    async with _cache_fill_lock:
+        cached = _cache.get("rates")
+        if cached is not None:
+            return cached
+        fetched = await _fetch_rates()
+        if fetched:
+            _cache["rates"] = fetched
+            return fetched
+        return {}
+
+
 @router.get("/fx-rates", response_model=dict[str, float | None])
 @limiter.limit("30/minute")
 async def get_fx_rates(
@@ -68,17 +87,7 @@ async def get_fx_rates(
     Response: {"USD": 1.0, "EUR": 1.085, "GBP": 1.27, ...}
     Cached for 1 hour.
     """
-    cached = _cache.get("rates")
-    if not cached:
-        fetched = await _fetch_rates()
-        if fetched:
-            _cache["rates"] = fetched
-            cached = fetched
-        else:
-            cached = {}
-
-    result = {}
-    for currency in SUPPORTED_CURRENCIES:
-        result[currency] = cached.get(currency)
+    cached = await _get_cached_rates()
+    result = {currency: cached.get(currency) for currency in SUPPORTED_CURRENCIES}
     result["USD"] = 1.0
     return result

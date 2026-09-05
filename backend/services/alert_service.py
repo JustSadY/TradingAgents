@@ -12,10 +12,10 @@ from backend.core.rls_context import (
     trusted_background_session,
 )
 from backend.repositories.alert_runtime import (
-    alert_analysis_exists,
     claim_alert_and_enqueue_outbox,
     claim_outbox_batch,
     complete_outbox_item,
+    existing_alert_analysis_keys,
     get_alert_unscoped,
     get_outbox_item,
     get_outbox_item_for_update,
@@ -32,6 +32,7 @@ _BACKGROUND_TASKS: set[asyncio.Task] = set()
 
 _RECOVERY_SEMAPHORE = asyncio.Semaphore(3)
 _ALERT_SEMAPHORE = asyncio.Semaphore(5)
+_OUTBOX_SEMAPHORE = asyncio.Semaphore(3)
 
 _INDICATOR_ALERT_TYPES = frozenset({"rsi", "macd_cross"})
 
@@ -39,8 +40,13 @@ async def _fetch_alert_market_summary(ticker: str) -> str:
     try:
         import yfinance as yf
 
-        info = await asyncio.to_thread(lambda: yf.Ticker(ticker).info)
-        hist = await asyncio.to_thread(lambda: yf.Ticker(ticker).history(period="3mo"))
+        from backend.services.news_service import get_news_feed
+
+        info, hist, news = await asyncio.gather(
+            asyncio.to_thread(lambda: yf.Ticker(ticker).info),
+            asyncio.to_thread(lambda: yf.Ticker(ticker).history(period="3mo")),
+            get_news_feed(ticker, 3),
+        )
 
         parts = []
         price = info.get("regularMarketPrice") or info.get("currentPrice")
@@ -63,9 +69,6 @@ async def _fetch_alert_market_summary(ticker: str) -> str:
                 rsi_val = float(rsi_series.iloc[-1])
                 parts.append(f"RSI(14): {rsi_val:.1f}")
 
-        from backend.services.news_service import get_news_feed
-
-        news = await get_news_feed(ticker, 3)
         if news:
             headlines = [n.get("title", "")[:80] for n in news[:3] if n.get("title")]
             if headlines:
@@ -86,11 +89,11 @@ async def _fetch_close_series(ticker: str, period: str = "6mo"):
         _logger.warning("Indicator alert history fetch failed for %s: %s", ticker, exc)
         return None
 
-async def _check_indicator_alert(alert) -> tuple[bool, str]:
-    """Evaluate an RSI/MACD-cross alert. Returns ``(hit, detail)`` for logging."""
+
+def _evaluate_indicator_alert(alert, hist) -> tuple[bool, str]:
+    """Evaluate one indicator alert against an already-fetched close series."""
     from backend.services.indicator_service import calculate_macd, calculate_rsi
 
-    hist = await _fetch_close_series(alert.ticker)
     if hist is None or len(hist) < 30:
         return False, ""
 
@@ -120,15 +123,42 @@ async def _check_indicator_alert(alert) -> tuple[bool, str]:
 
     return False, ""
 
-async def _deliver_alert_side_effects(db, alert, settings, current_value: float | None) -> None:
+
+async def _check_indicator_alert(alert) -> tuple[bool, str]:
+    """Compatibility wrapper for evaluating a single indicator alert."""
+    hist = await _fetch_close_series(alert.ticker)
+    return _evaluate_indicator_alert(alert, hist)
+
+
+async def _fetch_indicator_histories(alerts) -> dict[str, object]:
+    """Fetch one close series per unique indicator ticker with bounded concurrency."""
+    tickers = list(dict.fromkeys(alert.ticker for alert in alerts))
+
+    async def _fetch_one(ticker: str):
+        async with _ALERT_SEMAPHORE:
+            return ticker, await _fetch_close_series(ticker)
+
+    results = await asyncio.gather(*[_fetch_one(ticker) for ticker in tickers])
+    return dict(results)
+
+
+async def _deliver_alert_side_effects(
+    db,
+    alert,
+    settings,
+    current_value: float | None,
+    *,
+    market_summary: str | None = None,
+) -> None:
     """Deliver an already-committed outbox item."""
-    summary = await _fetch_alert_market_summary(alert.ticker)
+    summary = market_summary if market_summary is not None else await _fetch_alert_market_summary(alert.ticker)
     if summary:
         _logger.info("Alert market summary for %s: %s", alert.ticker, summary)
 
     user = await get_user_by_id(db, alert.user_id) if alert.user_id is not None else None
-    if settings and user:
-        user_settings = await get_or_create_settings(db, user)
+    needs_user_settings = user is not None and (settings or alert.auto_analyze)
+    user_settings = await get_or_create_settings(db, user) if needs_user_settings else None
+    if settings and user and user_settings:
         await notify_alert_triggered(
             alert.ticker,
             alert.condition,
@@ -138,13 +168,12 @@ async def _deliver_alert_side_effects(db, alert, settings, current_value: float 
             market_summary=summary,
         )
 
-    if alert.auto_analyze and user:
+    if alert.auto_analyze and user and user_settings:
         from backend.services.analysis_queue import dispatch_analysis
         from backend.services.analysis_service import register_queued_task
 
         today = datetime.now(UTC).strftime("%Y-%m-%d")
         task_id = str(uuid.uuid4())
-        user_settings = await get_or_create_settings(db, user)
         from backend.repositories.analysis import create_analysis_result
 
         await create_analysis_result(
@@ -198,8 +227,44 @@ async def _claim_alert(
     return True
 
 
+async def _prepare_outbox_market_summary(db, item_id: int) -> str | None:
+    """Read the delivery ticker, release the DB transaction, then do market I/O."""
+    item = await get_outbox_item(db, item_id)
+    if not item or item.status != "processing":
+        await db.rollback()
+        return None
+
+    alert = await get_alert_unscoped(db, item.alert_id)
+    ticker = str(alert.ticker) if alert and alert.ticker else ""
+    # The claim is already durable. End the read transaction before yfinance,
+    # news, or other external calls so a worker does not pin a DB connection or
+    # row lock while waiting on the network. The item is re-read FOR UPDATE
+    # immediately before the actual delivery mutation.
+    await db.commit()
+    return await _fetch_alert_market_summary(ticker) if ticker else ""
+
+
+async def _deliver_claimed_outbox_item(item_id: int, user_id: int | None) -> None:
+    """Deliver one claimed item in an isolated tenant/system session."""
+    async with _OUTBOX_SEMAPHORE:
+        if user_id is None:
+            async with trusted_background_session(BackgroundCapability.ALERT_OUTBOX) as system_db:
+                summary = await _prepare_outbox_market_summary(system_db, item_id)
+                if summary is None:
+                    return
+                await _deliver_outbox_item(system_db, item_id, market_summary=summary)
+            return
+
+        async with AsyncSessionLocal() as delivery_db:
+            await set_user_background_context(delivery_db, user_id)
+            summary = await _prepare_outbox_market_summary(delivery_db, item_id)
+            if summary is None:
+                return
+            await _deliver_outbox_item(delivery_db, item_id, market_summary=summary)
+
+
 async def process_alert_outbox(limit: int = 50) -> None:
-    """Claim globally, then deliver each item in its owner's tenant context."""
+    """Claim globally, then deliver items concurrently in isolated owner contexts."""
     async with trusted_background_session(BackgroundCapability.ALERT_OUTBOX) as db:
         stale_before = datetime.fromtimestamp(datetime.now(UTC).timestamp() - 300, UTC)
         claimed = await claim_outbox_batch(
@@ -210,20 +275,19 @@ async def process_alert_outbox(limit: int = 50) -> None:
         )
         await db.commit()
 
-    for item_id, user_id in claimed:
-        async with AsyncSessionLocal() as delivery_db:
-            if user_id is not None:
-                await set_user_background_context(delivery_db, user_id)
-            else:
-                # System-owned outbox rows still require an explicit audited
-                # capability rather than an admin or tenant bypass.
-                async with trusted_background_session(BackgroundCapability.ALERT_OUTBOX) as system_db:
-                    await _deliver_outbox_item(system_db, item_id)
-                continue
-            await _deliver_outbox_item(delivery_db, item_id)
+    if not claimed:
+        return
+
+    results = await asyncio.gather(
+        *[_deliver_claimed_outbox_item(item_id, user_id) for item_id, user_id in claimed],
+        return_exceptions=True,
+    )
+    for (item_id, _user_id), result in zip(claimed, results, strict=True):
+        if isinstance(result, BaseException):
+            _logger.error("Alert outbox delivery task failed id=%s: %s", item_id, result)
 
 
-async def _deliver_outbox_item(db, item_id: int) -> None:
+async def _deliver_outbox_item(db, item_id: int, *, market_summary: str | None = None) -> None:
     item = await get_outbox_item_for_update(db, item_id)
     if not item or item.status != "processing":
         return
@@ -237,7 +301,7 @@ async def _deliver_outbox_item(db, item_id: int) -> None:
 
             settings = await get_system_settings(db)
             value = float(item.current_value) if item.current_value is not None else None
-            await _deliver_alert_side_effects(db, alert, settings, value)
+            await _deliver_alert_side_effects(db, alert, settings, value, market_summary=market_summary)
             await complete_outbox_item(db, item, completed_at=datetime.now(UTC))
         await db.commit()
     except Exception as exc:
@@ -290,9 +354,10 @@ async def check_price_alerts() -> None:
             )
             await _claim_alert_for_owner(alert.id, alert.user_id, float(price))
 
+    indicator_histories = await _fetch_indicator_histories(indicator_alerts) if indicator_alerts else {}
     for alert in indicator_alerts:
         try:
-            hit, detail = await _check_indicator_alert(alert)
+            hit, detail = _evaluate_indicator_alert(alert, indicator_histories.get(alert.ticker))
         except Exception as exc:  # noqa: BLE001
             _logger.warning("Indicator alert check failed for %s: %s", alert.ticker, exc)
             continue
@@ -362,26 +427,23 @@ async def check_and_recover_lost_alerts() -> None:
     await process_alert_outbox()
     async with trusted_background_session(BackgroundCapability.ALERT_RECOVERY) as db:
         triggered_alerts = await list_triggered_auto_analyze_alerts(db)
-        missing: list[tuple[str, str, int | None]] = []
-        missing_keys: set[tuple[str, str, int | None]] = set()
+        recovery_candidates: list[tuple[str, str, int | None]] = []
+        seen_candidates: set[tuple[str, str, int | None]] = set()
         for alert in triggered_alerts:
             trigger_date = alert.triggered_at.strftime("%Y-%m-%d")
-            exists = await alert_analysis_exists(
-                db,
-                ticker=alert.ticker,
-                trade_date=trigger_date,
-                user_id=alert.user_id,
+            recovery_key = (alert.ticker, trigger_date, alert.user_id)
+            if recovery_key not in seen_candidates:
+                seen_candidates.add(recovery_key)
+                recovery_candidates.append(recovery_key)
+
+        existing_keys = await existing_alert_analysis_keys(db, seen_candidates)
+        missing = [key for key in recovery_candidates if key not in existing_keys]
+        for ticker, trigger_date, _user_id in missing:
+            _logger.warning(
+                "Recovering lost alert analysis task for %s (triggered at %s)",
+                ticker,
+                trigger_date,
             )
-            if not exists:
-                _logger.warning(
-                    "Recovering lost alert analysis task for %s (triggered at %s)",
-                    alert.ticker,
-                    trigger_date,
-                )
-                recovery_key = (alert.ticker, trigger_date, alert.user_id)
-                if recovery_key not in missing_keys:
-                    missing_keys.add(recovery_key)
-                    missing.append(recovery_key)
 
         if not missing:
             return

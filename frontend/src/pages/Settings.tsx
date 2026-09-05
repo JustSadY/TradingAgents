@@ -17,10 +17,6 @@ import {
 import {
   useUsersGetMySettingPermissions,
   useUsersGetUserSettingPermissions,
-  useUsersSetMyApiKey,
-  useUsersDeleteMyApiKey,
-  useUsersSetUserApiKeyEndpoint,
-  useUsersDeleteUserApiKeyEndpoint,
 } from '../api/generated/users/users'
 import { useCronCronStatus } from '../api/generated/cron/cron'
 import {
@@ -33,7 +29,7 @@ import {
   Bell, BookmarkPlus, Brain, Clock, Database, Pencil, Plus, Save, Settings as SettingsIcon, ShieldAlert, Trash2, UserCircle, Wrench, XCircle
 } from 'lucide-react'
 
-import { useMeta, triggerMetaRefetch } from '../hooks/useMeta'
+import { useMeta } from '../hooks/useMeta'
 import { useLlmCatalog, modelsFor, providerOptionsFrom, type LlmModelOption } from '../hooks/useLlmCatalog'
 import { useAuth } from '../contexts/AuthContext'
 import { requestBrowserNotifyPermission, setBrowserNotifyPref, isBrowserNotifyEnabled } from '../utils/browserNotify'
@@ -56,6 +52,12 @@ type Settings = SettingsRead
 type FallbackLLMEntry = { provider: string; model: string }
 
 const MAX_FALLBACK_CHAIN_LENGTH = 3
+const MEMORY_STATUS_SETTING_KEYS: ReadonlySet<keyof Settings> = new Set([
+  'memory_embedder',
+  'memory_openai_embed_model',
+  'memory_ollama_embed_model',
+  'agent_qa_enabled',
+])
 
 function lacksVerifiedOutputLanguage(model: LlmModelOption | undefined, language: string): boolean {
   const supported = model?.supported_output_languages
@@ -65,10 +67,28 @@ function lacksVerifiedOutputLanguage(model: LlmModelOption | undefined, language
   )
 }
 
+function buildSettingsPatch(current: Settings, persisted: Settings | null): Partial<Settings> {
+  const patch: Partial<Settings> = { ...current }
+  delete patch.updated_at
+  // Preset selection belongs to the preset apply endpoint. Sending the
+  // read-only marker back with every full-form save would keep a stale
+  // preset selected after the user changes an individual setting.
+  delete patch.active_preset_name
+
+  if (!persisted) return patch
+  for (const key of Object.keys(patch) as (keyof Settings)[]) {
+    if (JSON.stringify(patch[key]) === JSON.stringify(persisted[key])) {
+      delete patch[key]
+    }
+  }
+  return patch
+}
+
 export default function Settings({ userId }: { userId?: number } = {}) {
   const { t } = useTranslation()
   const { isAdmin } = useAuth()
   const [s, setS] = useState<Settings | null>(null)
+  const persistedSettingsRef = useRef<Settings | null>(null)
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -88,11 +108,8 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   // Deliveries are only fetched when the webhooks tab asks for them.
   const loadDeliveries = useCallback(() => { void deliveriesQuery.refetch() }, [deliveriesQuery])
   const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'agents' | 'risk' | 'alerts' | 'webhooks' | 'presets' | 'advanced' | 'cron' | 'tools' | 'memory' | 'personas'>('general')
-  const [pineconeKey, setPineconeKey] = useState('')
-  const [pineconeSaving, setPineconeSaving] = useState(false)
   const memoryQuery = useSettingsGetMemoryStatus(userId ? { user_id: userId } : undefined)
   const memoryStatus = memoryQuery.data ?? null
-  const loadMemoryStatus = useCallback(() => { void memoryQuery.refetch() }, [memoryQuery])
   const [allowedSettings, setAllowedSettings] = useState<string[]>([])
   const meta = useMeta()
   
@@ -102,10 +119,6 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const applyPresetMutation = usePresetsApplyPreset()
   const deletePresetMutation = usePresetsDeletePreset()
   const testWebhookMutation = useSettingsTestWebhook()
-  const setOwnKey = useUsersSetMyApiKey()
-  const deleteOwnKey = useUsersDeleteMyApiKey()
-  const setOtherUserKey = useUsersSetUserApiKeyEndpoint()
-  const deleteOtherUserKey = useUsersDeleteUserApiKeyEndpoint()
 
   const toolPanelRef = useRef<ToolSettingsPanelHandle>(null)
   const agentPanelRef = useRef<AgentSettingsPanelHandle>(null)
@@ -133,6 +146,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     const allowedSet = permPayload?.allowed_settings || permPayload?.permissions || []
     {
       setS(settings)
+      persistedSettingsRef.current = settings
       setAllowedSettings(userId ? ['general', 'agents', 'tools', 'risk', 'alerts', 'webhooks', 'cron', 'memory', 'presets', 'personas'] : allowedSet)
 
       const defaultTabs = ['general', 'agents', 'tools', 'risk', 'alerts', 'webhooks', 'cron']
@@ -168,7 +182,10 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     await applyPresetMutation.mutateAsync({ presetId: id, params: userId ? { user_id: userId } : undefined })
     // Re-read the settings the preset just wrote rather than guessing them.
     const refreshed = await settingsQuery.refetch()
-    if (refreshed.data) setS(refreshed.data)
+    if (refreshed.data) {
+      setS(refreshed.data)
+      persistedSettingsRef.current = refreshed.data
+    }
   }
 
   const deletePreset = async (id: number) => {
@@ -197,21 +214,24 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   }
 
   const save = async () => {
+    if (!s) return
     setSaveError(null)
     setSaving(true)
     try {
-      const settingsUpdate = { ...s }
-      delete settingsUpdate.updated_at
-      // Preset selection belongs to the preset apply endpoint. Sending the
-      // read-only marker back with every full-form save would keep a stale
-      // preset selected after the user changes an individual setting.
-      delete settingsUpdate.active_preset_name
-      if (userId) {
-        await updateOtherSettings.mutateAsync({ userId, data: settingsUpdate })
-      } else {
-        await updateOwnSettings.mutateAsync({ data: settingsUpdate })
+      const settingsUpdate = buildSettingsPatch(s, persistedSettingsRef.current)
+      const changedKeys = Object.keys(settingsUpdate) as (keyof Settings)[]
+      const memoryStatusChanged = changedKeys.some(key => MEMORY_STATUS_SETTING_KEYS.has(key))
+
+      if (changedKeys.length > 0) {
+        const persisted = userId
+          ? await updateOtherSettings.mutateAsync({ userId, data: settingsUpdate })
+          : await updateOwnSettings.mutateAsync({ data: settingsUpdate })
+        setS(persisted)
+        persistedSettingsRef.current = persisted
       }
-      triggerMetaRefetch()
+      if (memoryStatusChanged) {
+        void memoryQuery.refetch()
+      }
       if (agentPanelRef.current) {
         await agentPanelRef.current.save()
       }
@@ -251,27 +271,6 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     const provider = providerOptions[0]?.[0] ?? s.llm_provider
     const model = modelsFor(llmCatalog, provider)[0]?.value ?? s.llm_model
     update('fallback_llm_chain', [...fallbackChain, { provider, model }])
-  }
-
-  const savePineconeKey = async () => {
-    if (!pineconeKey.trim()) return
-    setPineconeSaving(true)
-    try {
-      const data = { provider: 'pinecone', api_key: pineconeKey.trim() }
-      if (userId) await setOtherUserKey.mutateAsync({ userId, data })
-      else await setOwnKey.mutateAsync({ data })
-      setPineconeKey('')
-      loadMemoryStatus()
-    } finally { setPineconeSaving(false) }
-  }
-  const deletePineconeKey = async () => {
-    try {
-      if (userId) await deleteOtherUserKey.mutateAsync({ userId, provider: 'pinecone' })
-      else await deleteOwnKey.mutateAsync({ provider: 'pinecone' })
-    } catch (e) {
-      console.error('Failed to delete Pinecone key', e)
-    }
-    loadMemoryStatus()
   }
 
   const languages = meta?.languages ?? [{ value: 'English', label: 'English' }, { value: 'Turkish', label: 'Türkçe' }]
@@ -572,12 +571,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
           {activeTab === 'cron' && <CronTab s={s} t={t} update={update} cronStatus={cronStatus} />}
 
           {activeTab === 'memory' && (
-            <MemoryTab
-              s={s} t={t} update={update} meta={meta} memoryStatus={memoryStatus}
-              pineconeKey={pineconeKey} setPineconeKey={setPineconeKey}
-              pineconeSaving={pineconeSaving} savePineconeKey={savePineconeKey}
-              deletePineconeKey={deletePineconeKey}
-            />
+            <MemoryTab s={s} t={t} update={update} meta={meta} memoryStatus={memoryStatus} />
           )}
 
           {activeTab === 'tools' && (

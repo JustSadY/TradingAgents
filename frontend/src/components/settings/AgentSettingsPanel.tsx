@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Loader2, Save, Settings2 } from 'lucide-react'
 import {
   useSettingsGetUserAgents,
@@ -59,6 +59,12 @@ function buildChildrenMap(agents: AgentMeta[]): Map<string | null, AgentMeta[]> 
     map.set(parent, [...(map.get(parent) ?? []), agent])
   }
   return map
+}
+
+function changedAgents(current: AgentSettingsData, persisted: AgentSettingsData | null): Record<string, AgentSettingState> {
+  return Object.fromEntries(
+    Object.entries(current.agents).filter(([key, value]) => JSON.stringify(value) !== JSON.stringify(persisted?.agents[key])),
+  )
 }
 
 interface AgentNodeProps {
@@ -183,6 +189,7 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
   const meta = useMeta()
   const llmCatalog = useLlmCatalog()
   const [settings, setSettings] = useState<AgentSettingsData | null>(null)
+  const persistedSettings = useRef<AgentSettingsData | null>(null)
 
   const otherUserId = !serverScope && userId ? userId : 0
   const serverQuery = useSettingsGetServerAgents({ query: { enabled: serverScope } })
@@ -193,7 +200,11 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
   const activeQuery = serverScope ? serverQuery : userId ? otherUserQuery : ownQuery
 
   useEffect(() => {
-    if (activeQuery.data) setSettings(activeQuery.data as unknown as AgentSettingsData)
+    if (activeQuery.data) {
+      const next = activeQuery.data as unknown as AgentSettingsData
+      setSettings(next)
+      persistedSettings.current = next
+    }
   }, [activeQuery.data])
 
   const saveServer = useSettingsUpdateServerAgents()
@@ -203,14 +214,19 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
 
   const save = async () => {
     if (!settings) return
+    const agents = changedAgents(settings, persistedSettings.current)
+    if (Object.keys(agents).length === 0) return
+
     try {
-      const body = settings as unknown as Parameters<typeof saveOwn.mutateAsync>[0]['data']
+      const body = { agents } as unknown as Parameters<typeof saveOwn.mutateAsync>[0]['data']
       const response = serverScope
         ? await saveServer.mutateAsync({ data: body })
         : userId
           ? await saveOtherUser.mutateAsync({ userId, data: body })
           : await saveOwn.mutateAsync({ data: body })
-      setSettings(response as unknown as AgentSettingsData)
+      const persisted = response as unknown as AgentSettingsData
+      setSettings(persisted)
+      persistedSettings.current = persisted
       triggerMetaRefetch()
       notify('success', t('settings.agents_saved'))
     } catch (error: unknown) {

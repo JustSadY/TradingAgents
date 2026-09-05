@@ -14,12 +14,18 @@ describe('normalizedOrderOutcome', () => {
     ['filled', 'filled'],
     ['executed', 'filled'],
     ['success', 'filled'],
+    ['partially_filled', 'partially_filled'],
+    ['partially-filled', 'partially_filled'],
+    ['partially filled', 'partially_filled'],
     ['skipped', 'skipped'],
     ['no_trade', 'skipped'],
     ['no-trade', 'skipped'],
     ['rejected', 'rejected'],
     ['blocked', 'rejected'],
     ['denied', 'rejected'],
+    ['reconciliation_required', 'reconciliation_required'],
+    ['reconciliation-required', 'reconciliation_required'],
+    ['reconciliation required', 'reconciliation_required'],
     ['error', 'error'],
     ['failed', 'error'],
     ['  FILLED  ', 'filled'],
@@ -40,6 +46,7 @@ describe('readOrderResult', () => {
       ticker: 'NVDA',
       quantity: 3,
       price: 10,
+      orderId: undefined,
       reason: undefined,
       message: undefined,
       analysisId: undefined,
@@ -50,10 +57,56 @@ describe('readOrderResult', () => {
     expect(readOrderResult({ status: 'no_trade', ticker: 'AAPL' }, '')?.outcome).toBe('skipped')
   })
 
+  it('upgrades an older rejected outcome when broker status requires reconciliation', () => {
+    const result = readOrderResult({
+      outcome: 'rejected',
+      broker_status: 'RECONCILIATION_REQUIRED',
+      order_id: 'alpaca-reconcile-42',
+      ticker: 'NVDA',
+      reason_code: 'broker_submission_uncertain',
+      message: 'Reconcile the broker account before retrying.',
+    }, '')
+
+    expect(result?.outcome).toBe('reconciliation_required')
+    expect(result?.orderId).toBe('alpaca-reconcile-42')
+    expect(result?.reason).toBe('broker_submission_uncertain')
+    expect(result?.message).toBe('Reconcile the broker account before retrying.')
+  })
+
+  it('upgrades a terminal broker cancellation when some quantity already filled', () => {
+    const result = readOrderResult({
+      outcome: 'rejected',
+      broker_status: 'CANCELED',
+      ticker: 'NVDA',
+      filled_quantity: 2,
+      filled_price: 100,
+    }, '')
+
+    expect(result?.outcome).toBe('partially_filled')
+    expect(result?.quantity).toBe(2)
+    expect(result?.price).toBe(100)
+  })
+
+  it('keeps a zero-fill broker cancellation rejected', () => {
+    const result = readOrderResult({
+      outcome: 'rejected',
+      broker_status: 'CANCELED',
+      ticker: 'NVDA',
+      filled_quantity: 0,
+    }, '')
+
+    expect(result?.outcome).toBe('rejected')
+    expect(result?.quantity).toBeUndefined()
+  })
+
   it('falls back to the filled_* fields when the plain ones are absent', () => {
     const result = readOrderResult({ outcome: 'filled', ticker: 'AAPL', filled_quantity: 5, filled_price: 99.5 }, '')
     expect(result?.quantity).toBe(5)
     expect(result?.price).toBe(99.5)
+  })
+
+  it('drops an empty broker order id instead of rendering a blank identifier', () => {
+    expect(readOrderResult({ outcome: 'filled', ticker: 'AAPL', order_id: '   ' }, '')?.orderId).toBeUndefined()
   })
 
   it('falls back to the run ticker when the event omits one', () => {
@@ -97,7 +150,14 @@ describe('readOrderResult', () => {
 })
 
 describe('sameOrderResult', () => {
-  const base: AnalysisOrderResult = { outcome: 'filled', action: 'BUY', ticker: 'NVDA', quantity: 1, price: 2 }
+  const base: AnalysisOrderResult = {
+    outcome: 'filled',
+    action: 'BUY',
+    ticker: 'NVDA',
+    quantity: 1,
+    price: 2,
+    orderId: 'broker-1',
+  }
 
   it('treats an identical result as already shown', () => {
     expect(sameOrderResult({ ...base }, base)).toBe(true)
@@ -112,6 +172,7 @@ describe('sameOrderResult', () => {
     ['ticker', { ticker: 'AAPL' }],
     ['quantity', { quantity: 2 }],
     ['price', { price: 3 }],
+    ['orderId', { orderId: 'broker-2' }],
   ])('notices a changed %s', (_field, change) => {
     expect(sameOrderResult({ ...base, ...change }, base)).toBe(false)
   })
@@ -127,9 +188,20 @@ describe('orderResultLogLine', () => {
     expect(line).toBe('✓ analysis.order.log_prefix — analysis.order.outcome.filled — analysis.order.action.buy 3 NVDA @ $1,234.50')
   })
 
+  it('includes the broker order id when reconciliation needs it', () => {
+    const line = orderResultLogLine(
+      { outcome: 'reconciliation_required', ticker: 'NVDA', orderId: 'alpaca-42' },
+      t,
+    )
+
+    expect(line).toContain('orders.col_broker_order_id: alpaca-42')
+  })
+
   it.each([
     ['filled', '✓'],
+    ['partially_filled', '⚠'],
     ['skipped', '⚠'],
+    ['reconciliation_required', '⚠'],
     ['rejected', '❌'],
     ['error', '❌'],
   ] as const)('marks %s with %s', (outcome, marker) => {

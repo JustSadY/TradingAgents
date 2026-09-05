@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
+import uuid
+from decimal import Decimal, InvalidOperation
 
 from backend.core.config import is_live_trading_enabled
 from backend.core.database import AsyncSessionLocal
@@ -20,6 +23,67 @@ def _value(value) -> str:
     return str(getattr(value, "value", value) or "")
 
 
+def _finite_float(value, *, field: str) -> float:
+    parsed = float(value or 0.0)
+    if not math.isfinite(parsed):
+        raise ValueError(f"Alpaca returned non-finite {field}")
+    return parsed
+
+
+def _broker_decimal(value) -> Decimal:
+    if value is None or value == "":
+        return Decimal("0")
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise ValueError("Alpaca returned an invalid decimal value") from exc
+    if not parsed.is_finite():
+        raise ValueError("Alpaca returned a non-finite decimal value")
+    return parsed
+
+
+def _validated_fill_details(raw_price, raw_quantity, *, requested_quantity):
+    """Return safe broker fill values plus an inconsistency reason, if any."""
+    try:
+        price = _broker_decimal(raw_price)
+        quantity = _broker_decimal(raw_quantity)
+        requested = _broker_decimal(requested_quantity)
+    except ValueError:
+        return None, None, "broker_fill_details_invalid"
+
+    if price < 0 or quantity < 0 or requested <= 0:
+        return None, None, "broker_fill_details_invalid"
+    if quantity > requested:
+        return None, None, "broker_fill_details_invalid"
+    if (quantity > 0) != (price > 0):
+        return None, None, "broker_fill_details_invalid"
+    return (price if price > 0 else None), (quantity if quantity > 0 else None), ""
+
+
+def _client_order_id(request: OrderRequest, action: str) -> str:
+    """Return an Alpaca client correlation id for every submitted order.
+
+    Analysis-originated orders use a deterministic UUID5 so retries for the
+    same durable analysis identity cannot silently become a second broker
+    order. Manual/direct adapter calls have no durable request key, so they use
+    a UUID4; that still gives a lost submit response an immediate recovery key
+    and a durable audit reference.
+    """
+    if request.analysis_id is None:
+        return f"ta-manual-{uuid.uuid4()}"
+    seed = f"tradingagents:{request.analysis_id}:{request.ticker.strip().upper()}:{action}"
+    return f"ta-{uuid.uuid5(uuid.NAMESPACE_URL, seed)}"
+
+
+def _terminal_consistency(status: str, filled_price, filled_quantity) -> str:
+    """Return a reconciliation reason for impossible terminal status/fill pairs."""
+    if status == "FILLED" and (filled_price is None or filled_quantity is None):
+        return "broker_fill_details_missing"
+    if status == "REJECTED" and filled_quantity is not None:
+        return "broker_status_fill_conflict"
+    return ""
+
+
 class AlpacaTrader(BaseTraderInterface):
     """Paper/live broker adapter backed exclusively by ``alpaca-py``."""
 
@@ -29,6 +93,7 @@ class AlpacaTrader(BaseTraderInterface):
         initial_capital: float = 100_000.0,
         db=None,
         mode: str = "simulation",
+        release_db_before_network: bool = False,
     ):
         if db is None:
             db = AsyncSessionLocal()
@@ -39,6 +104,7 @@ class AlpacaTrader(BaseTraderInterface):
         self._portfolio_id = portfolio_id
         self._initial_capital = initial_capital
         self._mode = mode
+        self._release_db_before_network = release_db_before_network
 
     @property
     def mode(self) -> str:
@@ -65,6 +131,15 @@ class AlpacaTrader(BaseTraderInterface):
         secret = get_user_api_key(owner, "alpaca_secret", fernet)
         if not key or not secret:
             raise ValueError("Alpaca API credentials missing or invalid. Set them in Owner Profile.")
+
+        if self._release_db_before_network:
+            # Every public broker method calls _clients() immediately before
+            # entering alpaca-py network I/O. End whatever short DB phase was
+            # needed to load credentials/config/audit state so a slow broker
+            # request never pins a SQL connection or row lock. Alpaca side
+            # effects cannot be transactionally rolled back with PostgreSQL;
+            # making the DB boundary explicit is safer than pretending they can.
+            await self._db.commit()
         return key, secret
 
     async def _clients(self):
@@ -89,7 +164,7 @@ class AlpacaTrader(BaseTraderInterface):
             request = StockLatestTradeRequest(symbol_or_symbols=ticker.upper())
             result = await asyncio.to_thread(market.get_stock_latest_trade, request)
             trade = result.get(ticker.upper()) if isinstance(result, dict) else None
-            price = float(getattr(trade, "price", 0.0) or 0.0)
+            price = _finite_float(getattr(trade, "price", 0.0), field=f"{ticker} latest-trade price")
             if price > 0:
                 return price
         except Exception as exc:
@@ -109,16 +184,37 @@ class AlpacaTrader(BaseTraderInterface):
                 filled_price=None,
                 filled_quantity=None,
                 message="Live Alpaca trading is disabled by server configuration.",
+                reason_code="live_trading_disabled",
             )
-        if request.quantity <= 0:
+
+        action = str(request.action or "").strip().upper()
+        if action not in {"BUY", "SELL"}:
             return OrderResult(
                 order_id="",
                 status="REJECTED",
                 filled_price=None,
                 filled_quantity=None,
-                message="Order quantity must be positive",
+                message="Order action must be BUY or SELL.",
+                reason_code="invalid_action",
             )
 
+        quantity = safe_decimal(request.quantity)
+        if not quantity.is_finite() or quantity <= 0:
+            return OrderResult(
+                order_id="",
+                status="REJECTED",
+                filled_price=None,
+                filled_quantity=None,
+                message="Order quantity must be a positive finite number.",
+                reason_code="invalid_quantity",
+            )
+
+        client_order_id = _client_order_id(request, action)
+        submission_started = False
+        known_order_id = ""
+        known_filled_price = None
+        known_filled_qty = None
+        trading = None
         try:
             from alpaca.trading.enums import OrderClass, OrderSide, TimeInForce
             from alpaca.trading.requests import MarketOrderRequest, StopLossRequest, TakeProfitRequest
@@ -126,9 +222,10 @@ class AlpacaTrader(BaseTraderInterface):
             trading, _market = await self._clients()
             kwargs = {
                 "symbol": request.ticker.upper(),
-                "qty": float(request.quantity),
-                "side": OrderSide.BUY if request.action.upper() == "BUY" else OrderSide.SELL,
+                "qty": float(quantity),
+                "side": OrderSide.BUY if action == "BUY" else OrderSide.SELL,
                 "time_in_force": TimeInForce.DAY,
+                "client_order_id": client_order_id,
             }
             if request.stop_loss and request.take_profit:
                 kwargs["order_class"] = OrderClass.BRACKET
@@ -141,11 +238,22 @@ class AlpacaTrader(BaseTraderInterface):
                 if request.take_profit:
                     kwargs["take_profit"] = TakeProfitRequest(limit_price=float(request.take_profit))
 
-            order = await asyncio.to_thread(trading.submit_order, MarketOrderRequest(**kwargs))
+            # Construct and validate the SDK request entirely locally first. A
+            # validation error here proves nothing was submitted and is safe to
+            # report as a rejection. Only flip the uncertainty flag immediately
+            # before entering submit_order, where a timeout may hide acceptance.
+            broker_request = MarketOrderRequest(**kwargs)
+            submission_started = True
+            order = await asyncio.to_thread(trading.submit_order, broker_request)
             order_id = str(getattr(order, "id", "") or "")
+            if not order_id:
+                raise RuntimeError("Alpaca submit response did not include an order id")
+            known_order_id = order_id
             status = _value(getattr(order, "status", "UNKNOWN")).upper()
             filled_price = getattr(order, "filled_avg_price", None)
             filled_qty = getattr(order, "filled_qty", None)
+            known_filled_price = filled_price
+            known_filled_qty = filled_qty
 
             for _ in range(20):
                 if status in _TERMINAL:
@@ -155,6 +263,8 @@ class AlpacaTrader(BaseTraderInterface):
                 status = _value(getattr(order, "status", status)).upper()
                 filled_price = getattr(order, "filled_avg_price", filled_price)
                 filled_qty = getattr(order, "filled_qty", filled_qty)
+                known_filled_price = filled_price
+                known_filled_qty = filled_qty
 
             if status not in _TERMINAL:
                 try:
@@ -166,25 +276,113 @@ class AlpacaTrader(BaseTraderInterface):
                 status = _value(getattr(order, "status", status)).upper()
                 filled_price = getattr(order, "filled_avg_price", filled_price)
                 filled_qty = getattr(order, "filled_qty", filled_qty)
+                known_filled_price = filled_price
+                known_filled_qty = filled_qty
 
-            if status == "FILLED" and (not filled_price or not filled_qty):
+            safe_filled_price, safe_filled_qty, fill_reason = _validated_fill_details(
+                filled_price,
+                filled_qty,
+                requested_quantity=quantity,
+            )
+            reason_code = fill_reason
+            if fill_reason:
                 status = "RECONCILIATION_REQUIRED"
+            elif status not in _TERMINAL:
+                status = "RECONCILIATION_REQUIRED"
+                reason_code = "broker_order_still_open"
+            else:
+                terminal_reason = _terminal_consistency(status, safe_filled_price, safe_filled_qty)
+                if terminal_reason:
+                    status = "RECONCILIATION_REQUIRED"
+                    reason_code = terminal_reason
 
             return OrderResult(
                 order_id=order_id,
                 status=status,
-                filled_price=safe_decimal(filled_price),
-                filled_quantity=safe_decimal(filled_qty),
-                message=f"Alpaca order status: {status}",
+                filled_price=safe_filled_price,
+                filled_quantity=safe_filled_qty,
+                message=(
+                    "Broker order state is not safely terminal; reconcile the Alpaca account before retrying."
+                    if status == "RECONCILIATION_REQUIRED"
+                    else f"Alpaca order status: {status}"
+                ),
+                reason_code=reason_code,
+                external_submission=True,
             )
         except Exception:
             _logger.exception("alpaca-py order placement failed")
+
+            # If submit_order lost its response, the client id is the safest way
+            # to ask Alpaca whether the order actually exists. A confirmed
+            # lookup can turn an ambiguous timeout into a concrete terminal
+            # result without ever submitting a second order.
+            if submission_started and not known_order_id and trading is not None:
+                try:
+                    recovered = await asyncio.to_thread(trading.get_order_by_client_id, client_order_id)
+                    recovered_id = str(getattr(recovered, "id", "") or "")
+                    recovered_status = _value(getattr(recovered, "status", "UNKNOWN")).upper()
+                    recovered_price = getattr(recovered, "filled_avg_price", None)
+                    recovered_qty = getattr(recovered, "filled_qty", None)
+                    safe_price, safe_qty, fill_reason = _validated_fill_details(
+                        recovered_price,
+                        recovered_qty,
+                        requested_quantity=quantity,
+                    )
+                    reason_code = fill_reason
+                    if fill_reason:
+                        recovered_status = "RECONCILIATION_REQUIRED"
+                    elif recovered_status not in _TERMINAL:
+                        recovered_status = "RECONCILIATION_REQUIRED"
+                        reason_code = "broker_order_still_open"
+                    else:
+                        terminal_reason = _terminal_consistency(recovered_status, safe_price, safe_qty)
+                        if terminal_reason:
+                            recovered_status = "RECONCILIATION_REQUIRED"
+                            reason_code = terminal_reason
+
+                    return OrderResult(
+                        order_id=recovered_id or f"client:{client_order_id}",
+                        status=recovered_status,
+                        filled_price=safe_price,
+                        filled_quantity=safe_qty,
+                        message=(
+                            "Broker submission was recovered by client order id; reconcile before retrying."
+                            if recovered_status == "RECONCILIATION_REQUIRED"
+                            else f"Alpaca order status: {recovered_status}"
+                        ),
+                        reason_code=reason_code,
+                        external_submission=True,
+                    )
+                except Exception as recovery_exc:
+                    _logger.warning(
+                        "Could not recover uncertain Alpaca submission by client_order_id=%s: %s",
+                        client_order_id,
+                        recovery_exc,
+                    )
+                    # Preserve a durable, explicitly typed reference in the
+                    # existing external-order audit field. No production code
+                    # treats this value as a broker UUID, and the prefix makes
+                    # the distinction unambiguous to operators.
+                    known_order_id = f"client:{client_order_id}"
+
+            status = "RECONCILIATION_REQUIRED" if submission_started else "REJECTED"
+            safe_filled_price, safe_filled_qty, _fill_reason = _validated_fill_details(
+                known_filled_price,
+                known_filled_qty,
+                requested_quantity=quantity,
+            )
             return OrderResult(
-                order_id="",
-                status="REJECTED",
-                filled_price=None,
-                filled_quantity=None,
-                message="Broker order request failed. Review server logs and reconcile the broker account.",
+                order_id=known_order_id,
+                status=status,
+                filled_price=safe_filled_price if submission_started else None,
+                filled_quantity=safe_filled_qty if submission_started else None,
+                message=(
+                    "Broker submission outcome is uncertain; reconcile the Alpaca account before retrying."
+                    if submission_started
+                    else "Broker order request failed before submission. Review server logs."
+                ),
+                reason_code="broker_submission_uncertain" if submission_started else "broker_request_failed",
+                external_submission=submission_started,
             )
 
     async def cancel_order(self, order_id: str) -> bool:
@@ -192,7 +390,16 @@ class AlpacaTrader(BaseTraderInterface):
             return False
         try:
             trading, _market = await self._clients()
-            await asyncio.to_thread(trading.cancel_order_by_id, order_id)
+            broker_order_id = str(order_id or "").strip()
+            if broker_order_id.startswith("client:"):
+                client_order_id = broker_order_id.removeprefix("client:").strip()
+                if not client_order_id:
+                    return False
+                recovered = await asyncio.to_thread(trading.get_order_by_client_id, client_order_id)
+                broker_order_id = str(getattr(recovered, "id", "") or "")
+            if not broker_order_id:
+                return False
+            await asyncio.to_thread(trading.cancel_order_by_id, broker_order_id)
             return True
         except Exception as exc:
             _logger.warning("alpaca-py cancellation failed for %s: %s", order_id, exc)
@@ -202,14 +409,27 @@ class AlpacaTrader(BaseTraderInterface):
         try:
             trading, _market = await self._clients()
             account = await asyncio.to_thread(trading.get_account)
+            account_status = _value(getattr(account, "status", "")).upper()
+            trade_suspended = bool(getattr(account, "trade_suspended_by_user", False))
+            status_allows_trading = account_status == "ACTIVE" or (
+                self._mode != "live" and account_status == "PAPER_ONLY"
+            )
             return {
-                "cash": float(getattr(account, "cash", 0.0) or 0.0),
-                "buying_power": float(getattr(account, "buying_power", 0.0) or 0.0),
-                "equity": float(getattr(account, "equity", 0.0) or 0.0),
-                "portfolio_value": float(getattr(account, "portfolio_value", 0.0) or 0.0),
-                "status": _value(getattr(account, "status", "")),
-                "trading_blocked": bool(getattr(account, "trading_blocked", False)),
+                "cash": _finite_float(getattr(account, "cash", 0.0), field="account cash"),
+                "buying_power": _finite_float(getattr(account, "buying_power", 0.0), field="account buying power"),
+                "equity": _finite_float(getattr(account, "equity", 0.0), field="account equity"),
+                "portfolio_value": _finite_float(
+                    getattr(account, "portfolio_value", 0.0), field="account portfolio value"
+                ),
+                "status": account_status,
+                "trading_blocked": (
+                    bool(getattr(account, "trading_blocked", False))
+                    or trade_suspended
+                    or not status_allows_trading
+                ),
                 "account_blocked": bool(getattr(account, "account_blocked", False)),
+                "trade_suspended_by_user": trade_suspended,
+                "shorting_enabled": bool(getattr(account, "shorting_enabled", False)),
             }
         except Exception as exc:
             _logger.warning("alpaca-py account request failed: %s", exc)
@@ -224,23 +444,43 @@ class AlpacaTrader(BaseTraderInterface):
             positions = await asyncio.to_thread(trading.get_all_positions)
             result: dict[str, dict] = {}
             for pos in positions:
-                symbol = str(getattr(pos, "symbol", "")).upper()
-                qty = float(getattr(pos, "qty", 0.0) or 0.0)
-                side = _value(getattr(pos, "side", "short" if qty < 0 else "long")).lower()
+                symbol = str(getattr(pos, "symbol", "") or "").strip().upper()
+                if not symbol:
+                    raise ValueError("Alpaca returned a position without a symbol")
+
+                qty = _finite_float(getattr(pos, "qty", 0.0), field=f"{symbol} quantity")
+                side = _value(getattr(pos, "side", "")).lower()
+                if side not in {"long", "short"}:
+                    raise ValueError(f"Alpaca returned invalid {symbol} position side {side!r}")
+
+                quantity = abs(qty)
+                if quantity == 0:
+                    continue
+                avg_price = _finite_float(getattr(pos, "avg_entry_price", 0.0), field=f"{symbol} average price")
+                current_price = _finite_float(getattr(pos, "current_price", 0.0), field=f"{symbol} current price")
+                market_value = abs(
+                    _finite_float(getattr(pos, "market_value", 0.0), field=f"{symbol} market value")
+                )
+                unrealized_pnl = _finite_float(
+                    getattr(pos, "unrealized_pl", 0.0), field=f"{symbol} unrealized PnL"
+                )
+                if avg_price <= 0 or current_price <= 0 or market_value <= 0:
+                    raise ValueError(f"Alpaca returned incomplete valuation data for {symbol}")
+
                 result[symbol] = {
                     "ticker": symbol,
-                    "quantity": abs(qty),
-                    "signed_quantity": qty,
+                    "quantity": quantity,
+                    "signed_quantity": -quantity if side == "short" else quantity,
                     "side": side,
-                    "avg_price": float(getattr(pos, "avg_entry_price", 0.0) or 0.0),
-                    "current_price": float(getattr(pos, "current_price", 0.0) or 0.0),
-                    "market_value": abs(float(getattr(pos, "market_value", 0.0) or 0.0)),
-                    "unrealized_pnl": float(getattr(pos, "unrealized_pl", 0.0) or 0.0),
+                    "avg_price": avg_price,
+                    "current_price": current_price,
+                    "market_value": market_value,
+                    "unrealized_pnl": unrealized_pnl,
                 }
             return result
         except Exception as exc:
             _logger.warning("alpaca-py positions request failed: %s", exc)
-            return {}
+            raise RuntimeError("Alpaca positions are unavailable; refusing to assume an empty account.") from exc
 
     async def close(self) -> None:
         if self._is_local_db and self._db is not None:

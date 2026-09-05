@@ -17,6 +17,7 @@ _logger = logging.getLogger(__name__)
 _BETA_THRESHOLD = 1.5
 _VOL_THRESHOLD = 0.40
 _SECTOR_THRESHOLD = 50.0
+_RISK_FETCH_CONCURRENCY = 8
 
 def _evaluate_breaches(
     portfolio_beta: float | None,
@@ -91,18 +92,26 @@ async def _fetch_market_data(tickers: list[str]) -> tuple[dict[str, Any], Any, d
     """Concurrently fetch per-ticker close history, SPY history, and sectors.
 
     Returns ``(ticker_hist, spy_returns, sector_map)`` with failed fetches simply
-    omitted from the maps.
+    omitted from the maps. External fan-out is explicitly bounded so a large
+    portfolio cannot open an unbounded number of provider/thread operations.
     """
+    semaphore = asyncio.Semaphore(_RISK_FETCH_CONCURRENCY)
 
     async def hist_for(ticker: str):
-        return ticker, await _fetch_close_history(ticker)
+        async with semaphore:
+            return ticker, await _fetch_close_history(ticker)
+
+    async def spy_history():
+        async with semaphore:
+            return await _fetch_close_history("SPY")
 
     async def sector_for(ticker: str):
-        return ticker, await fetch_sector(ticker)
+        async with semaphore:
+            return ticker, await fetch_sector(ticker)
 
     results = await asyncio.gather(
         *[hist_for(t) for t in tickers],
-        _fetch_close_history("SPY"),
+        spy_history(),
         *[sector_for(t) for t in tickers],
         return_exceptions=True,
     )
@@ -247,7 +256,13 @@ def _build_correlation_matrix(ticker_returns: dict[str, Any]) -> list[dict]:
 
 async def _fetch_returns(tickers: list[str]) -> dict[str, Any]:
     """Fetch 3mo daily returns per ticker; failed/short series are omitted."""
-    results = await asyncio.gather(*[_fetch_close_history(t) for t in tickers], return_exceptions=True)
+    semaphore = asyncio.Semaphore(_RISK_FETCH_CONCURRENCY)
+
+    async def _fetch_one(ticker: str):
+        async with semaphore:
+            return await _fetch_close_history(ticker)
+
+    results = await asyncio.gather(*[_fetch_one(t) for t in tickers], return_exceptions=True)
     out: dict[str, Any] = {}
     for ticker, hist in zip(tickers, results, strict=False):
         if isinstance(hist, Exception) or hist is None:
@@ -300,7 +315,12 @@ async def get_risk_dashboard(db: AsyncSession, user: User) -> dict:
     """Calculate portfolio risk metrics from current open holdings."""
     from backend.services.mock_trading_service import get_portfolio_with_live_prices
 
-    portfolio_data: dict = await get_portfolio_with_live_prices(db, user=user, read_only=True)
+    portfolio_data: dict = await get_portfolio_with_live_prices(
+        db,
+        user=user,
+        read_only=True,
+        release_before_price_io=True,
+    )
     holdings: list[dict] = portfolio_data.get("holdings", [])
     if not holdings:
         return dict(_EMPTY_DASHBOARD)
@@ -308,6 +328,9 @@ async def get_risk_dashboard(db: AsyncSession, user: User) -> dict:
     total_equity = _prepare_holdings(holdings)
     tickers = [h["ticker"] for h in holdings]
 
+    # The portfolio snapshot may leave a read transaction open. Release its
+    # connection before the slower history/sector provider fan-out below.
+    await db.commit()
     ticker_hist, spy_returns, sector_map = await _fetch_market_data(tickers)
 
     holdings_risk, portfolio_beta, portfolio_volatility, ticker_returns = _build_holdings_risk(

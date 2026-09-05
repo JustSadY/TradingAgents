@@ -19,10 +19,40 @@ from backend.models.settings import AppSettings
 from backend.schemas.settings import SettingsRead, SettingsUpdate
 
 _logger = logging.getLogger(__name__)
+_MEMORY_STORE_CONFIG_FIELDS = frozenset(
+    {
+        "memory_embedder",
+        "memory_openai_embed_model",
+        "memory_ollama_embed_model",
+    }
+)
 
 
 class SettingsPermissionError(PermissionError):
     pass
+
+
+def _enforce_auto_execution_safety(settings: AppSettings, fields: dict) -> None:
+    """Make automatic AI execution impossible without deterministic safeguards.
+
+    ``auto_execute_signals`` is an opt-in to unattended execution, not an opt-out
+    from the stability controller or run-quality gate. Keep the stored settings
+    self-consistent so every execution path observes the same contract, including
+    presets and background scheduler runs.
+    """
+    auto_execute = bool(fields.get("auto_execute_signals", getattr(settings, "auto_execute_signals", False)))
+    if not auto_execute:
+        return
+    fields["quality_gate_enabled"] = True
+    fields["decision_stability_mode"] = "enforce"
+
+
+def _invalidate_memory_store_if_needed(settings: AppSettings, changed_fields: set[str]) -> None:
+    if not changed_fields.intersection(_MEMORY_STORE_CONFIG_FIELDS):
+        return
+    from backend.services.memory_service import invalidate_user_memory_store_cache
+
+    invalidate_user_memory_store_cache(getattr(settings, "user_id", None))
 
 
 async def enforce_settings_update_permissions(db: AsyncSession, user, body: SettingsUpdate) -> None:
@@ -51,10 +81,9 @@ async def enforce_settings_update_permissions(db: AsyncSession, user, body: Sett
 def parse_preset_settings_json(settings_json: str) -> SettingsUpdate:
     """Parse a stored preset as a strict, validated ``SettingsUpdate``.
 
-    ``SettingsUpdate`` deliberately accepts partial updates, but Pydantic's
-    default extra-field behaviour is permissive. Check field names first so
-    an ORM attribute such as ``user_id`` cannot reappear as a mass-assignment
-    path through a legacy or manually-created preset.
+    ``SettingsUpdate`` deliberately accepts partial updates. Check field names
+    first so an ORM attribute such as ``user_id`` cannot reappear as a
+    mass-assignment path through a legacy or manually-created preset.
     """
     try:
         data = json.loads(settings_json)
@@ -105,21 +134,35 @@ async def apply_settings_update(
     settings: AppSettings,
     body: SettingsUpdate,
 ) -> AppSettings:
-    """Apply a partial settings update, reset the active preset on real changes,
-    persist, and emit a 'settings_updated' event."""
-    has_changes = False
+    """Apply a partial settings update and emit only when stored values change.
+
+    Idempotent PUT/PATCH callers must not advance ``updated_at``, issue a commit,
+    or fan out a ``settings_updated`` event when they resend values that are
+    already persisted.
+    """
     fields = body.model_dump(exclude_unset=True)
-    webhook_url = fields.get("webhook_url")
+    _enforce_auto_execution_safety(settings, fields)
+    changed_fields = {
+        field: value
+        for field, value in fields.items()
+        if getattr(settings, field, None) != value
+    }
+    if not changed_fields:
+        return settings
+
+    webhook_url = changed_fields.get("webhook_url")
     if webhook_url:
         from backend.services.notification_service import resolve_webhook_target
 
+        # Settings/permission reads are complete and fields have not been
+        # mutated yet. DNS/SSRF validation can block on network resolution, so
+        # release the DB connection before it starts.
+        await db.commit()
         await resolve_webhook_target(webhook_url)
-    for field, value in fields.items():
-        if getattr(settings, field, None) != value:
-            has_changes = True
+
+    for field, value in changed_fields.items():
         setattr(settings, field, value)
-    if has_changes:
-        settings.active_preset_name = None
+    settings.active_preset_name = None
 
     if settings.webhook_url:
         from backend.core.log_redaction import register_sensitive_literal
@@ -129,6 +172,7 @@ async def apply_settings_update(
     settings.updated_at = datetime.now(UTC)
     await db.flush()
     await db.commit()
+    _invalidate_memory_store_if_needed(settings, set(changed_fields))
 
     from backend.core.events import emit
 
@@ -153,40 +197,54 @@ async def get_user_language(db: AsyncSession, user=None) -> str:
 
 
 async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
-    """Apply a preset's settings JSON onto *user*'s AppSettings row.
+    """Apply a preset without rewriting identical runtime state.
 
-    Raises ValueError if the stored preset JSON is invalid. Flushes so any
-    constraint error surfaces here rather than at request-commit time.
+    The active preset marker is bookkeeping and may change even when every
+    runtime setting already matches. In that marker-only case persist the label
+    but do not fan out ``settings_updated`` because no runtime consumer needs to
+    rebuild itself.
     """
     update = parse_preset_settings_json(preset.settings_json)
     fields = update.model_dump(exclude_unset=True)
+    settings = await get_or_create_settings(db, user)
+    _enforce_auto_execution_safety(settings, fields)
 
-    webhook_url = fields.get("webhook_url")
-    if webhook_url:
+    changed_field_names = {
+        key for key, value in fields.items() if getattr(settings, key, None) != value
+    }
+    marker_changed = settings.active_preset_name != preset.name
+    if not changed_field_names and not marker_changed:
+        return preset.name
+
+    if "webhook_url" in changed_field_names and fields.get("webhook_url"):
         from backend.services.notification_service import resolve_webhook_target
 
-        await resolve_webhook_target(webhook_url)
+        # Same boundary as direct settings updates: no preset mutation has been
+        # applied yet, so release DB state before DNS/SSRF validation.
+        await db.commit()
+        await resolve_webhook_target(fields["webhook_url"])
 
-    settings = await get_or_create_settings(db, user)
-    for key, value in fields.items():
-        setattr(settings, key, value)
+    for key in changed_field_names:
+        setattr(settings, key, fields[key])
     settings.active_preset_name = preset.name
-    settings.updated_at = datetime.now(UTC)
 
     if settings.webhook_url:
         from backend.core.log_redaction import register_sensitive_literal
 
         register_sensitive_literal(settings.webhook_url)
 
+    settings.updated_at = datetime.now(UTC)
     await db.flush()
     await db.commit()
+    _invalidate_memory_store_if_needed(settings, changed_field_names)
 
-    from backend.core.events import emit
+    if changed_field_names:
+        from backend.core.events import emit
 
-    try:
-        await emit("settings_updated", settings=settings)
-    except Exception:
-        _logger.warning("Preset settings update event emission failed", exc_info=True)
+        try:
+            await emit("settings_updated", settings=settings)
+        except Exception:
+            _logger.warning("Preset settings update event emission failed", exc_info=True)
     return preset.name
 
 
@@ -205,9 +263,12 @@ async def add_ticker_to_watchlist(db: AsyncSession, user, ticker: str) -> list[s
 
 
 async def remove_ticker_from_watchlist(db: AsyncSession, user, ticker: str) -> list[str]:
-    """Remove ``ticker`` from ``user``'s watchlist."""
+    """Remove ``ticker`` without rewriting an unchanged watchlist."""
     settings = await get_or_create_settings(db, user)
-    settings.watchlist = [t for t in settings.watchlist if t != ticker]
+    current = list(settings.watchlist or [])
+    if ticker not in current:
+        return current
+    settings.watchlist = [item for item in current if item != ticker]
     await db.flush()
     return settings.watchlist
 

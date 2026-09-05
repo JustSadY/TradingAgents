@@ -11,7 +11,6 @@ export interface MemoryStatusResponse {
   embed_model: string | null;
   embedder: string | null;
   enabled: boolean;
-  index: string | null;
   needs_openai_key: boolean;
   store: string;
 }

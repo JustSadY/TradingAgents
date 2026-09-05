@@ -16,6 +16,14 @@ async def get_app_settings(db: AsyncSession, user_id: int | None) -> AppSettings
     return result.scalar_one_or_none()
 
 
+async def get_app_settings_map(db: AsyncSession, user_ids: set[int]) -> dict[int, AppSettings]:
+    """Load settings for multiple tenant owners in one query."""
+    if not user_ids:
+        return {}
+    result = await db.execute(select(AppSettings).where(AppSettings.user_id.in_(user_ids)))
+    return {int(row.user_id): row for row in result.scalars().all() if row.user_id is not None}
+
+
 async def get_or_create_app_settings(db: AsyncSession, user_id: int | None) -> AppSettings:
     settings = await get_app_settings(db, user_id)
     if settings is not None:
