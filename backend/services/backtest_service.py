@@ -534,6 +534,11 @@ async def run_backtest_simulation(
             analyses_map, consensus_report_stats = await _load_consensus_analyses(
                 db, ticker, start_date, end_date, user
             )
+            # Consensus reports are now fully materialized into the in-memory
+            # map. The remaining simulation is CPU work plus benchmark market
+            # data, so release the DB connection before either begins.
+            if db is not None:
+                await db.commit()
 
         initial_capital_decimal = _decimal(initial_capital)
         if initial_capital_decimal <= 0:
