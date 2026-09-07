@@ -121,6 +121,14 @@ def test_alert_service_does_not_own_background_sql() -> None:
     assert "existing_alert_analysis_keys" in source
 
 
+def test_alert_service_delegates_task_store_identity_to_analysis_queue() -> None:
+    backend_root = Path(__file__).resolve().parents[2]
+    source = (backend_root / "services" / "alert_service.py").read_text()
+
+    assert "dispatch_analysis" in source
+    assert "register_queued_task" not in source
+
+
 def test_alert_service_keeps_audited_background_capabilities() -> None:
     backend_root = Path(__file__).resolve().parents[2]
     source = (backend_root / "services" / "alert_service.py").read_text()
