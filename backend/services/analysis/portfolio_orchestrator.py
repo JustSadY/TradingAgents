@@ -15,6 +15,28 @@ from .orchestrator import run_individual_analysis
 
 _logger = logging.getLogger(__name__)
 
+_PORTFOLIO_TICKER_CONCURRENCY_CAP = 2
+_PROVIDER_PORTFOLIO_TICKER_CAPS = {
+    # Each ticker graph already fans out to multiple analyst teams. Running two
+    # such graphs against a constrained/local provider multiplies that pressure,
+    # so keep the outer portfolio layer serial for these providers.
+    "nvidia": 1,
+    "ollama": 1,
+}
+
+
+def _portfolio_ticker_concurrency(settings: AppSettings) -> int:
+    """Bound outer ticker graphs independently from inner analyst fan-out."""
+    raw = getattr(settings, "analyst_concurrency_limit", None) or 1
+    try:
+        requested = max(1, int(raw))
+    except (TypeError, ValueError):
+        requested = 1
+    provider = str(getattr(settings, "llm_provider", "") or "").strip().lower()
+    cap = _PROVIDER_PORTFOLIO_TICKER_CAPS.get(provider, _PORTFOLIO_TICKER_CONCURRENCY_CAP)
+    return min(requested, cap)
+
+
 def _portfolio_overview_labels(output_language: str | None) -> dict[str, str]:
     """Fixed copy for the non-executing multi-ticker overview.
 
@@ -56,6 +78,7 @@ def _portfolio_overview_labels(output_language: str | None) -> dict[str, str]:
         ),
     }
 
+
 def build_portfolio_overview(
     ticker_reports: dict[str, dict],
     *,
@@ -86,6 +109,7 @@ def build_portfolio_overview(
     parts.extend((labels["rule"], labels["rule_text"]))
     return "\n\n".join(parts)
 
+
 async def run_portfolio_analysis(
     tickers: list[str],
     trade_date: str,
@@ -96,17 +120,20 @@ async def run_portfolio_analysis(
     user=None,
     task_id: str | None = None,
 ):
+    normalized_tickers = list(dict.fromkeys(str(ticker).strip().upper() for ticker in tickers if str(ticker).strip()))
     username = user.username if user else "system"
-    _logger.info("Starting portfolio analysis for tickers=%s user=%s triggered_by=%s", tickers, username, triggered_by)
+    _logger.info(
+        "Starting portfolio analysis for tickers=%s user=%s triggered_by=%s", normalized_tickers, username, triggered_by
+    )
     portfolio_emitter = AnalysisEmitter(task_id) if task_id else None
-    total = len(tickers)
+    total = len(normalized_tickers)
     completed = 0
     progress_lock = asyncio.Lock()
 
     if portfolio_emitter:
         await portfolio_emitter.emit_progress(f"Starting portfolio analysis ({total} tickers)", "starting", "portfolio")
 
-    concurrency = settings.analyst_concurrency_limit or 1
+    concurrency = _portfolio_ticker_concurrency(settings)
     semaphore = asyncio.Semaphore(concurrency)
 
     async def _run_one(ticker: str):
@@ -137,7 +164,7 @@ async def run_portfolio_analysis(
                 await portfolio_emitter.emit_progress(f"{ticker} complete ({done}/{total})", "running", "portfolio")
             return ticker, data
 
-    results = await asyncio.gather(*[_run_one(t.upper()) for t in tickers], return_exceptions=True)
+    results = await asyncio.gather(*[_run_one(ticker) for ticker in normalized_tickers], return_exceptions=True)
     ticker_reports: dict = {}
     analysis_ids: list[int] = []
     for res in results:
@@ -165,11 +192,11 @@ async def run_portfolio_analysis(
         triggered_by=triggered_by,
         user_id=user.id if user is not None else None,
     )
-    multi_row.tickers = tickers
+    multi_row.tickers = normalized_tickers
     multi_row.analysis_ids = analysis_ids
     db.add(multi_row)
     await db.flush()
-    _logger.info("Portfolio analysis complete for user=%s tickers=%s", username, tickers)
+    _logger.info("Portfolio analysis complete for user=%s tickers=%s", username, normalized_tickers)
 
     if portfolio_emitter:
         await portfolio_emitter.emit(
@@ -183,6 +210,7 @@ async def run_portfolio_analysis(
         )
         await portfolio_emitter.close()
     return multi_row
+
 
 async def _generate_portfolio_overview(*, user, ticker_reports: dict[str, dict], output_language: str | None) -> str:
     """Build the report-only multi-ticker overview without a second decision LLM."""

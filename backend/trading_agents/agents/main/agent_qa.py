@@ -55,7 +55,8 @@ def create_agent_qa_node(ctx: AgentRunContext) -> NodeFn:
     async def agent_qa_node(state) -> dict:
         from backend.trading_agents.dataflows.config import get_config
 
-        if not get_config().get("agent_qa_enabled", True):
+        config = get_config()
+        if not config.get("agent_qa_enabled", True):
             return {}
 
         available = [
@@ -73,9 +74,29 @@ def create_agent_qa_node(ctx: AgentRunContext) -> NodeFn:
 
         by_normalized = {_normalize(label): (key, label, report) for key, label, report in available}
         moderator = ctx.llm_for(MAIN_KEY)
+        situation_text = "\n\n".join(
+            f"{label}: {report.strip()[:1200]}" for _key, label, report in available
+        )[:4000]
+
+        memory_context = ""
+        # Vector memory stores observation timestamps at application-write time,
+        # not exact market-knowledge time. Historical/time-travel runs therefore
+        # never consult it: even a same-day transcript could have been recorded
+        # after the replay cutoff and would create look-ahead leakage.
+        if str(config.get("analysis_mode") or "live").lower() == "live":
+            try:
+                from backend.services.memory_service import recall_agent_qa
+
+                memory_context = await recall_agent_qa(
+                    user_id=config.get("user_id"),
+                    situation_text=situation_text,
+                    top_k=3,
+                )
+            except Exception as exc:
+                logger.debug("[agent_qa] memory recall failed (non-fatal): %s", exc)
 
         try:
-            questions = await _generate_questions(moderator, available)
+            questions = await _generate_questions(moderator, available, memory_context=memory_context)
         except Exception as exc:
             logger.warning("[agent_qa] question generation failed: %s", exc)
             return {}
@@ -103,15 +124,15 @@ def create_agent_qa_node(ctx: AgentRunContext) -> NodeFn:
 
         transcript = "### Analyst Cross-Examination\n\n" + "\n\n".join(transcript_parts)
 
-        if state.get("learning_eligible", get_config().get("learning_eligible", True)):
+        if state.get("learning_eligible", config.get("learning_eligible", True)):
             try:
                 from backend.services.memory_service import record_agent_qa
 
                 await record_agent_qa(
-                    user_id=get_config().get("user_id"),
+                    user_id=config.get("user_id"),
                     ticker=state.get("company_of_interest", ""),
                     trade_date=state.get("trade_date", ""),
-                    situation_text=state.get("market_report", ""),
+                    situation_text=situation_text,
                     transcript=transcript,
                 )
             except Exception as exc:
@@ -121,19 +142,31 @@ def create_agent_qa_node(ctx: AgentRunContext) -> NodeFn:
 
     return agent_qa_node
 
-async def _generate_questions(moderator, available: list[tuple[str, str, str]]) -> list[_Question]:
+async def _generate_questions(
+    moderator,
+    available: list[tuple[str, str, str]],
+    *,
+    memory_context: str = "",
+) -> list[_Question]:
     """Ask the moderator for up to a few sharp cross-agent questions."""
     from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
 
     reports_block = "\n\n".join(f"### {label}\n{report.strip()[:2000]}" for _key, label, report in available)
     labels = ", ".join(label for _k, label, _r in available)
+    memory_block = ""
+    if memory_context:
+        memory_block = (
+            "\n\nPrior similar cross-examinations are supplied only as process memory. "
+            "Use them to notice recurring blind spots, never as current evidence and never copy their conclusions:\n"
+            f"{memory_context[:6000]}"
+        )
     prompt = (
         "You are moderating a panel of equity analysts who have each written a report. "
         "Identify the most important disagreements or unanswered gaps BETWEEN their reports, "
         f"and write up to {_MAX_QUESTIONS} focused questions that one analyst should put to another. "
         f"Each question's 'to' must be exactly one of: {labels}. "
         "Prefer questions that force an analyst to defend a claim another analyst contradicts.\n\n"
-        f"{reports_block}" + get_general_settings_block()
+        f"{reports_block}{memory_block}" + get_general_settings_block()
     )
     structured = bind_structured(moderator, _Questions, "Q&A Moderator")
     result = await ainvoke_structured_or_freetext(structured, moderator, prompt, "Q&A Moderator", schema=_Questions)

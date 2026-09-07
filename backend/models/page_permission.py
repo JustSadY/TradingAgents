@@ -79,18 +79,14 @@ SECTION_FIELDS = {
         "cron_schedule",
     ],
     "memory": [
-        "memory_store",
-        "pinecone_index",
-        "pinecone_cloud",
-        "pinecone_region",
         "memory_embedder",
-        "pinecone_embed_model",
         "memory_openai_embed_model",
         "memory_ollama_embed_model",
         "agent_qa_enabled",
         "memory_recall_count",
     ],
 }
+
 
 class UserPagePermission(Base):
     __tablename__ = "user_page_permissions"
@@ -99,6 +95,7 @@ class UserPagePermission(Base):
     page_key: Mapped[str] = mapped_column(String(50), nullable=False)
     allowed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     __table_args__ = (UniqueConstraint("user_id", "page_key", name="uq_user_page"),)
+
 
 class UserSettingPermission(Base):
     __tablename__ = "user_setting_permissions"

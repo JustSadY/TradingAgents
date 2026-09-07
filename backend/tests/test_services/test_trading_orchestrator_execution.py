@@ -255,7 +255,11 @@ async def test_portfolio_risk_snapshot_is_read_only(monkeypatch):
     )
 
     assert quantity == 10.0
-    assert received_kwargs == {"portfolio_id": 42, "read_only": True}
+    assert received_kwargs == {
+        "portfolio_id": 42,
+        "read_only": True,
+        "release_before_price_io": True,
+    }
 
 
 async def test_portfolio_risk_snapshot_failure_fails_closed_for_new_exposure(monkeypatch):

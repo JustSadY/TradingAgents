@@ -14,8 +14,10 @@ def _as_utc(value: datetime) -> datetime:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
 
+
 async def get_user_analysis(db: AsyncSession, analysis_id: int, user_id: int) -> AnalysisResult | None:
     return await repo.get_user_analysis_by_id(db, analysis_id, user_id)
+
 
 async def get_or_create_shared_report(
     db: AsyncSession,
@@ -36,13 +38,11 @@ async def get_or_create_shared_report(
         share.expires_at = current_time + timedelta(hours=48)
         share.revoked_at = None
         await db.commit()
-        await db.refresh(share)
         return share
 
     try:
         share = await repo.create_shared_report(db, user_id, analysis_id)
         await db.commit()
-        await db.refresh(share)
         return share
     except IntegrityError:
         await db.rollback()
@@ -56,8 +56,8 @@ async def get_or_create_shared_report(
             share.expires_at = current_time + timedelta(hours=48)
             share.revoked_at = None
             await db.commit()
-            await db.refresh(share)
         return share
+
 
 async def revoke_shared_report(
     db: AsyncSession, analysis_id: int, user_id: int, current_time: datetime
@@ -71,8 +71,10 @@ async def revoke_shared_report(
     await db.commit()
     return True
 
+
 async def get_shared_report(db: AsyncSession, token: str) -> SharedReport | None:
     return await repo.get_shared_report_by_token(db, token)
+
 
 async def get_analysis_for_share(db: AsyncSession, analysis_id: int) -> AnalysisResult | None:
     return await repo.get_analysis_by_id_public(db, analysis_id)

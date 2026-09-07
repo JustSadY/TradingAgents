@@ -23,6 +23,7 @@ _logger = logging.getLogger(__name__)
 _MAX_ROWS = 50
 _RECENT_SHOWN = 5
 
+
 def _summarize(rows: list) -> dict[str, dict]:
     """Per-signal stats over rows that have a realized raw_return."""
     stats: dict[str, dict] = {}
@@ -38,6 +39,7 @@ def _summarize(rows: list) -> dict[str, dict]:
             s["wins"] += 1
     return stats
 
+
 def render_signal_replay(ticker: str, rows: list) -> str:
     stats = _summarize(rows)
     if not stats:
@@ -51,19 +53,20 @@ def render_signal_replay(ticker: str, rows: list) -> str:
     for signal, s in sorted(stats.items(), key=lambda kv: -kv[1]["count"]):
         avg = s["total_return"] / s["count"]
         win_rate = s["wins"] / s["count"] * 100.0
-        md += f"- {signal}: {s['count']} signal(s), avg realized return {avg:+.2f}%, win rate {win_rate:.0f}%\n"
+        md += f"- {signal}: {s['count']} signal(s), avg realized return {avg * 100:+.2f}%, win rate {win_rate:.0f}%\n"
 
     recent = [r for r in rows if r.raw_return is not None][:_RECENT_SHOWN]
     if recent:
         md += "Most recent calls:\n"
-        for r in recent:
-            md += f"  - {r.trade_date}: {r.signal} -> {float(r.raw_return):+.2f}%\n"
+        for row in recent:
+            md += f"  - {row.trade_date}: {row.signal} -> {float(row.raw_return) * 100:+.2f}%\n"
     md += (
         "[IMPORTANT] If a signal type has a poor track record on this ticker, "
         "demand stronger evidence before repeating it; if the record is strong, "
         "that supports conviction.\n\n"
     )
     return md
+
 
 async def get_signal_replay_context(db: AsyncSession, ticker: str, user_id: int | None) -> str:
     """Markdown replay summary for ``ticker`` scoped to the requesting user.
@@ -72,8 +75,14 @@ async def get_signal_replay_context(db: AsyncSession, ticker: str, user_id: int 
     the prompt stays clean for first-time tickers).
     """
     try:
+        # Replay needs only these three scalar fields. Avoid materializing full
+        # analysis rows with report text, debate histories and strategy JSON.
         q = (
-            select(AnalysisResult)
+            select(
+                AnalysisResult.trade_date,
+                AnalysisResult.signal,
+                AnalysisResult.raw_return,
+            )
             .where(AnalysisResult.ticker == ticker.upper())
             .where(AnalysisResult.raw_return.is_not(None))
             .where(AnalysisResult.learning_eligible.is_(True))
@@ -84,7 +93,7 @@ async def get_signal_replay_context(db: AsyncSession, ticker: str, user_id: int 
             q = q.where(AnalysisResult.user_id.is_(None))
         else:
             q = q.where(AnalysisResult.user_id == user_id)
-        rows = list((await db.execute(q)).scalars().all())
+        rows = list((await db.execute(q)).all())
         return render_signal_replay(ticker, rows)
     except Exception as exc:  # noqa: BLE001
         _logger.warning("Signal replay context failed for %s: %s", ticker, exc)

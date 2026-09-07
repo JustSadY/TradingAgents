@@ -2,12 +2,47 @@ from __future__ import annotations
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from backend.models.analysis import AnalysisResult
+
+_BACKFILL_COLUMNS = (
+    AnalysisResult.id,
+    AnalysisResult.user_id,
+    AnalysisResult.ticker,
+    AnalysisResult.trade_date,
+    AnalysisResult.signal,
+    AnalysisResult.final_decision,
+    AnalysisResult.market_report,
+    AnalysisResult.reflection,
+    AnalysisResult.raw_return,
+    AnalysisResult.alpha_return,
+    AnalysisResult.holding_days,
+)
 
 
 def _tenant_clause(user_id: int | None):
     return AnalysisResult.user_id == user_id if user_id is not None else AnalysisResult.user_id.is_(None)
+
+
+def _resolved_learning_columns() -> tuple:
+    """Columns used by analyst attribution without loading the full analysis row."""
+    from backend.trading_agents.agents.analyst_registry import get_report_fields
+
+    report_columns = tuple(
+        getattr(AnalysisResult, field)
+        for field in get_report_fields()
+        if hasattr(AnalysisResult, field)
+    )
+    return (
+        AnalysisResult.id,
+        AnalysisResult.ticker,
+        AnalysisResult.trade_date,
+        AnalysisResult.market_regime_json,
+        AnalysisResult.raw_return,
+        AnalysisResult.alpha_return,
+        *report_columns,
+    )
 
 
 async def list_resolved_learning_analyses(
@@ -22,6 +57,7 @@ async def list_resolved_learning_analyses(
         .where(AnalysisResult.learning_eligible.is_(True))
         .where(AnalysisResult.status == "completed")
         .where(_tenant_clause(user_id))
+        .options(load_only(*_resolved_learning_columns()))
     )
     result = await db.execute(query)
     return list(result.scalars().all())
@@ -41,6 +77,7 @@ async def list_return_backfill_candidates(
         .where(AnalysisResult.learning_eligible.is_(True))
         .where(AnalysisResult.status == "completed")
         .where(AnalysisResult.trade_date <= cutoff_trade_date)
+        .options(load_only(*_BACKFILL_COLUMNS))
         .limit(limit)
     )
     result = await db.execute(query)

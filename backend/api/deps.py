@@ -6,10 +6,10 @@ from backend.core.database import get_db
 from backend.core.rls_context import set_request_admin_context, set_request_tenant_context
 from backend.core.security import decode_token_payload
 from backend.models.user import User
-from backend.repositories.permissions import get_user_page_permission, get_user_setting_permission
+from backend.repositories.permissions import get_user_page_permission, get_user_setting_permission, list_allowed_page_keys
 from backend.repositories.users import get_user_by_username
 from backend.schemas.tool_settings import ToolSettingsUpdate
-from backend.services.tool_access_service import get_user_tool_access, get_user_tool_field_access
+from backend.services.tool_access_service import get_user_access_overrides
 from backend.trading_agents.agents.tools.registry import registry
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -74,6 +74,12 @@ async def get_current_user(
     from backend.core.log_handler import current_user_id
 
     current_user_id.set(user.id)
+    # Authentication has fully materialized the User object and RLS context is
+    # stored in AsyncSession.info. End the authentication transaction so a
+    # handler whose first operation is network/LLM work does not inherit a
+    # pinned DB connection. The RLS after_begin hook reapplies the same logical
+    # context when the handler later opens its own transaction.
+    await db.commit()
     return user
 
 
@@ -100,6 +106,10 @@ def require_page(page_key: str):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access to page '{page_key}' is not permitted",
             )
+        # Non-admin permission checks open a fresh transaction after auth.
+        # Release it before entering the endpoint for the same connection-life
+        # reason as get_current_user above.
+        await db.commit()
         return current_user
 
     return _check
@@ -113,9 +123,14 @@ def require_any_page(*page_keys: str):
         current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
     ) -> User:
-        for page_key in page_keys:
-            if await has_page_access(db, current_user, page_key):
-                return current_user
+        if current_user.is_admin or "settings" in page_keys:
+            return current_user
+
+        allowed_pages = await list_allowed_page_keys(db, current_user.id)
+        if allowed_pages.intersection(page_keys):
+            await db.commit()
+            return current_user
+
         joined = ", ".join(page_keys)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -140,14 +155,15 @@ async def enforce_tool_settings_permission(
     db: AsyncSession,
     user: User,
     body: ToolSettingsUpdate,
-) -> None:
+) -> dict[str, dict] | None:
+    """Validate a tool mutation and return the access snapshot already loaded."""
     if user.is_admin:
-        return
+        return None
 
     await enforce_setting_section_permission(db, user, "tools")
-
-    tool_access_map = await get_user_tool_access(db, user.id)
-    field_access_map = await get_user_tool_field_access(db, user.id)
+    access = await get_user_access_overrides(db, user.id)
+    tool_access_map = access["tool_access"]
+    field_access_map = access["field_access"]
 
     for tool_key, update in body.tools.items():
         tool = registry.get(tool_key)
@@ -179,3 +195,5 @@ async def enforce_tool_settings_permission(
                         status_code=403,
                         detail=f"You do not have permission to modify field '{field_key}' on tool '{tool_key}'.",
                     )
+
+    return access

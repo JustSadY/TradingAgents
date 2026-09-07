@@ -44,13 +44,12 @@ Decrypted JSON structure:
 
 ## Supported Providers
 
-The encrypted store accepts **any** provider name string (it is also used for
-`pinecone` in the memory settings). For LLM execution, the providers a user can
-actually select are the ones registered in
+For LLM execution, the providers a user can select are the ones registered in
 `backend/trading_agents/llm_clients/registry.py` — currently `openai`,
 `anthropic`, `google`, `mistral`, `groq`, `nvidia`, `deepseek`, and `ollama` —
-exposed via `GET /api/settings/llm-catalog`. Ollama is server-managed and does
-not accept or expose a per-user API key.
+exposed via `GET /api/settings/llm-catalog`. The same stored OpenAI credential is
+used when Mem0 long-term memory is configured with the OpenAI embedder. Ollama
+is server-managed and does not accept or expose a per-user API key.
 
 ## Security
 

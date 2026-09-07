@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.agent_settings import AgentSetting
@@ -18,6 +19,21 @@ async def get_server_agent_settings(db: AsyncSession):
 
 async def get_user_agent_settings(db: AsyncSession, user_id: int):
     return await get_agent_settings_by_scope(db, "user", user_id)
+
+
+async def get_runtime_agent_settings(db: AsyncSession, user_id: int | None):
+    """Load server and optional user agent-setting scopes in one round-trip."""
+    if user_id is None:
+        return await get_server_agent_settings(db)
+
+    stmt = select(AgentSetting).where(
+        or_(
+            and_(AgentSetting.scope == "server", AgentSetting.user_id.is_(None)),
+            and_(AgentSetting.scope == "user", AgentSetting.user_id == user_id),
+        )
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
 
 def persist_agent_setting(

@@ -143,5 +143,4 @@ async def run_optimization(
 
     await complete_optimization_run(db, run, result.as_dict())
     await db.commit()
-    await db.refresh(run)
     return run

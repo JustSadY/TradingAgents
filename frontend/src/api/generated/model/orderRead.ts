@@ -14,6 +14,7 @@ export interface OrderRead {
   commission: number;
   created_at: string;
   executed_at: string | null;
+  external_order_id: string | null;
   id: number;
   leverage?: number;
   portfolio_id: number;

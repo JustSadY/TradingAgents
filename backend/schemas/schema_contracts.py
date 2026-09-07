@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Any
 
 from pydantic import BaseModel
@@ -74,7 +75,18 @@ def _default_for(name: str) -> Any:
 
 def _copy_constraints(target: dict[str, Any], update_prop: dict[str, Any]) -> None:
     source = _unwrap_nullable(update_prop)
-    for key in ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "minLength", "maxLength", "minItems", "maxItems", "pattern", "enum"):
+    for key in (
+        "minimum",
+        "maximum",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "minLength",
+        "maxLength",
+        "minItems",
+        "maxItems",
+        "pattern",
+        "enum",
+    ):
         if key in source:
             target[key] = source[key]
 
@@ -190,7 +202,9 @@ def _registry_bundle(settings_schema: list[dict[str, Any]], *, section: str) -> 
     )
 
 
+@lru_cache(maxsize=1)
 def build_meta_schemas() -> MetaSchemasResponse:
+    """Build immutable meta schemas once per process."""
     # Bootstrap is import-idempotent and only registers local tool classes; it
     # does not perform network or database work.
     import backend.trading_agents.agents.tools.bootstrap  # noqa: F401

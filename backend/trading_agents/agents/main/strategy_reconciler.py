@@ -267,22 +267,37 @@ def _fallback_candidate(state: Mapping[str, Any]) -> StrategyRevisionCandidate:
             regime_after=_mapping(synthesis.get("market_regime")) or before.regime_assumption,
         )
 
-    # A zero-conviction strategy cannot be weakened further.  Previously this
-    # branch clamped 0.0 - 0.10 back to 0.0 and then violated the candidate
-    # validator's strict "WEAKEN must decrease conviction" invariant.
-    if dominant is not before.strategic_bias and before.conviction > 0.0:
-        after = _next_snapshot(
-            before,
-            action=StrategyRevisionAction.WEAKEN,
-            conviction=before.conviction - 0.10,
-        )
+    if dominant is not before.strategic_bias:
+        if before.conviction > 0.0:
+            after = _next_snapshot(
+                before,
+                action=StrategyRevisionAction.WEAKEN,
+                conviction=before.conviction - 0.10,
+            )
+            return StrategyRevisionCandidate(
+                revision_action=StrategyRevisionAction.WEAKEN,
+                expected_version=before.version,
+                strategy_before=before,
+                strategy_after=after,
+                change_strength=StrategyChangeStrength.MATERIAL,
+                revision_reason="Fresh structured synthesis differs from the active strategic bias; retain the same thesis direction with lower conviction until explicit invalidation is established.",
+                supporting_evidence=evidence[:8],
+                triggered_invalidations=[],
+                regime_before=before.regime_assumption,
+                regime_after=_mapping(synthesis.get("market_regime")) or before.regime_assumption,
+            )
+
+        # There is no lower legal conviction than zero.  Keep the current
+        # lineage unchanged until an evidence-backed invalidation is triggered;
+        # never fall through and strengthen a thesis that the synthesis opposes.
+        after = _next_snapshot(before, action=StrategyRevisionAction.KEEP)
         return StrategyRevisionCandidate(
-            revision_action=StrategyRevisionAction.WEAKEN,
+            revision_action=StrategyRevisionAction.KEEP,
             expected_version=before.version,
             strategy_before=before,
             strategy_after=after,
-            change_strength=StrategyChangeStrength.MATERIAL,
-            revision_reason="Fresh structured synthesis differs from the active strategic bias; retain the same thesis direction with lower conviction until explicit invalidation is established.",
+            change_strength=StrategyChangeStrength.NONE,
+            revision_reason="Fresh synthesis opposes the active bias, but conviction is already zero; retain the lineage unchanged until an explicit invalidation is established.",
             supporting_evidence=evidence[:8],
             triggered_invalidations=[],
             regime_before=before.regime_assumption,
@@ -400,6 +415,9 @@ def _materialize_intent(
         )
 
     if action in {StrategyRevisionAction.STRENGTHEN, StrategyRevisionAction.WEAKEN}:
+        dominant = _bias(synthesis.get("dominant_bias"), before.strategic_bias)
+        if action is StrategyRevisionAction.STRENGTHEN and dominant is not before.strategic_bias:
+            return fallback
         if action is StrategyRevisionAction.WEAKEN and before.conviction <= 0.0:
             return fallback
         if action is StrategyRevisionAction.STRENGTHEN and before.conviction >= 1.0:
@@ -507,7 +525,7 @@ Rules:
 - Choose only CREATE, KEEP, STRENGTHEN, WEAKEN, INVALIDATE, or REBUILD.
 - KEEP means conviction stays unchanged.
 - WEAKEN means conviction must strictly decrease; never choose WEAKEN when current conviction is already 0.
-- STRENGTHEN means conviction must strictly increase; never choose STRENGTHEN when current conviction is already 1.
+- STRENGTHEN means conviction must strictly increase; never choose STRENGTHEN when current conviction is already 1 or when Structured Synthesis has a different dominant_bias than the active strategy.
 - For STRENGTHEN/WEAKEN, use MATERIAL or MAJOR change_strength. The caller computes the exact numeric conviction delta.
 - STRENGTHEN/WEAKEN preserve ACTIVE status, strategic_bias, accepted_rating, ticker, asset type and lineage. A direction change requires INVALIDATE followed by a later REBUILD.
 - INVALIDATE requires a validated MATERIAL or CRITICAL triggered invalidation from Structured Synthesis. WATCH conditions can justify caution/WEAKEN but never close a thesis.

@@ -323,6 +323,12 @@ async def run_individual_analysis(
                 )
             else:
                 attribution_md = await get_analyst_performance_context(db, user_id=persisted_user_id)
+
+            # All DB-backed inputs needed by the broad-market pulse have been
+            # materialized. Do not pin the analysis session while live market
+            # providers are queried; the session's RLS context is reapplied if
+            # the later replay/config reads open a new transaction.
+            await db.commit()
             market_pulse_md = await get_market_pulse()
             scenarios_md = get_active_scenarios()
             signal_replay_md = await get_signal_replay_context(db, ticker, persisted_user_id)
@@ -469,6 +475,11 @@ async def run_individual_analysis(
                 await emitter.emit_report(key, content)
                 prev_state[key] = content
 
+        # Engine configuration and every DB-backed prefilter/calibration input
+        # are complete. The graph can spend minutes in provider/tool I/O; start
+        # it without an inherited DB transaction. Incremental report writes
+        # will open and commit their own short transactions as they arrive.
+        await db.commit()
         heartbeat_task = asyncio.create_task(
             _heartbeat_monitor(
                 emitter,
@@ -641,6 +652,12 @@ async def run_individual_analysis(
         except Exception as prev_signal_exc:
             _logger.debug("Previous-signal lookup failed for %s: %s", ticker, prev_signal_exc)
             prev_signal = None
+            await db.rollback()
+        else:
+            # The previous-signal lookup is the last main-session DB read before
+            # annotation LLM work and webhook delivery. Release it now so those
+            # background tasks cannot inherit a pinned connection.
+            await db.commit()
 
         track_background_task(
             extract_and_save_annotations(

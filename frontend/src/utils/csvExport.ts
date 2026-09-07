@@ -29,8 +29,9 @@ export function exportPortfolioCSV(holdings: { ticker: string; quantity: number;
   downloadCSV(`portfolio_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows)
 }
 
-// Optional fields mirror the generated OrderRead: the API omits them for
-// orders that never filled, and the body below already renders those as blank.
+// Nullable fields mirror the generated OrderRead. Broker references are kept
+// in exports because they are the primary reconciliation key after a reload;
+// they may be either Alpaca's order UUID or an explicit `client:...` fallback.
 export function exportOrdersCSV(orders: {
   ticker: string
   action: string
@@ -39,10 +40,11 @@ export function exportOrdersCSV(orders: {
   total_value?: number | null
   realized_pnl?: number | null
   ai_signal?: string | null
+  external_order_id?: string | null
   status: string
   created_at: string
 }[]): void {
-  const headers = ['Date', 'Ticker', 'Action', 'Qty Filled', 'Price/Share', 'Total Value', 'Realized P&L', 'Signal', 'Status']
+  const headers = ['Date', 'Ticker', 'Action', 'Qty Filled', 'Price/Share', 'Total Value', 'Realized P&L', 'Signal', 'Status', 'Broker Reference']
   const rows = orders.map(o => [
     o.created_at.slice(0, 10),
     o.ticker,
@@ -53,6 +55,7 @@ export function exportOrdersCSV(orders: {
     o.realized_pnl?.toFixed(2) ?? '',
     o.ai_signal ?? '',
     o.status,
+    o.external_order_id ?? '',
   ])
   downloadCSV(`orders_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows)
 }

@@ -159,6 +159,11 @@ async def generate_formula(db: AsyncSession, prompt: str, user) -> str:
 
     client = create_llm_client(provider=provider, model=model, api_key=api_key)
     messages = [SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=prompt)]
+
+    # Settings are the only DB dependency of formula generation. Close the read
+    # transaction before provider retries/backoff so capacity pressure on the
+    # LLM cannot consume a database pool slot at the same time.
+    await db.commit()
     response = await _invoke_formula_llm(client.get_llm(), messages)
 
     from backend.services.llm_content import llm_text

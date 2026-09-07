@@ -80,31 +80,42 @@ describe('exportPortfolioCSV', () => {
 })
 
 describe('exportOrdersCSV', () => {
-  it('generates CSV for orders', () => {
+  it('exports broker references for reconciliation', async () => {
     const click = vi.fn()
     document.createElement = vi.fn(() => ({
       href: '',
       download: '',
       click,
-      setAttribute,
+      setAttribute: vi.fn(),
     })) as any
-    const setAttribute = vi.fn()
+
+    let exportedBlob: Blob | undefined
+    URL.createObjectURL = vi.fn((blob: Blob | MediaSource) => {
+      if (blob instanceof Blob) exportedBlob = blob
+      return 'blob:test'
+    })
 
     exportOrdersCSV([
       {
         ticker: 'AAPL',
         action: 'BUY',
-        quantity_filled: 10,
-        price_per_share: 150,
-        total_value: 1500,
+        quantity_filled: 0,
+        price_per_share: null,
+        total_value: null,
         realized_pnl: null,
+        external_order_id: 'client:ta-reconcile-123',
         ai_signal: 'Bullish',
-        status: 'filled',
+        status: 'RECONCILIATION_REQUIRED',
         created_at: '2026-07-18T00:00:00Z',
       },
     ])
 
     expect(click).toHaveBeenCalledTimes(1)
+    expect(exportedBlob).toBeInstanceOf(Blob)
+    const csv = await exportedBlob!.text()
+    expect(csv).toContain('Broker Reference')
+    expect(csv).toContain('client:ta-reconcile-123')
+    expect(csv).toContain('RECONCILIATION_REQUIRED')
   })
 })
 

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
@@ -18,11 +19,15 @@ async def get_current_regime_snapshot() -> dict[str, object]:
     """
     now = datetime.now(UTC)
     try:
-        prices = await get_live_prices_batch(["^VIX"])
-        vix = prices.get("^VIX")
         start = (now - timedelta(days=45)).date().isoformat()
         end = (now + timedelta(days=1)).date().isoformat()
-        history = await get_historical_data("^GSPC", start, end)
+        # These providers are independent. Fetching them together keeps regime
+        # attribution from paying the sum of live-price and history latencies.
+        prices, history = await asyncio.gather(
+            get_live_prices_batch(["^VIX"]),
+            get_historical_data("^GSPC", start, end),
+        )
+        vix = prices.get("^VIX")
 
         trend = "uncertain"
         if history is not None and not getattr(history, "empty", True) and "Close" in history:

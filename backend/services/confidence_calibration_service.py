@@ -16,12 +16,13 @@ from collections import defaultdict
 from typing import Any
 
 from backend.repositories.analysis_stats import list_learning_eligible_analyses
+from backend.services.outcome_semantics import rating_outcome_success
 
 _RISK_CLASSES = {
-    "Buy": "long",
-    "Overweight": "long",
-    "Sell": "short",
-    "Underweight": "short",
+    "Buy": "absolute_long",
+    "Overweight": "relative_long",
+    "Sell": "absolute_sell",
+    "Underweight": "relative_reduce",
     "Hold": "flat",
 }
 _DEFAULT_PRIOR_MEAN = 0.5
@@ -49,21 +50,6 @@ def _finite_probability(value: object) -> float | None:
     return None
 
 
-def _directional_success(alpha_return: object, rating: object) -> bool | None:
-    try:
-        alpha = float(alpha_return)
-    except (TypeError, ValueError):
-        return None
-    risk_class = rating_risk_class(rating)
-    if risk_class == "long":
-        return alpha > 0.0
-    if risk_class == "short":
-        return alpha < 0.0
-    if risk_class == "flat":
-        return abs(alpha) <= 0.02
-    return None
-
-
 def _bucket(confidence: float) -> str:
     """Ten percentage-point calibration buckets, clamped at one."""
     lower = min(0.9, max(0.0, int(confidence * 10) / 10))
@@ -76,7 +62,8 @@ def build_calibration_context(rows: list[object]) -> dict[str, Any]:
 
     Inputs are normally resolved *learning eligible* analyses for one user.
     We store only aggregate successes/counts in graph config, never historical
-    raw decisions or reflected text.
+    raw decisions or reflected text. Success uses the same canonical five-tier
+    semantics as analyst attribution.
     """
     stats: dict[str, dict[str, int]] = defaultdict(lambda: {"count": 0, "successes": 0})
     buckets: dict[str, dict[str, int]] = defaultdict(lambda: {"count": 0, "successes": 0})
@@ -87,7 +74,11 @@ def build_calibration_context(rows: list[object]) -> dict[str, Any]:
         decision = _decision_mapping(row)
         confidence = _finite_probability(decision.get("confidence_score"))
         rating = decision.get("rating") or getattr(row, "signal", None)
-        outcome = _directional_success(getattr(row, "alpha_return", None), rating)
+        outcome = rating_outcome_success(
+            rating,
+            raw_return=getattr(row, "raw_return", None),
+            alpha_return=getattr(row, "alpha_return", None),
+        )
         if confidence is None or outcome is None:
             continue
         risk_class = rating_risk_class(rating)
@@ -102,7 +93,7 @@ def build_calibration_context(rows: list[object]) -> dict[str, Any]:
             successes += 1
 
     return {
-        "method": "beta_binomial_shrinkage_v1",
+        "method": "beta_binomial_shrinkage_v2",
         "prior_mean": _DEFAULT_PRIOR_MEAN,
         "prior_strength": _DEFAULT_PRIOR_STRENGTH,
         "total_samples": total,

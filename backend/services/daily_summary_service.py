@@ -39,8 +39,30 @@ async def generate_daily_summary(db: AsyncSession, user: User) -> dict:
     settings = await get_or_create_settings(db, user)
     watchlist: list[str] = list(settings.watchlist or [])[:10]
 
-    price_lines = await _fetch_watchlist_prices(watchlist)
-    sector_lines = await _fetch_sector_data()
+    from langchain_core.messages import HumanMessage
+
+    from backend.services.agent_settings_service import build_agent_runtime_context
+    from backend.trading_agents.llm_clients.factory import create_llm_client
+    from backend.trading_agents.llm_clients.registry import provider_requires_api_key
+
+    # Resolve every DB-backed runtime input before starting market-data or LLM
+    # network I/O. That lets the request return its database connection to the
+    # pool for the potentially slow external phase.
+    agent_ctx = await build_agent_runtime_context(db, user.id)
+    pm = agent_ctx.get("portfolio_manager", {}).get("settings", {})
+    provider = pm.get("llm_provider") or settings.llm_provider
+    model = pm.get("llm_model") or settings.llm_model
+
+    user_key = resolve_user_api_key(user, provider)
+    if provider_requires_api_key(provider) and not user_key:
+        raise ValueError(f"No API key configured for provider '{provider}'. Add it in Settings.")
+
+    await db.commit()
+
+    price_lines, sector_lines = await asyncio.gather(
+        _fetch_watchlist_prices(watchlist),
+        _fetch_sector_data(),
+    )
 
     watchlist_block = "\n".join(price_lines) if price_lines else "  (watchlist empty)"
     sector_block = "\n".join(sector_lines) if sector_lines else "  (sector data unavailable)"
@@ -54,21 +76,6 @@ async def generate_daily_summary(db: AsyncSession, user: User) -> dict:
         "(3) one key risk or opportunity to watch today. "
         "Use a direct, professional tone. No disclaimers, no markdown headers."
     )
-
-    from langchain_core.messages import HumanMessage
-
-    from backend.services.agent_settings_service import build_agent_runtime_context
-    from backend.trading_agents.llm_clients.factory import create_llm_client
-    from backend.trading_agents.llm_clients.registry import provider_requires_api_key
-
-    agent_ctx = await build_agent_runtime_context(db, user.id)
-    pm = agent_ctx.get("portfolio_manager", {}).get("settings", {})
-    provider = pm.get("llm_provider") or settings.llm_provider
-    model = pm.get("llm_model") or settings.llm_model
-
-    user_key = resolve_user_api_key(user, provider)
-    if provider_requires_api_key(provider) and not user_key:
-        raise ValueError(f"No API key configured for provider '{provider}'. Add it in Settings.")
 
     client = create_llm_client(provider=provider, model=model, api_key=user_key)
     llm = client.get_llm()
@@ -86,7 +93,9 @@ async def generate_daily_summary(db: AsyncSession, user: User) -> dict:
     )
     db.add(record)
     await db.commit()
-    await db.refresh(record)
+    # AsyncSessionLocal uses expire_on_commit=False. ``id`` is populated by the
+    # INSERT and ``created_at`` also has a Python default, so a post-commit
+    # refresh only adds a redundant SELECT.
 
     return {
         "id": record.id,

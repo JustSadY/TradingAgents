@@ -28,9 +28,14 @@ async def get_watchlist_prices(
     current_user: User = Depends(require_page("watchlist")),
 ):
     settings = await get_or_create_settings(db, current_user)
-    if not settings.watchlist:
+    watchlist = list(settings.watchlist)
+    if not watchlist:
         return {}
-    return await get_live_prices_details_batch(settings.watchlist)
+
+    # Materialize the only DB-backed input before the slow market-data request
+    # so the request does not pin a pool connection while waiting on provider I/O.
+    await db.commit()
+    return await get_live_prices_details_batch(watchlist)
 
 @router.post("/{ticker}", response_model=list[str], responses={422: {"description": "Invalid ticker format"}})
 async def add_to_watchlist(

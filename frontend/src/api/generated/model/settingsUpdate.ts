@@ -53,17 +53,12 @@ export interface SettingsUpdate {
   memory_ollama_embed_model?: string | null;
   memory_openai_embed_model?: string | null;
   memory_recall_count?: number | null;
-  memory_store?: string | null;
   news_article_limit?: number | null;
   node_retry_attempts?: number | null;
   node_retry_base_delay?: number | null;
   node_timeout_seconds?: number | null;
   openai_reasoning_effort?: string | null;
   output_language?: string | null;
-  pinecone_cloud?: string | null;
-  pinecone_embed_model?: string | null;
-  pinecone_index?: string | null;
-  pinecone_region?: string | null;
   price_tolerance_pct?: number | null;
   quality_gate_enabled?: boolean | null;
   regime_aware_weighting_enabled?: boolean | null;

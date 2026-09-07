@@ -10,6 +10,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.optimization import OptimizationRun
 from backend.repositories.common import scope_to_user
 
+_OPTIMIZATION_LIST_COLUMNS = (
+    OptimizationRun.id,
+    OptimizationRun.ticker,
+    OptimizationRun.strategy_type,
+    OptimizationRun.objective,
+    OptimizationRun.start_date,
+    OptimizationRun.end_date,
+    OptimizationRun.trials_requested,
+    OptimizationRun.trials_completed,
+    OptimizationRun.status,
+    OptimizationRun.best_params,
+    OptimizationRun.best_value,
+    OptimizationRun.best_metrics,
+    OptimizationRun.baseline_params,
+    OptimizationRun.baseline_value,
+    OptimizationRun.baseline_metrics,
+    OptimizationRun.error,
+    OptimizationRun.created_at,
+    OptimizationRun.completed_at,
+)
+
 
 async def create_optimization_run(
     db: AsyncSession,
@@ -69,12 +90,19 @@ async def list_optimization_runs(
     ticker: str | None = None,
     limit: int = 20,
     offset: int = 0,
-) -> list[OptimizationRun]:
-    query = select(OptimizationRun).order_by(desc(OptimizationRun.created_at)).limit(limit).offset(offset)
+) -> list[dict]:
+    """Return compact list rows without loading the potentially large trial history."""
+    query = (
+        select(*_OPTIMIZATION_LIST_COLUMNS)
+        .order_by(desc(OptimizationRun.created_at))
+        .limit(limit)
+        .offset(offset)
+    )
     if ticker:
         query = query.where(OptimizationRun.ticker == ticker.upper())
     query = scope_to_user(query, OptimizationRun, user)
-    return list((await db.execute(query)).scalars().all())
+    rows = (await db.execute(query)).mappings().all()
+    return [dict(row) for row in rows]
 
 
 async def get_optimization_run(db: AsyncSession, run_id: int, user) -> OptimizationRun | None:

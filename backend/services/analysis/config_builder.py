@@ -8,12 +8,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.config import get_settings as _cfg
 from backend.core.security import decrypt_secret
 from backend.models.settings import AppSettings
-from backend.services.user_service import decrypt_api_keys, get_user_api_key
+from backend.services.user_service import decrypt_api_keys
 from backend.trading_agents.config import normalize_fallback_llm_chain
 from backend.trading_agents.default_config import DEFAULT_CONFIG
 from backend.trading_agents.llm_clients.registry import provider_requires_api_key
 
 _logger = logging.getLogger(__name__)
+_PROVIDER_ANALYST_CONCURRENCY_CAPS = {
+    # NIM deployments expose comparatively small worker pools and have returned
+    # provider-side DEGRADED/overload errors in production. Keep user-requested
+    # parallelism bounded without forcing serial execution for everyone else.
+    "nvidia": 2,
+    # Local models commonly share one GPU/CPU pool; excess graph parallelism
+    # usually increases queueing and memory pressure rather than throughput.
+    "ollama": 2,
+}
+_DEFAULT_ANALYST_CONCURRENCY_CAP = 4
+
 
 def _decrypt_tool_secret(value: str | None) -> str | None:
     """Decrypt a persisted tool secret.
@@ -26,6 +37,7 @@ def _decrypt_tool_secret(value: str | None) -> str | None:
     if not value:
         return value
     return decrypt_secret(value)
+
 
 def _fallback_llm_chain(settings: AppSettings) -> list[dict[str, str]]:
     """Read the canonical ordered LLM failover settings defensively.
@@ -45,6 +57,27 @@ def _fallback_llm_chain(settings: AppSettings) -> list[dict[str, str]]:
         )
         return []
 
+
+def _effective_analyst_concurrency(settings: AppSettings) -> int:
+    """Respect the user's requested parallelism within a provider-safe ceiling."""
+    raw = getattr(settings, "analyst_concurrency_limit", None) or DEFAULT_CONFIG["analyst_concurrency_limit"]
+    try:
+        requested = max(1, int(raw))
+    except (TypeError, ValueError):
+        requested = int(DEFAULT_CONFIG["analyst_concurrency_limit"])
+    provider = str(getattr(settings, "llm_provider", "") or "").strip().lower()
+    cap = _PROVIDER_ANALYST_CONCURRENCY_CAPS.get(provider, _DEFAULT_ANALYST_CONCURRENCY_CAP)
+    effective = min(requested, cap)
+    if effective != requested:
+        _logger.info(
+            "Capping analyst concurrency for provider=%s from %d to %d",
+            provider or "unknown",
+            requested,
+            effective,
+        )
+    return effective
+
+
 def inject_tool_credentials(config: dict) -> None:
     runtime_tool_context = config.get("runtime_tool_context")
     if not runtime_tool_context:
@@ -62,6 +95,7 @@ def inject_tool_credentials(config: dict) -> None:
 
     stock_server = server_settings.get("core_stock_data", {}).get("settings", {})
     config["alpha_vantage_api_key"] = _decrypt_tool_secret(stock_server.get("alpha_vantage_api_key"))
+
 
 def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
     _vendor_default = getattr(sys_settings, "active_data_vendor", None) or "yfinance"
@@ -82,7 +116,8 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         "max_debate_rounds": settings.max_debate_rounds,
         "output_language": settings.output_language or DEFAULT_CONFIG["output_language"],
         "investor_persona": settings.investor_persona or DEFAULT_CONFIG["investor_persona"],
-        "analyst_concurrency_limit": settings.analyst_concurrency_limit or DEFAULT_CONFIG["analyst_concurrency_limit"],
+        "analyst_concurrency_limit": _effective_analyst_concurrency(settings),
+        "max_analyst_tool_turns": DEFAULT_CONFIG.get("max_analyst_tool_turns", 4),
         "skip_disk_log": True,
         "checkpoint_enabled": True,
         "allow_short_selling": bool(getattr(settings, "allow_short_selling", False)),
@@ -154,15 +189,13 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         try:
             fernet = _cfg().get_fernet()
             current_provider = str(cfg.get("llm_provider", "openai")).strip().lower()
-            user_key = get_user_api_key(user, current_provider, fernet)
-            if user.api_keys_enc:
-                cfg["user_api_keys"] = {
-                    provider: key
-                    for provider, key in decrypt_api_keys(user.api_keys_enc, fernet).items()
-                    if provider_requires_api_key(provider)
-                }
-            else:
-                cfg["user_api_keys"] = {}
+            stored_keys = decrypt_api_keys(user.api_keys_enc, fernet) if user.api_keys_enc else {}
+            cfg["user_api_keys"] = {
+                provider: key
+                for provider, key in stored_keys.items()
+                if provider_requires_api_key(provider)
+            }
+            user_key = cfg["user_api_keys"].get(current_provider) if provider_requires_api_key(current_provider) else None
         except Exception:
             _logger.exception("Failed to decrypt user API keys in build_analysis_config")
             user_key = None
@@ -170,6 +203,7 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         if user_key:
             cfg["api_key"] = user_key
     return cfg
+
 
 def history_json_from(value):
     """Return a JSON-column-safe debate-side history value.
@@ -189,23 +223,25 @@ def history_json_from(value):
         return debate_messages(value) or None
     return None
 
-async def prepare_graph_config(db: AsyncSession, user_id: int | None, config: dict) -> list[str]:
-    """Resolve the user's permitted analysts and inject runtime tool/agent
-    context + credentials into ``config``; returns the permitted analyst keys.
 
-    Shared by the single- and multi-ticker orchestrators so the
-    security-sensitive agent-access filtering can't diverge between them.
+async def prepare_graph_config(db: AsyncSession, user_id: int | None, config: dict) -> list[str]:
+    """Resolve permitted analysts and inject one consistent runtime snapshot.
+
+    ``build_global_runtime_context`` already includes the persisted agent-access
+    overrides used by tool enforcement. Reuse that same snapshot for analyst
+    filtering instead of issuing a second agent-access query at every analysis
+    start.
     """
     from backend.services.agent_settings_service import build_agent_runtime_context
-    from backend.services.tool_access_service import get_user_agent_access
     from backend.services.tool_settings_service import build_global_runtime_context
     from backend.trading_agents.agent_catalog import list_analysts
 
-    agent_access_map = await get_user_agent_access(db, user_id) if user_id else {}
+    runtime_tool_context = await build_global_runtime_context(db, user_id)
+    agent_access_map = runtime_tool_context.get("access", {}).get("agent_access", {}) if user_id else {}
     permitted_analysts = [a.key for a in list_analysts() if agent_access_map.get(a.key, True)]
 
     config["user_id"] = user_id
-    config["runtime_tool_context"] = await build_global_runtime_context(db, user_id)
+    config["runtime_tool_context"] = runtime_tool_context
     config["runtime_agent_context"] = await build_agent_runtime_context(db, user_id)
     inject_tool_credentials(config)
     return permitted_analysts

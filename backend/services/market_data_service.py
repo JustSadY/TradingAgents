@@ -11,29 +11,35 @@ _logger = logging.getLogger(__name__)
 
 _BATCH_PRICE_TIMEOUT_SEC = 10.0
 _SINGLE_PRICE_TIMEOUT_SEC = 6.0
+_INDIVIDUAL_PRICE_CONCURRENCY = 8
 _YAHOO_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
-async def get_live_price(ticker: str) -> float | None:
-    """Fetch live price for a single ticker. Falls back to history if Yahoo REST query fails."""
+
+async def _fetch_direct_live_price(ticker: str, client: httpx.AsyncClient) -> float | None:
+    """Fetch one Yahoo REST quote through a caller-owned HTTP connection pool."""
     url = f"https://query2.finance.yahoo.com/v7/finance/quote?symbols={ticker.upper()}"
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(url, headers=_YAHOO_HEADERS, timeout=5.0)
-            if resp.status_code == 200:
-                data = resp.json()
-                results = data.get("quoteResponse", {}).get("result", [])
-                if results:
-                    price = (
-                        results[0].get("regularMarketPrice")
-                        or results[0].get("preMarketPrice")
-                        or results[0].get("postMarketPrice")
-                    )
-                    if price is not None:
-                        val = float(price)
-                        if math.isfinite(val) and val > 0:
-                            return val
-    except Exception as e:
-        _logger.warning("Direct Yahoo quote fetch failed for %s: %s", ticker, e)
+        resp = await client.get(url, headers=_YAHOO_HEADERS, timeout=5.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            results = data.get("quoteResponse", {}).get("result", [])
+            if results:
+                price = (
+                    results[0].get("regularMarketPrice")
+                    or results[0].get("preMarketPrice")
+                    or results[0].get("postMarketPrice")
+                )
+                if price is not None:
+                    val = float(price)
+                    if math.isfinite(val) and val > 0:
+                        return val
+    except Exception as exc:
+        _logger.warning("Direct Yahoo quote fetch failed for %s: %s", ticker, exc)
+    return None
+
+
+async def _fetch_history_price_fallback(ticker: str) -> float | None:
+    """Fetch one yFinance history fallback off-thread with a hard timeout."""
 
     def _fallback():
         try:
@@ -43,8 +49,8 @@ async def get_live_price(ticker: str) -> float | None:
                 price = float(hist["Close"].iloc[-1])
                 if math.isfinite(price) and price > 0:
                     return price
-        except Exception as e:
-            _logger.warning("History fallback failed for %s: %s", ticker, e)
+        except Exception as exc:
+            _logger.warning("History fallback failed for %s: %s", ticker, exc)
         return None
 
     try:
@@ -52,6 +58,16 @@ async def get_live_price(ticker: str) -> float | None:
     except TimeoutError:
         _logger.warning("Price fetch fallback timed out for %s after %.1fs", ticker, _SINGLE_PRICE_TIMEOUT_SEC)
         return None
+
+
+async def get_live_price(ticker: str) -> float | None:
+    """Fetch live price for a single ticker. Falls back to history if Yahoo REST query fails."""
+    async with httpx.AsyncClient() as client:
+        direct = await _fetch_direct_live_price(ticker, client)
+    if direct is not None:
+        return direct
+    return await _fetch_history_price_fallback(ticker)
+
 
 async def get_live_prices_batch(tickers: list[str]) -> dict[str, float]:
     """Fetch live prices for multiple tickers in a single batch call."""
@@ -71,6 +87,7 @@ async def get_live_prices_batch(tickers: list[str]) -> dict[str, float]:
             prices.update(await _fetch_individual_fallbacks(still_missing))
 
     return prices
+
 
 async def _fetch_yahoo_quotes_rest(unique_tickers: list[str]) -> dict[str, float]:
     """Fetch multiple quotes from Yahoo REST API."""
@@ -94,6 +111,7 @@ async def _fetch_yahoo_quotes_rest(unique_tickers: list[str]) -> dict[str, float
     except Exception as exc:
         _logger.warning("Direct batch query failed for %s: %s", unique_tickers, exc)
     return prices
+
 
 async def _fetch_yfinance_download_fallback(missing: list[str]) -> dict[str, float]:
     """Fallback batch yfinance download."""
@@ -122,6 +140,7 @@ async def _fetch_yfinance_download_fallback(missing: list[str]) -> dict[str, flo
         _logger.warning("Batch fallback download timed out for %s", missing)
         return {}
 
+
 def _parse_yfinance_batch_data(close_data, missing_symbols: list[str]) -> dict[str, float]:
     """Parse pandas data from yf.download."""
     parsed = {}
@@ -144,10 +163,23 @@ def _parse_yfinance_batch_data(close_data, missing_symbols: list[str]) -> dict[s
             parsed[missing_symbols[0]] = val
     return parsed
 
+
 async def _fetch_individual_fallbacks(still_missing: list[str]) -> dict[str, float]:
-    """Final individual fallback for any remaining missing tickers."""
+    """Final individual fallback with bounded concurrency and one shared HTTP pool."""
+    semaphore = asyncio.Semaphore(_INDIVIDUAL_PRICE_CONCURRENCY)
+
+    async with httpx.AsyncClient() as client:
+
+        async def _one(symbol: str) -> float | None:
+            async with semaphore:
+                direct = await _fetch_direct_live_price(symbol, client)
+                if direct is not None:
+                    return direct
+                return await _fetch_history_price_fallback(symbol)
+
+        fallbacks = await asyncio.gather(*(_one(symbol) for symbol in still_missing), return_exceptions=True)
+
     prices = {}
-    fallbacks = await asyncio.gather(*[get_live_price(symbol) for symbol in still_missing], return_exceptions=True)
     for symbol, fetched in zip(still_missing, fallbacks, strict=True):
         if isinstance(fetched, BaseException) or fetched is None:
             continue
@@ -155,6 +187,7 @@ async def _fetch_individual_fallbacks(still_missing: list[str]) -> dict[str, flo
         if math.isfinite(val) and val > 0:
             prices[symbol] = val
     return prices
+
 
 async def get_historical_data(ticker: str, start_date: str, end_date: str):
     """Fetch historical OHLCV data for a ticker."""
@@ -186,6 +219,7 @@ async def get_historical_data(ticker: str, start_date: str, end_date: str):
     except Exception:
         _logger.exception("Historical data fetch for %s failed", ticker)
         raise
+
 
 async def calculate_returns(
     ticker: str, start_date: str, holding_days: int = 5, benchmark: str = "SPY"
@@ -219,17 +253,16 @@ async def calculate_returns(
             raw = float((stock_close.iloc[actual] - stock_close.iloc[0]) / stock_close.iloc[0])
             bench_r = float((bench_close.iloc[actual] - bench_close.iloc[0]) / bench_close.iloc[0])
 
-            import math
-
             if math.isnan(raw) or math.isnan(bench_r):
                 return None, None, None
 
             return round(raw, 4), round(raw - bench_r, 4), actual
-        except Exception as e:
-            _logger.warning("Return calculation failed for %s on %s: %s", ticker, start_date, e)
+        except Exception as exc:
+            _logger.warning("Return calculation failed for %s on %s: %s", ticker, start_date, exc)
             return None, None, None
 
     return await asyncio.to_thread(_fetch)
+
 
 async def get_benchmark_return(
     benchmark: str = "SPY",
@@ -258,8 +291,6 @@ async def get_benchmark_return(
                 close_series = spy["Close"].dropna()
                 if len(close_series) >= 2:
                     ret = float((close_series.iloc[-1] - close_series.iloc[0]) / close_series.iloc[0] * 100)
-                    import math
-
                     if not math.isnan(ret):
                         return ret
             return None
@@ -275,6 +306,7 @@ async def get_benchmark_return(
             return None
 
     return await asyncio.to_thread(_fetch)
+
 
 async def get_live_prices_details_batch(tickers: list[str]) -> dict[str, dict[str, float]]:
     """Fetch live prices and daily change percentage for multiple tickers in a single batch call."""

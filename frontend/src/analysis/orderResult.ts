@@ -9,7 +9,7 @@ import { isRecord } from '../utils/isRecord'
  * is the boundary where that event becomes something the UI can render.
  */
 
-export type OrderOutcome = 'filled' | 'skipped' | 'rejected' | 'error'
+export type OrderOutcome = 'filled' | 'partially_filled' | 'skipped' | 'rejected' | 'error' | 'reconciliation_required'
 
 export type AnalysisOrderResult = {
   outcome: OrderOutcome
@@ -17,6 +17,7 @@ export type AnalysisOrderResult = {
   ticker: string
   quantity?: number
   price?: number
+  orderId?: string
   reason?: string
   message?: string
   analysisId?: number
@@ -33,6 +34,10 @@ export function normalizedOrderOutcome(value: unknown): OrderOutcome | null {
     case 'executed':
     case 'success':
       return 'filled'
+    case 'partially_filled':
+    case 'partially-filled':
+    case 'partially filled':
+      return 'partially_filled'
     case 'skipped':
     case 'no_trade':
     case 'no-trade':
@@ -41,6 +46,10 @@ export function normalizedOrderOutcome(value: unknown): OrderOutcome | null {
     case 'blocked':
     case 'denied':
       return 'rejected'
+    case 'reconciliation_required':
+    case 'reconciliation-required':
+    case 'reconciliation required':
+      return 'reconciliation_required'
     case 'error':
     case 'failed':
       return 'error'
@@ -54,10 +63,25 @@ export function normalizedOrderOutcome(value: unknown): OrderOutcome | null {
  * intentionally emits a small, transport-safe payload, but old workers used
  * `status` rather than `outcome`; accepting both makes reconnect/replay and
  * rolling deployment harmless without treating arbitrary payloads as fills.
+ *
+ * Rolling deployments may also pair an older emitter (outcome=rejected) with
+ * a newer execution service that already sends broker_status/fill details.
+ * Preserve reconciliation and partial-fill states whenever that stronger
+ * broker evidence is present.
  */
 export function readOrderResult(value: unknown, fallbackTicker: string): AnalysisOrderResult | null {
   if (!isRecord(value)) return null
-  const outcome = normalizedOrderOutcome(value.outcome ?? value.status)
+  const brokerStatus = typeof value.broker_status === 'string' ? value.broker_status.trim().toUpperCase() : ''
+  const filledQuantity = isFiniteNumeric(value.quantity) && value.quantity > 0
+    ? value.quantity
+    : isFiniteNumeric(value.filled_quantity) && value.filled_quantity > 0
+      ? value.filled_quantity
+      : undefined
+  const outcome = brokerStatus === 'RECONCILIATION_REQUIRED'
+    ? 'reconciliation_required'
+    : brokerStatus === 'PARTIALLY_FILLED' || ((brokerStatus === 'CANCELED' || brokerStatus === 'EXPIRED') && filledQuantity !== undefined)
+      ? 'partially_filled'
+      : normalizedOrderOutcome(value.outcome ?? value.status)
   if (!outcome) return null
 
   const rawAction = typeof value.action === 'string' ? value.action.trim().toUpperCase() : ''
@@ -65,21 +89,19 @@ export function readOrderResult(value: unknown, fallbackTicker: string): Analysi
   const rawTicker = typeof value.ticker === 'string' ? value.ticker.trim().toUpperCase() : ''
   const ticker = rawTicker || fallbackTicker.trim().toUpperCase()
   if (!ticker) return null
+  const orderId = typeof value.order_id === 'string' && value.order_id.trim() ? value.order_id.trim() : undefined
 
   return {
     outcome,
     action,
     ticker,
-    quantity: isFiniteNumeric(value.quantity) && value.quantity > 0
-      ? value.quantity
-      : isFiniteNumeric(value.filled_quantity) && value.filled_quantity > 0
-        ? value.filled_quantity
-        : undefined,
+    quantity: filledQuantity,
     price: isFiniteNumeric(value.price) && value.price >= 0
       ? value.price
       : isFiniteNumeric(value.filled_price) && value.filled_price >= 0
         ? value.filled_price
         : undefined,
+    orderId,
     reason: typeof value.reason === 'string' && value.reason.trim()
       ? value.reason.trim()
       : typeof value.reason_code === 'string' && value.reason_code.trim()
@@ -94,7 +116,8 @@ export function readOrderResult(value: unknown, fallbackTicker: string): Analysi
 export function sameOrderResult(left: AnalysisOrderResult | null, right: AnalysisOrderResult): boolean {
   return !!left && left.outcome === right.outcome && left.action === right.action &&
     left.ticker === right.ticker && left.quantity === right.quantity && left.price === right.price &&
-    left.reason === right.reason && left.message === right.message && left.analysisId === right.analysisId
+    left.orderId === right.orderId && left.reason === right.reason && left.message === right.message &&
+    left.analysisId === right.analysisId
 }
 
 export function orderActionLabel(action: AnalysisOrderResult['action'], t: (key: string) => string): string | null {
@@ -103,7 +126,11 @@ export function orderActionLabel(action: AnalysisOrderResult['action'], t: (key:
 }
 
 export function orderResultLogLine(result: AnalysisOrderResult, t: (key: string) => string): string {
-  const marker = result.outcome === 'filled' ? '✓' : result.outcome === 'skipped' ? '⚠' : '❌'
+  const marker = result.outcome === 'filled'
+    ? '✓'
+    : result.outcome === 'partially_filled' || result.outcome === 'skipped' || result.outcome === 'reconciliation_required'
+      ? '⚠'
+      : '❌'
   const details = [
     orderActionLabel(result.action, t),
     result.quantity !== undefined ? String(result.quantity) : null,
@@ -115,6 +142,7 @@ export function orderResultLogLine(result: AnalysisOrderResult, t: (key: string)
     `${marker} ${t('analysis.order.log_prefix')}`,
     t(`analysis.order.outcome.${result.outcome}`),
     details.join(' '),
+    result.orderId ? `${t('orders.col_broker_order_id')}: ${result.orderId}` : null,
     reason,
   ].filter((part): part is string => !!part).join(' — ')
 }

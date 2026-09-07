@@ -28,6 +28,8 @@ _REQUEST_TIMEOUT_SECONDS = 3.0
 _VALID_CACHE_TTL_SECONDS = 15 * 60
 _INVALID_CACHE_TTL_SECONDS = 5 * 60
 _MAX_SUGGESTIONS = 3
+_VALIDATION_CONCURRENCY = 4
+
 
 @dataclass(frozen=True)
 class TickerSuggestion:
@@ -40,11 +42,13 @@ class TickerSuggestion:
     def as_dict(self) -> dict[str, str | None]:
         return {"symbol": self.symbol, "name": self.name, "quote_type": self.quote_type}
 
+
 @dataclass(frozen=True)
 class TickerValidationResult:
     """A confirmed symbol in canonical (upper-case) form."""
 
     ticker: str
+
 
 class TickerNotFoundError(ValueError):
     """Raised when the quote provider confirms that a symbol is unknown."""
@@ -54,8 +58,10 @@ class TickerNotFoundError(ValueError):
         self.suggestions = suggestions
         super().__init__(f"Unknown symbol: {ticker}")
 
+
 class TickerValidationUnavailableError(RuntimeError):
     """Raised when symbol validation cannot obtain a trustworthy answer."""
+
 
 _CACHE_MAX_ENTRIES = 2048
 # Two stores because the answers keep different company: a symbol that resolved
@@ -63,17 +69,27 @@ _CACHE_MAX_ENTRIES = 2048
 _VALID_CACHE: TTLCache = TTLCache(maxsize=_CACHE_MAX_ENTRIES, ttl=_VALID_CACHE_TTL_SECONDS)
 _INVALID_CACHE: TTLCache = TTLCache(maxsize=_CACHE_MAX_ENTRIES, ttl=_INVALID_CACHE_TTL_SECONDS)
 
+
 def _normalize_ticker(ticker: str) -> str:
     if not isinstance(ticker, str):
         raise ValueError("Ticker must be a non-empty string.")
     normalized = ticker.strip().upper()
     return safe_ticker_component(normalized)
 
-async def _request_yahoo_json(url: str, *, params: dict[str, str]) -> dict[str, Any] | None:
+
+async def _request_yahoo_json(
+    url: str,
+    *,
+    params: dict[str, str],
+    client: httpx.AsyncClient | None = None,
+) -> dict[str, Any] | None:
     """Fetch one Yahoo payload and classify transport failures distinctly."""
+    if client is None:
+        async with httpx.AsyncClient(headers=_YAHOO_HEADERS, timeout=_REQUEST_TIMEOUT_SECONDS) as owned_client:
+            return await _request_yahoo_json(url, params=params, client=owned_client)
+
     try:
-        async with httpx.AsyncClient(headers=_YAHOO_HEADERS, timeout=_REQUEST_TIMEOUT_SECONDS) as client:
-            response = await client.get(url, params=params)
+        response = await client.get(url, params=params)
     except httpx.TimeoutException as exc:
         raise TickerValidationUnavailableError("Symbol validation timed out") from exc
     except httpx.RequestError as exc:
@@ -92,8 +108,12 @@ async def _request_yahoo_json(url: str, *, params: dict[str, str]) -> dict[str, 
         raise TickerValidationUnavailableError("Symbol validation returned invalid data")
     return payload
 
-async def _fetch_quote_candidates(ticker: str) -> list[dict[str, Any]]:
-    payload = await _request_yahoo_json(_YAHOO_QUOTE_URL, params={"symbols": ticker})
+
+async def _fetch_quote_candidates(
+    ticker: str,
+    client: httpx.AsyncClient | None = None,
+) -> list[dict[str, Any]]:
+    payload = await _request_yahoo_json(_YAHOO_QUOTE_URL, params={"symbols": ticker}, client=client)
     if payload is None:
         return []
     response = payload.get("quoteResponse")
@@ -102,19 +122,26 @@ async def _fetch_quote_candidates(ticker: str) -> list[dict[str, Any]]:
     results = response.get("result")
     return [item for item in results if isinstance(item, dict)] if isinstance(results, list) else []
 
-async def _fetch_search_candidates(ticker: str) -> list[dict[str, Any]]:
+
+async def _fetch_search_candidates(
+    ticker: str,
+    client: httpx.AsyncClient | None = None,
+) -> list[dict[str, Any]]:
     payload = await _request_yahoo_json(
         _YAHOO_SEARCH_URL,
         params={"q": ticker, "quotesCount": str(_MAX_SUGGESTIONS), "newsCount": "0"},
+        client=client,
     )
     if payload is None:
         raise TickerValidationUnavailableError("Symbol search is unavailable")
     quotes = payload.get("quotes")
     return [item for item in quotes if isinstance(item, dict)] if isinstance(quotes, list) else []
 
+
 def _candidate_symbol(candidate: dict[str, Any]) -> str | None:
     symbol = candidate.get("symbol")
     return symbol.strip().upper() if isinstance(symbol, str) and symbol.strip() else None
+
 
 def _suggestions_from_candidates(candidates: list[dict[str, Any]], ticker: str) -> tuple[TickerSuggestion, ...]:
     suggestions: list[TickerSuggestion] = []
@@ -137,22 +164,41 @@ def _suggestions_from_candidates(candidates: list[dict[str, Any]], ticker: str) 
             break
     return tuple(suggestions)
 
+
 def _cache_result(ticker: str, suggestions: tuple[TickerSuggestion, ...] | None) -> None:
     if suggestions is None:
         _VALID_CACHE[ticker] = True
     else:
         _INVALID_CACHE[ticker] = suggestions
 
-async def _validate_normalized_ticker(normalized: str) -> TickerValidationResult:
+
+def _cached_validation(normalized: str) -> TickerValidationResult | None:
     if normalized in _VALID_CACHE:
         return TickerValidationResult(ticker=normalized)
     cached_suggestions = _INVALID_CACHE.get(normalized)
     if cached_suggestions is not None:
         raise TickerNotFoundError(normalized, cached_suggestions)
+    return None
+
+
+async def _validate_normalized_ticker(
+    normalized: str,
+    client: httpx.AsyncClient | None = None,
+) -> TickerValidationResult:
+    cached = _cached_validation(normalized)
+    if cached is not None:
+        return cached
+
+    # Single-ticker validation gets one short-lived pool shared by its quote
+    # and search requests. Portfolio validation passes one batch-owned pool to
+    # every bounded worker instead.
+    if client is None:
+        async with httpx.AsyncClient(headers=_YAHOO_HEADERS, timeout=_REQUEST_TIMEOUT_SECONDS) as owned_client:
+            return await _validate_normalized_ticker(normalized, owned_client)
 
     quote_failure: TickerValidationUnavailableError | None = None
     try:
-        quote_candidates = await _fetch_quote_candidates(normalized)
+        quote_candidates = await _fetch_quote_candidates(normalized, client)
     except TickerValidationUnavailableError as exc:
         quote_failure = exc
         quote_candidates = []
@@ -161,7 +207,7 @@ async def _validate_normalized_ticker(normalized: str) -> TickerValidationResult
         return TickerValidationResult(ticker=normalized)
 
     try:
-        search_candidates = await _fetch_search_candidates(normalized)
+        search_candidates = await _fetch_search_candidates(normalized, client)
     except TickerValidationUnavailableError:
         if quote_failure is not None:
             raise quote_failure from None
@@ -175,33 +221,44 @@ async def _validate_normalized_ticker(normalized: str) -> TickerValidationResult
     _cache_result(normalized, suggestions)
     raise TickerNotFoundError(normalized, suggestions)
 
+
 async def validate_analysis_ticker(ticker: str, *, asset_type: str = "stock") -> TickerValidationResult:
     """Confirm that *ticker* exists before it can enter an analysis queue.
 
     ``asset_type`` is intentionally accepted for the API contract even though
-    Yahoo's instrument taxonomy is broader than the two UI choices.  Rejecting
+    Yahoo's instrument taxonomy is broader than the two UI choices. Rejecting
     a valid ETF, index, or token solely because Yahoo labels it differently
     would turn this guard into a false-negative source.
     """
     del asset_type
     return await _validate_normalized_ticker(_normalize_ticker(ticker))
 
-async def validate_analysis_tickers(tickers: list[str], *, asset_type: str = "stock") -> list[TickerValidationResult]:
-    """Validate a portfolio batch with bounded lookup concurrency.
 
-    Results and exceptions are inspected in input order, so the API reports
-    the first invalid symbol deterministically while never enqueueing a partial
-    portfolio analysis.
+async def validate_analysis_tickers(tickers: list[str], *, asset_type: str = "stock") -> list[TickerValidationResult]:
+    """Validate one copy of each portfolio symbol with bounded concurrency.
+
+    Case/whitespace-equivalent duplicates are removed before remote lookup so a
+    duplicate cannot consume a second validation request or launch a second
+    expensive analysis graph. A portfolio still requires at least two distinct
+    instruments after normalization. All remote requests in the batch share a
+    single HTTP connection pool.
     """
     normalized_tickers = [_normalize_ticker(ticker) for ticker in tickers]
-    semaphore = asyncio.Semaphore(4)
+    unique_tickers = list(dict.fromkeys(normalized_tickers))
+    if len(unique_tickers) < 2:
+        raise ValueError("Portfolio analysis requires at least 2 distinct tickers.")
 
-    async def _validate_one(ticker: str) -> TickerValidationResult:
-        async with semaphore:
-            return await _validate_normalized_ticker(ticker)
+    semaphore = asyncio.Semaphore(_VALIDATION_CONCURRENCY)
 
-    del asset_type
-    results = await asyncio.gather(*(_validate_one(ticker) for ticker in normalized_tickers), return_exceptions=True)
+    async with httpx.AsyncClient(headers=_YAHOO_HEADERS, timeout=_REQUEST_TIMEOUT_SECONDS) as client:
+
+        async def _validate_one(ticker: str) -> TickerValidationResult:
+            async with semaphore:
+                return await _validate_normalized_ticker(ticker, client)
+
+        del asset_type
+        results = await asyncio.gather(*(_validate_one(ticker) for ticker in unique_tickers), return_exceptions=True)
+
     validated: list[TickerValidationResult] = []
     for result in results:
         if isinstance(result, BaseException):

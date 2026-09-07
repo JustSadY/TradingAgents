@@ -28,7 +28,6 @@ export interface MetaResponse {
   embedders: Choice[];
   investor_personas: Choice[];
   languages: Choice[];
-  memory_stores: Choice[];
   order_actions: SignalMeta[];
   order_statuses: SignalMeta[];
   page_keys: string[];

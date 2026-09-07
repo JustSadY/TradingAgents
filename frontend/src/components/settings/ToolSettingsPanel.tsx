@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { RefreshCw, Save } from 'lucide-react'
 import { useSystemSettingsGetServerTools, useSystemSettingsUpdateServerTools } from '../../api/generated/system-settings/system-settings'
 import {
@@ -8,7 +8,7 @@ import {
   useSettingsUpdateOtherUserTools,
 } from '../../api/generated/settings/settings'
 import { useTranslation } from '../../contexts/LanguageContext'
-import { useMeta } from '../../hooks/useMeta'
+import { triggerMetaRefetch, useMeta } from '../../hooks/useMeta'
 import type { ToolSettingFieldMeta } from '../../api/generated/model'
 import { notify } from '../../utils/notify'
 import AppSchemaForm, { legacyFieldsToSchema } from '../ui/AppSchemaForm'
@@ -38,6 +38,12 @@ export interface ToolSettingsPanelHandle {
   save: () => Promise<void>
 }
 
+function changedTools(current: ToolSettings, persisted: ToolSettings | null): Record<string, ToolSettingState> {
+  return Object.fromEntries(
+    Object.entries(current.tools).filter(([key, value]) => JSON.stringify(value) !== JSON.stringify(persisted?.tools[key])),
+  )
+}
+
 const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelProps>(({
   userId,
   serverScope = false,
@@ -46,6 +52,7 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
   const { t } = useTranslation()
   const meta = useMeta()
   const [settings, setSettings] = useState<ToolSettings | null>(null)
+  const persistedSettings = useRef<ToolSettings | null>(null)
 
   const otherUserId = !serverScope && userId ? userId : 0
   const serverQuery = useSystemSettingsGetServerTools({ query: { enabled: serverScope } })
@@ -56,7 +63,11 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
   const activeQuery = serverScope ? serverQuery : userId ? otherUserQuery : ownQuery
 
   useEffect(() => {
-    if (activeQuery.data) setSettings(activeQuery.data as unknown as ToolSettings)
+    if (activeQuery.data) {
+      const next = activeQuery.data as unknown as ToolSettings
+      setSettings(next)
+      persistedSettings.current = next
+    }
   }, [activeQuery.data])
 
   const saveServer = useSystemSettingsUpdateServerTools()
@@ -66,14 +77,20 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
 
   const save = useCallback(async () => {
     if (!settings) return
+    const tools = changedTools(settings, persistedSettings.current)
+    if (Object.keys(tools).length === 0) return
+
     try {
-      const body = settings as unknown as Parameters<typeof saveOwn.mutateAsync>[0]['data']
+      const body = { tools } as unknown as Parameters<typeof saveOwn.mutateAsync>[0]['data']
       const response = serverScope
         ? await saveServer.mutateAsync({ data: body })
         : userId
           ? await saveOtherUser.mutateAsync({ userId, data: body })
           : await saveOwn.mutateAsync({ data: body })
-      setSettings(response as unknown as ToolSettings)
+      const persisted = response as unknown as ToolSettings
+      setSettings(persisted)
+      persistedSettings.current = persisted
+      triggerMetaRefetch()
       notify('success', t('settings.tools_saved'))
     } catch (error: unknown) {
       const message = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail

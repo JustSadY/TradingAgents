@@ -9,6 +9,7 @@ from backend.trading_agents.llm_clients.registry import llm_registry
 
 _RISK_DEBATE = "Risk Debate"
 
+
 def _node_specs() -> dict:
     try:
         from backend.trading_agents.agents.runtime.analyst_execution import ANALYST_NODE_SPECS
@@ -17,26 +18,28 @@ def _node_specs() -> dict:
     except Exception:
         return {}
 
-async def available_analysts(db=None, user=None) -> list[dict]:
+
+async def available_analysts(db=None, user=None, *, agent_access_map: dict[str, bool] | None = None) -> list[dict]:
     """Single source: the engine analyst catalog.
 
-    When the graph is importable we only surface analysts that actually
-    have a wired node spec.
+    When the graph is importable we only surface analysts that actually have a
+    wired node spec. Callers that already loaded access overrides can pass the
+    map to avoid another permission query.
     """
     specs = _node_specs()
     out: list[dict] = []
 
-    agent_access_map = {}
-    if db is not None and user is not None and not user.is_admin:
-        from backend.services.tool_access_service import get_user_agent_access
+    if agent_access_map is None:
+        agent_access_map = {}
+        if db is not None and user is not None and not user.is_admin:
+            from backend.services.tool_access_service import get_user_agent_access
 
-        agent_access_map = await get_user_agent_access(db, user.id)
+            agent_access_map = await get_user_agent_access(db, user.id)
 
     for info in _engine_analysts():
         if not specs or info.key in specs:
-            if user is not None and not user.is_admin:
-                if not agent_access_map.get(info.key, True):
-                    continue
+            if user is not None and not user.is_admin and not agent_access_map.get(info.key, True):
+                continue
             out.append(
                 {
                     "key": info.key,
@@ -47,8 +50,10 @@ async def available_analysts(db=None, user=None) -> list[dict]:
             )
     return out
 
+
 def _analyst_label(key: str) -> str:
     return label_for(key)
+
 
 SECTION_LABELS: dict[str, str] = {
     "market_report": "Market Analysis",
@@ -130,10 +135,11 @@ LLM_CATALOG: dict[str, dict] = {
     for p in llm_registry.list_providers()
 }
 
+
 def trading_options_for_user(user=None) -> tuple[list[dict], list[dict]]:
     """Return only brokerage choices the requesting user may safely configure.
 
-    Paper Alpaca remains an owner-only option.  The real-money mode is omitted
+    Paper Alpaca remains an owner-only option. The real-money mode is omitted
     until the server operator explicitly enables it; non-owner administrators
     never receive either Alpaca or Live choices from the metadata API.
     """
@@ -150,15 +156,10 @@ def trading_options_for_user(user=None) -> tuple[list[dict], list[dict]]:
         {"value": "alpaca", "label": "Alpaca (Paper)"},
     ]
 
-MEMORY_STORES: list[dict] = [
-    {"value": "pinecone", "label": "Pinecone"},
-    {"value": "pgvector", "label": "pgvector (PostgreSQL)"},
-]
 
 EMBEDDERS: list[dict] = [
-    {"value": "pinecone", "label": "Pinecone hosted", "note": "No extra key needed"},
     {"value": "openai", "label": "OpenAI", "note": "Uses your OpenAI key"},
-    {"value": "ollama", "label": "Ollama", "note": "Local, free"},
+    {"value": "ollama", "label": "Ollama", "note": "Local, no cloud key"},
 ]
 
 SECTIONS: list[dict] = [
@@ -206,6 +207,7 @@ SECTIONS: list[dict] = [
     {"key": "final_decision", "label": "Final Decision", "category": "decision", "order": 26, "icon": "CheckCircle"},
 ]
 
+
 async def investor_personas(db=None, user=None) -> list[dict]:
     from backend.trading_agents.personas import list_personas
 
@@ -220,6 +222,7 @@ async def investor_personas(db=None, user=None) -> list[dict]:
         except Exception:
             pass
     return builtins
+
 
 ORDER_STATUSES: list[dict] = [
     {"value": "FILLED", "label": "Filled", "tone": "positive"},
@@ -240,23 +243,45 @@ CHART_PERIODS: list[dict] = [
     {"value": "5y", "label": "5Y"},
 ]
 
+_META_TOOLS: tuple[dict, ...] | None = None
+_META_AGENTS: tuple[dict, ...] | None = None
+
+
+def _validated_static_meta() -> tuple[tuple[dict, ...], tuple[dict, ...]]:
+    """Validate immutable registry metadata once per process."""
+    global _META_AGENTS, _META_TOOLS
+    if _META_TOOLS is None:
+        from backend.schemas.tool_settings import ToolMeta
+        from backend.trading_agents.agents.tools import registry
+
+        _META_TOOLS = tuple(ToolMeta.model_validate(item).model_dump() for item in registry.metadata())
+    if _META_AGENTS is None:
+        from backend.schemas.meta import AgentMeta
+        from backend.trading_agents.agent_catalog import list_agents
+
+        _META_AGENTS = tuple(AgentMeta.model_validate(agent.metadata()).model_dump() for agent in list_agents())
+    return _META_TOOLS, _META_AGENTS
+
+
 async def build_meta(db=None, user=None) -> dict:
-    from backend.schemas.meta import AgentMeta
-    from backend.schemas.tool_settings import ToolMeta
     from backend.services.agent_settings_service import build_agent_runtime_context
-    from backend.trading_agents.agent_catalog import list_agents
     from backend.trading_agents.agents.hierarchy import AgentHierarchy
-    from backend.trading_agents.agents.tools import registry
 
-    tools_list = [ToolMeta.model_validate(item).model_dump() for item in registry.metadata()]
-    agents_list = [AgentMeta.model_validate(a.metadata()).model_dump() for a in list_agents()]
+    static_tools, static_agents = _validated_static_meta()
+    tools_list = list(static_tools)
+    agents_list = list(static_agents)
+    agent_access_map: dict[str, bool] = {}
     if db is not None and user is not None:
-        from backend.services.tool_access_service import get_user_tool_access
-
         agent_ctx = await build_agent_runtime_context(db, user.id)
         hierarchy = AgentHierarchy(agent_ctx)
 
-        tool_access_map = await get_user_tool_access(db, user.id)
+        tool_access_map = {}
+        if not user.is_admin:
+            from backend.services.tool_access_service import get_user_access_overrides
+
+            access = await get_user_access_overrides(db, user.id)
+            agent_access_map = access["agent_access"]
+            tool_access_map = access["tool_access"]
 
         filtered_tools = []
         for t in tools_list:
@@ -264,16 +289,14 @@ async def build_meta(db=None, user=None) -> dict:
                 continue
 
             allowed = t.get("allowed_analysts", [])
-            if allowed:
-                is_any_agent_enabled = any(hierarchy.is_enabled(a) for a in allowed)
-                if not is_any_agent_enabled:
-                    continue
-
+            if allowed and not any(hierarchy.is_enabled(a) for a in allowed):
+                continue
             filtered_tools.append(t)
         tools_list = filtered_tools
+
     trading_modes, brokers = trading_options_for_user(user)
     return {
-        "analysts": await available_analysts(db, user),
+        "analysts": await available_analysts(db, user, agent_access_map=agent_access_map),
         "tools": tools_list,
         "agents": agents_list,
         "section_labels": SECTION_LABELS,
@@ -293,12 +316,12 @@ async def build_meta(db=None, user=None) -> dict:
         "setting_keys": [{"value": key, "label": key} for key in SETTING_KEYS],
         "sections": SECTIONS,
         "webhook_events": WEBHOOK_EVENTS,
-        "memory_stores": MEMORY_STORES,
         "embedders": EMBEDDERS,
         # Published so the generated client carries the WebSocket vocabulary
         # and the browser can be checked against it; see schemas/analysis_events.
         "analysis_event_types": list(ANALYSIS_EVENT_TYPES),
     }
+
 
 _STATIC_NODE_LABELS: dict[str, tuple[str, str]] = {
     "Strategy Context Loader": ("Strategy Context", "research"),
@@ -319,6 +342,7 @@ _STATIC_NODE_LABELS: dict[str, tuple[str, str]] = {
 }
 _ANALYST_NODE_LABELS: dict[str, tuple[str, str]] | None = None
 
+
 def _analyst_node_labels() -> dict[str, tuple[str, str]]:
     global _ANALYST_NODE_LABELS
     if _ANALYST_NODE_LABELS is None:
@@ -329,6 +353,7 @@ def _analyst_node_labels() -> dict[str, tuple[str, str]]:
             mapping[spec.tool_node] = (f"{label} — fetching data", "tool")
         _ANALYST_NODE_LABELS = mapping
     return _ANALYST_NODE_LABELS
+
 
 def node_progress(node_name: str) -> dict | None:
     hit = _analyst_node_labels().get(node_name) or _STATIC_NODE_LABELS.get(node_name)

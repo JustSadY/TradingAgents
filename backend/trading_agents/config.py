@@ -35,7 +35,7 @@ def normalize_fallback_llm_chain(value: Any) -> list[dict[str, str]]:
     """Validate and canonicalize the ordered LLM failover contract.
 
     Runtime callers pass plain dictionaries while :class:`TradingAgentsConfig`
-    uses typed entries.  Keeping the conversion here gives both paths one
+    uses typed entries. Keeping the conversion here gives both paths one
     strict representation and prevents stale single-provider settings from
     being interpreted by the graph.
     """
@@ -83,7 +83,10 @@ class TradingAgentsConfig(BaseModel):
     tool_timeout_seconds: int = Field(default=60, ge=15)
     circuit_breaker_threshold: int = Field(default=3, ge=1)
     circuit_breaker_cooldown: int = Field(default=60, ge=10)
-    max_analyst_tool_turns: int = Field(default=10, ge=2)
+    # One tool turn can contain several parallel tool calls. Four rounds are
+    # enough for gather/refine/finalize without allowing a single analyst to
+    # consume ten provider round trips before the forced final report pass.
+    max_analyst_tool_turns: int = Field(default=4, ge=2)
     stall_timeout_seconds: int = Field(default=120, ge=30)
     alpha_vantage_rate_limit_calls: int = Field(default=5, ge=1)
     alpha_vantage_rate_limit_window: float = Field(default=60.0, ge=1.0)

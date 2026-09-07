@@ -69,7 +69,8 @@ def resolve_user_api_key(user: User, provider: str) -> str | None:
         return None
 
 
-def set_user_api_key(user: User, provider: str, api_key: str, fernet: Fernet) -> None:
+def set_user_api_key(user: User, provider: str, api_key: str, fernet: Fernet) -> bool:
+    """Set one tenant-managed provider key and report whether it changed."""
     from backend.trading_agents.llm_clients.registry import provider_requires_api_key
 
     if not provider_requires_api_key(provider):
@@ -87,8 +88,14 @@ def set_user_api_key(user: User, provider: str, api_key: str, fernet: Fernet) ->
             raise RuntimeError(
                 "Stored API credentials cannot be decrypted. Restore the configured encryption key before changing credentials."
             ) from e
-    existing[provider.lower()] = api_key
+
+    provider_key = provider.lower()
+    if existing.get(provider_key) == api_key:
+        return False
+
+    existing[provider_key] = api_key
     user.api_keys_enc = encrypt_api_keys(existing, fernet)
+    return True
 
 
 def delete_user_api_key(user: User, provider: str, fernet: Fernet) -> bool:
@@ -129,15 +136,27 @@ def _app_fernet() -> Fernet:
     return get_settings().get_fernet()
 
 
+def _invalidate_memory_cache_for_provider(user: User, provider: str) -> None:
+    """Invalidate only credentials that can change the Mem0 store client."""
+    if provider.strip().lower() != "openai":
+        return
+    from backend.services.memory_service import invalidate_user_memory_store_cache
+
+    invalidate_user_memory_store_cache(user.id)
+
+
 def list_stored_api_key_providers(user: User) -> list[str]:
     """List tenant-managed provider keys using the application encryption key."""
     return list_user_api_key_providers(user, _app_fernet())
 
 
 async def save_stored_api_key(db: AsyncSession, user: User, provider: str, api_key: str) -> None:
-    """Encrypt and persist a tenant-managed provider key."""
-    set_user_api_key(user, provider, api_key, _app_fernet())
+    """Encrypt and persist a tenant-managed provider key only when it changes."""
+    changed = set_user_api_key(user, provider, api_key, _app_fernet())
+    if not changed:
+        return
     await db.flush()
+    _invalidate_memory_cache_for_provider(user, provider)
 
 
 async def remove_stored_api_key(db: AsyncSession, user: User, provider: str) -> bool:
@@ -145,6 +164,7 @@ async def remove_stored_api_key(db: AsyncSession, user: User, provider: str) -> 
     deleted = delete_user_api_key(user, provider, _app_fernet())
     if deleted:
         await db.flush()
+        _invalidate_memory_cache_for_provider(user, provider)
     return deleted
 
 
@@ -195,15 +215,27 @@ async def get_managed_page_permissions(db: AsyncSession, user_id: int) -> dict[s
 
 async def set_managed_page_permissions(db: AsyncSession, user_id: int, permissions: dict[str, bool]) -> None:
     from backend.models.page_permission import ALL_PAGE_KEYS
-    from backend.repositories.permissions import set_user_page_permission
+    from backend.repositories.permissions import ensure_user_page_permission_row, list_user_page_permission_rows
 
     await get_user_or_raise(db, user_id)
     unknown = sorted(set(permissions) - set(ALL_PAGE_KEYS))
     if unknown:
         raise UnknownPermissionKeysError(f"Unknown page permission keys: {', '.join(unknown)}")
+
+    rows = {row.page_key: row for row in await list_user_page_permission_rows(db, user_id)}
+    dirty = False
     for page_key, allowed in permissions.items():
-        await set_user_page_permission(db, user_id, page_key, allowed)
-    await db.flush()
+        row = rows.get(page_key)
+        if row is None and allowed is False:
+            continue
+        if row is not None and row.allowed == allowed:
+            continue
+        row = ensure_user_page_permission_row(db, row=row, user_id=user_id, page_key=page_key)
+        row.allowed = allowed
+        rows[page_key] = row
+        dirty = True
+    if dirty:
+        await db.flush()
 
 
 async def get_managed_setting_permissions(db: AsyncSession, user_id: int) -> dict[str, bool]:
@@ -217,15 +249,27 @@ async def get_managed_setting_permissions(db: AsyncSession, user_id: int) -> dic
 
 async def set_managed_setting_permissions(db: AsyncSession, user_id: int, permissions: dict[str, bool]) -> None:
     from backend.core.constants import SETTING_KEYS
-    from backend.repositories.permissions import set_user_setting_permission
+    from backend.repositories.permissions import ensure_user_setting_permission_row, list_user_setting_permission_rows
 
     await get_user_or_raise(db, user_id)
     unknown = sorted(set(permissions) - set(SETTING_KEYS))
     if unknown:
         raise UnknownPermissionKeysError(f"Unknown setting permission keys: {', '.join(unknown)}")
+
+    rows = {row.setting_key: row for row in await list_user_setting_permission_rows(db, user_id)}
+    dirty = False
     for setting_key, allowed in permissions.items():
-        await set_user_setting_permission(db, user_id, setting_key, allowed)
-    await db.flush()
+        row = rows.get(setting_key)
+        if row is None and allowed is False:
+            continue
+        if row is not None and row.allowed == allowed:
+            continue
+        row = ensure_user_setting_permission_row(db, row=row, user_id=user_id, setting_key=setting_key)
+        row.allowed = allowed
+        rows[setting_key] = row
+        dirty = True
+    if dirty:
+        await db.flush()
 
 
 async def update_profile(
@@ -240,7 +284,7 @@ async def update_profile(
     from backend.core.password_hashing import hash_password
     from backend.repositories.users import email_exists, update_user_profile
 
-    if email is not None and await email_exists(db, email, exclude_user_id=user.id):
+    if email is not None and email != user.email and await email_exists(db, email, exclude_user_id=user.id):
         raise EmailTakenError("Email already in use")
 
     hashed_password = None
@@ -317,7 +361,7 @@ async def update_managed_user(
         if actor.role != "owner":
             raise UserPolicyError("Only Server Owner can promote/demote admins.")
 
-    if email is not None and await email_exists(db, email, exclude_user_id=user.id):
+    if email is not None and email != user.email and await email_exists(db, email, exclude_user_id=user.id):
         raise EmailTakenError("Email already in use")
 
     return await update_user_admin(
@@ -343,10 +387,11 @@ async def delete_managed_user(db: AsyncSession, actor: User, user_id: int) -> No
 
 
 async def delete_user_and_emit(db: AsyncSession, user: User) -> None:
-    """Delete a tenant and clean up any active task-store state."""
+    """Delete a tenant and clean up active task/memory process state."""
     from backend.core import task_store
     from backend.core.events import emit
     from backend.repositories.user_cleanup import delete_user_record, list_active_analysis_task_ids
+    from backend.services.memory_service import invalidate_user_memory_store_cache
 
     task_ids = await list_active_analysis_task_ids(db, user.id)
     for task_id in task_ids:
@@ -354,6 +399,7 @@ async def delete_user_and_emit(db: AsyncSession, user: User) -> None:
         await task_store.publish_cancel(task_id)
 
     await delete_user_record(db, user)
+    invalidate_user_memory_store_cache(user.id)
 
     for task_id in task_ids:
         await task_store.clear_meta(task_id, user.id)

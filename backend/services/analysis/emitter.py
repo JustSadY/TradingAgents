@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from collections import Counter
 from typing import Any
 
@@ -111,22 +112,48 @@ class AnalysisEmitter:
 
         ``complete`` means that the AI report was persisted; it must not be
         interpreted as an assertion that an order was filled. This separate
-        event gives the client an explicit filled/skipped/rejected/error
-        result, while retaining broker-specific detail for an order history.
-        Values may be ``Decimal`` instances, so convert them at this wire
-        boundary instead of relying on a JSON encoder implementation.
+        event gives the client an explicit filled/partially-filled/skipped/
+        rejected/error or reconciliation-required result while retaining
+        broker-specific detail for order history. Values may be ``Decimal``
+        instances, so convert them at this wire boundary instead of relying on
+        a JSON encoder implementation.
         """
-
-        if outcome not in {"filled", "skipped", "rejected", "error"}:
-            raise ValueError(f"Unsupported order outcome: {outcome}")
 
         def _number(value: object | None) -> float | None:
             if value is None:
                 return None
             try:
-                return float(value)
+                parsed = float(value)
             except (TypeError, ValueError):
                 return None
+            return parsed if math.isfinite(parsed) else None
+
+        filled_quantity_number = _number(filled_quantity)
+        normalized_broker_status = (broker_status or "").strip().upper()
+        if normalized_broker_status == "RECONCILIATION_REQUIRED":
+            # A broker request may have escaped the local transaction even when
+            # its exact fill/audit state is unknown. Calling that "rejected"
+            # invites an unsafe retry; expose the operational state explicitly.
+            outcome = "reconciliation_required"
+        elif normalized_broker_status == "PARTIALLY_FILLED" or (
+            normalized_broker_status in {"CANCELED", "EXPIRED"}
+            and filled_quantity_number is not None
+            and filled_quantity_number > 0
+        ):
+            # Alpaca can report a terminal cancellation after part of the order
+            # already executed. Treating that as a rejection hides a real
+            # position change and can make a retry dangerously duplicate size.
+            outcome = "partially_filled"
+
+        if outcome not in {
+            "filled",
+            "partially_filled",
+            "skipped",
+            "rejected",
+            "error",
+            "reconciliation_required",
+        }:
+            raise ValueError(f"Unsupported order outcome: {outcome}")
 
         event: dict[str, Any] = {
             "type": "order_result",
@@ -138,7 +165,7 @@ class AnalysisEmitter:
             "outcome": outcome,
             "broker_status": broker_status,
             "order_id": order_id or None,
-            "filled_quantity": _number(filled_quantity),
+            "filled_quantity": filled_quantity_number,
             "filled_price": _number(filled_price),
             "commission": _number(commission),
             "message": message,

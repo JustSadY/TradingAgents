@@ -87,7 +87,6 @@ class MetaResponse(BaseModel):
     setting_keys: list[Choice]
     sections: list[SectionMeta]
     webhook_events: list[str]
-    memory_stores: list[Choice]
     embedders: list[Choice]
     analysis_event_types: list[AnalysisEventType]
 

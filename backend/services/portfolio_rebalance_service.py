@@ -27,11 +27,17 @@ _logger = logging.getLogger(__name__)
 
 # The plan carries the score, issues and trades; only prose can be missing.
 _NO_NARRATIVE: dict = {"summary": "", "rationales": []}
+_REBALANCE_SECTOR_CONCURRENCY = 6
 
 async def get_rebalance_suggestions(db: AsyncSession, user: User) -> dict:
     from backend.services.mock_trading_service import get_portfolio_with_live_prices
 
-    portfolio = await get_portfolio_with_live_prices(db, user=user, read_only=True)
+    portfolio = await get_portfolio_with_live_prices(
+        db,
+        user=user,
+        read_only=True,
+        release_before_price_io=True,
+    )
     holdings = portfolio.get("holdings") or []
 
     if not holdings:
@@ -42,12 +48,7 @@ async def get_rebalance_suggestions(db: AsyncSession, user: User) -> dict:
             "suggestions": [],
         }
 
-    tickers = [h["ticker"] for h in holdings]
-    sectors = await _fetch_sectors(tickers)
-    recent_signals = await _get_recent_signals(db, user, tickers)
-
     plan = build_plan(portfolio)
-
     if not plan["suggestions"] and not plan["issues"]:
         return {
             "summary": "No concentration or cash-allocation issues found.",
@@ -56,14 +57,30 @@ async def get_rebalance_suggestions(db: AsyncSession, user: User) -> dict:
             "suggestions": [],
         }
 
+    tickers = [h["ticker"] for h in holdings]
+    # Start sector network I/O immediately, but release the request's DB
+    # transaction as soon as the independent signal query completes rather than
+    # holding a pool connection until every sector provider call finishes.
+    sector_task = asyncio.create_task(_fetch_sectors(tickers))
+    try:
+        recent_signals = await _get_recent_signals(db, user, tickers)
+        await db.commit()
+        sectors = await sector_task
+    finally:
+        if not sector_task.done():
+            sector_task.cancel()
+
     prompt = _build_prompt(portfolio, sectors, recent_signals, plan)
     narrative = await _call_llm(db, user, prompt)
     return _merge(plan, narrative)
 
 async def _fetch_sectors(tickers: list[str]) -> dict[str, str]:
+    semaphore = asyncio.Semaphore(_REBALANCE_SECTOR_CONCURRENCY)
+
     async def _one(ticker: str) -> tuple[str, str]:
-        sector = await fetch_sector(ticker)
-        return ticker, sector
+        async with semaphore:
+            sector = await fetch_sector(ticker)
+            return ticker, sector
 
     pairs = await asyncio.gather(*[_one(t) for t in tickers], return_exceptions=False)
     return dict(pairs)
@@ -203,6 +220,11 @@ async def _call_llm(db: AsyncSession, user: User, prompt: str) -> dict:
     except Exception as exc:
         _logger.debug("Failed to retrieve user API key: %s", exc)
         user_key = None
+
+    # Settings/runtime reads are complete. Do not pin a pool connection while
+    # waiting on the narrative model; the same AsyncSession will reapply its RLS
+    # context automatically if a later DB transaction is needed.
+    await db.commit()
 
     if provider_requires_api_key(provider) and not user_key:
         # The plan needs no model, so a missing key costs the explanation only.

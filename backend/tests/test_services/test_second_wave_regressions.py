@@ -168,6 +168,15 @@ async def test_performance_compares_spy_over_the_portfolio_lifetime(monkeypatch)
     snapshot_calls: list[dict] = []
     benchmark_calls: list[dict] = []
 
+    class _DB:
+        def __init__(self):
+            self.commits = 0
+
+        async def commit(self):
+            self.commits += 1
+
+    db = _DB()
+
     async def fake_portfolio(*_args, **_kwargs):
         return portfolio
 
@@ -176,6 +185,7 @@ async def test_performance_compares_spy_over_the_portfolio_lifetime(monkeypatch)
         return {"total_pnl_pct": 5.0}
 
     async def fake_benchmark(benchmark="SPY", period="1y", *, start_date=None, end_date=None):
+        assert db.commits == 1
         benchmark_calls.append(
             {"benchmark": benchmark, "period": period, "start_date": start_date, "end_date": end_date}
         )
@@ -186,11 +196,20 @@ async def test_performance_compares_spy_over_the_portfolio_lifetime(monkeypatch)
     monkeypatch.setattr(market_data_service, "get_benchmark_return", fake_benchmark)
 
     user = SimpleNamespace(id=1)
-    result = await mock_trading_service.get_performance(object(), user=user)
+    result = await mock_trading_service.get_performance(db, user=user)
 
-    # read_only keeps the performance read path from writing prices/positions
-    # back while it is only computing a return figure.
-    assert snapshot_calls == [{"user": user, "portfolio_id": 42, "read_only": True}]
+    # The snapshot is side-effect free and may explicitly release its DB
+    # transaction before live-price I/O. Performance also releases once more
+    # before the independent benchmark request so empty portfolios are covered.
+    assert snapshot_calls == [
+        {
+            "user": user,
+            "portfolio_id": 42,
+            "read_only": True,
+            "release_before_price_io": True,
+        }
+    ]
+    assert db.commits == 1
     assert benchmark_calls == [{"benchmark": "SPY", "period": "1y", "start_date": "2024-05-10", "end_date": None}]
     assert result["alpha_pct"] == 1.75
 
