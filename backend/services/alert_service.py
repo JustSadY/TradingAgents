@@ -170,7 +170,6 @@ async def _deliver_alert_side_effects(
 
     if alert.auto_analyze and user and user_settings:
         from backend.services.analysis_queue import dispatch_analysis
-        from backend.services.analysis_service import register_queued_task
 
         today = datetime.now(UTC).strftime("%Y-%m-%d")
         task_id = str(uuid.uuid4())
@@ -186,13 +185,6 @@ async def _deliver_alert_side_effects(
             status="queued",
             heartbeat_at=datetime.now(UTC),
             triggered_by="alert",
-        )
-        await register_queued_task(
-            task_id,
-            ticker=alert.ticker,
-            trade_date=today,
-            asset_type="stock",
-            user_id=user.id,
         )
         await dispatch_analysis(
             None,
@@ -390,7 +382,6 @@ async def _auto_analyze(ticker: str, trade_date: str, user_id: int | None) -> No
             task_id = str(uuid.uuid4())
             from backend.repositories.analysis import create_analysis_result
             from backend.services.analysis_queue import dispatch_analysis
-            from backend.services.analysis_service import register_queued_task
 
             await create_analysis_result(
                 new_db,
@@ -402,13 +393,6 @@ async def _auto_analyze(ticker: str, trade_date: str, user_id: int | None) -> No
                 status="queued",
                 heartbeat_at=datetime.now(UTC),
                 triggered_by="alert",
-            )
-            await register_queued_task(
-                task_id,
-                ticker=ticker,
-                trade_date=trade_date,
-                asset_type="stock",
-                user_id=user.id,
             )
             await dispatch_analysis(
                 None,
