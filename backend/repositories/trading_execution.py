@@ -94,30 +94,76 @@ async def persist_broker_order(
     ai_reasoning: str,
     executed_at,
 ) -> Order:
-    """Persist one broker submission/result as an immutable local audit row."""
-    order = Order(
-        portfolio_id=portfolio_id,
-        broker="alpaca",
-        ticker=ticker,
-        action=action,
-        side=side,
-        leverage=leverage,
-        quantity_requested=quantity_requested,
-        quantity_filled=quantity_filled,
-        status=status,
-        price_per_share=price_per_share,
-        total_value=total_value,
-        commission=commission,
-        entry_commission=Decimal("0"),
-        realized_pnl=Decimal("0"),
-        financing_cost=Decimal("0"),
-        external_order_id=external_order_id,
-        analysis_id=analysis_id,
-        ai_signal=ai_signal[:50],
-        ai_reasoning=ai_reasoning[:4_000],
-        executed_at=executed_at,
+    """Persist one canonical broker audit row, idempotent for an analysis.
+
+    Automatic execution has one durable broker intent per ``analysis_id``.
+    Broker retries therefore refresh the same audit row instead of appending a
+    duplicate history record. Locking the audit portfolio serializes concurrent
+    retries before the existence check; direct/manual orders without an
+    analysis id remain append-only.
+    """
+    await db.execute(
+        select(Portfolio.id)
+        .where(Portfolio.id == portfolio_id)
+        .with_for_update()
     )
-    db.add(order)
+
+    order = None
+    if analysis_id is not None:
+        result = await db.execute(
+            select(Order)
+            .where(
+                Order.portfolio_id == portfolio_id,
+                Order.broker == "alpaca",
+                Order.analysis_id == analysis_id,
+            )
+            .with_for_update()
+        )
+        order = result.scalar_one_or_none()
+
+    if order is not None:
+        if (
+            order.ticker != ticker
+            or order.action != action
+            or order.side != side
+            or order.quantity_requested != quantity_requested
+        ):
+            raise ValueError("Existing broker audit row conflicts with the analysis execution intent")
+        order.leverage = leverage
+        order.quantity_filled = quantity_filled
+        order.status = status
+        order.price_per_share = price_per_share
+        order.total_value = total_value
+        order.commission = commission
+        order.external_order_id = external_order_id
+        order.ai_signal = ai_signal[:50]
+        order.ai_reasoning = ai_reasoning[:4_000]
+        order.executed_at = executed_at
+    else:
+        order = Order(
+            portfolio_id=portfolio_id,
+            broker="alpaca",
+            ticker=ticker,
+            action=action,
+            side=side,
+            leverage=leverage,
+            quantity_requested=quantity_requested,
+            quantity_filled=quantity_filled,
+            status=status,
+            price_per_share=price_per_share,
+            total_value=total_value,
+            commission=commission,
+            entry_commission=Decimal("0"),
+            realized_pnl=Decimal("0"),
+            financing_cost=Decimal("0"),
+            external_order_id=external_order_id,
+            analysis_id=analysis_id,
+            ai_signal=ai_signal[:50],
+            ai_reasoning=ai_reasoning[:4_000],
+            executed_at=executed_at,
+        )
+        db.add(order)
+
     await db.flush()
     return order
 
