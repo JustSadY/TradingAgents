@@ -80,8 +80,8 @@ async def _prepare_alert_dispatch_identity(
     for the same recovery identity as canonical; only that row may dispatch.
 
     The first row is renamed to a deterministic task id before queue I/O. The
-    random task-store registration created by the caller is replaced with the
-    same deterministic id so Redis/arq, inline dispatch, DB persistence and
+    random task-store registration created by older callers is replaced with
+    the same deterministic id so Redis/arq, inline dispatch, DB persistence and
     recovery all agree on one identity.
     """
     if user is None:
@@ -100,6 +100,7 @@ async def _prepare_alert_dispatch_identity(
         return task_id, True
 
     should_dispatch = True
+    newly_canonicalized = False
     async with AsyncSessionLocal() as db:
         await set_user_background_context(db, user.id)
         rows = list(
@@ -128,17 +129,18 @@ async def _prepare_alert_dispatch_identity(
             # exists, and never launch work with no AnalysisResult lease at all.
             should_dispatch = False
         elif canonical is not None and canonical.id != current.id:
-            # The outbox is retrying work that already has a durable analysis
-            # row. Remove only this newly staged duplicate; the canonical job
-            # remains untouched regardless of whether it is queued, running,
-            # completed or terminally failed.
+            # Remove only the newly staged duplicate. A queued canonical row
+            # that already owns the deterministic task id may be retried: queue
+            # identity is idempotent, and this closes the failure window where
+            # task-store or queue submission died after canonicalization.
+            should_dispatch = canonical.status == "queued" and canonical.task_id == stable_task_id
             await db.delete(current)
             await db.commit()
-            should_dispatch = False
         else:
             current.task_id = stable_task_id
             try:
                 await db.commit()
+                newly_canonicalized = True
             except IntegrityError:
                 # A concurrent outbox delivery won the deterministic task-id
                 # race. Its row is canonical; remove this random duplicate.
@@ -161,13 +163,25 @@ async def _prepare_alert_dispatch_identity(
         )
         return stable_task_id, False
 
-    await register_queued_task(
-        stable_task_id,
-        ticker=ticker,
-        trade_date=trade_date,
-        asset_type=asset_type,
-        user_id=user.id,
-    )
+    try:
+        await register_queued_task(
+            stable_task_id,
+            ticker=ticker,
+            trade_date=trade_date,
+            asset_type=asset_type,
+            user_id=user.id,
+        )
+    except Exception:
+        # On the first canonicalization no queue submission can own this row
+        # yet. Remove it so outbox/recovery can stage a clean retry instead of
+        # leaving a permanent queued tombstone. For a retry of an existing
+        # canonical row, leave it intact because a worker may already own it.
+        if newly_canonicalized:
+            try:
+                await _cleanup_failed_alert_dispatch(stable_task_id, user)
+            except Exception:
+                _logger.exception("Could not clean up failed alert task-store registration task=%s", stable_task_id)
+        raise
     return stable_task_id, True
 
 
