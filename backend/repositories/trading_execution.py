@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.order import Order
 from backend.models.portfolio import Portfolio
 
+_BROKER_TERMINAL = {"FILLED", "CANCELED", "REJECTED", "EXPIRED"}
+
 
 async def _get_broker_audit_portfolio_for_update(
     db: AsyncSession,
@@ -101,6 +103,11 @@ async def persist_broker_order(
     duplicate history record. Locking the audit portfolio serializes concurrent
     retries before the existence check; direct/manual orders without an
     analysis id remain append-only.
+
+    Once a terminal broker state is durable, a later retry that only knows the
+    state is uncertain must not erase that stronger fact. A genuinely different
+    terminal state for the same analysis is treated as a reconciliation
+    conflict instead of silently rewriting history.
     """
     await db.execute(
         select(Portfolio.id)
@@ -129,6 +136,15 @@ async def persist_broker_order(
             or order.quantity_requested != quantity_requested
         ):
             raise ValueError("Existing broker audit row conflicts with the analysis execution intent")
+
+        existing_status = str(order.status or "").upper()
+        incoming_status = str(status or "").upper()
+        if existing_status in _BROKER_TERMINAL:
+            if incoming_status == "RECONCILIATION_REQUIRED":
+                return order
+            if incoming_status in _BROKER_TERMINAL and incoming_status != existing_status:
+                raise ValueError("Broker terminal state conflicts with the existing analysis audit row")
+
         order.leverage = leverage
         order.quantity_filled = quantity_filled
         order.status = status
