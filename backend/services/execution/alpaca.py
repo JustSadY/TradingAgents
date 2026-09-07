@@ -133,12 +133,6 @@ class AlpacaTrader(BaseTraderInterface):
             raise ValueError("Alpaca API credentials missing or invalid. Set them in Owner Profile.")
 
         if self._release_db_before_network:
-            # Every public broker method calls _clients() immediately before
-            # entering alpaca-py network I/O. End whatever short DB phase was
-            # needed to load credentials/config/audit state so a slow broker
-            # request never pins a SQL connection or row lock. Alpaca side
-            # effects cannot be transactionally rolled back with PostgreSQL;
-            # making the DB boundary explicit is safer than pretending they can.
             await self._db.commit()
         return key, secret
 
@@ -170,8 +164,6 @@ class AlpacaTrader(BaseTraderInterface):
         except Exception as exc:
             _logger.warning("alpaca-py latest trade failed for %s: %s", ticker, exc)
 
-        # Real-money sizing fails closed. Paper mode can still use the normal
-        # market-data service when Alpaca's data endpoint is transiently down.
         if self._mode == "live":
             return None
         return await _get_price(ticker)
@@ -238,10 +230,6 @@ class AlpacaTrader(BaseTraderInterface):
                 if request.take_profit:
                     kwargs["take_profit"] = TakeProfitRequest(limit_price=float(request.take_profit))
 
-            # Construct and validate the SDK request entirely locally first. A
-            # validation error here proves nothing was submitted and is safe to
-            # report as a rejection. Only flip the uncertainty flag immediately
-            # before entering submit_order, where a timeout may hide acceptance.
             broker_request = MarketOrderRequest(**kwargs)
             submission_started = True
             order = await asyncio.to_thread(trading.submit_order, broker_request)
@@ -312,10 +300,6 @@ class AlpacaTrader(BaseTraderInterface):
         except Exception:
             _logger.exception("alpaca-py order placement failed")
 
-            # If submit_order lost its response, the client id is the safest way
-            # to ask Alpaca whether the order actually exists. A confirmed
-            # lookup can turn an ambiguous timeout into a concrete terminal
-            # result without ever submitting a second order.
             if submission_started and not known_order_id and trading is not None:
                 try:
                     recovered = await asyncio.to_thread(trading.get_order_by_client_id, client_order_id)
@@ -323,6 +307,9 @@ class AlpacaTrader(BaseTraderInterface):
                     recovered_status = _value(getattr(recovered, "status", "UNKNOWN")).upper()
                     recovered_price = getattr(recovered, "filled_avg_price", None)
                     recovered_qty = getattr(recovered, "filled_qty", None)
+                    known_order_id = recovered_id or f"client:{client_order_id}"
+                    known_filled_price = recovered_price
+                    known_filled_qty = recovered_qty
 
                     if recovered_status not in _TERMINAL and recovered_id:
                         try:
@@ -338,6 +325,8 @@ class AlpacaTrader(BaseTraderInterface):
                         recovered_status = _value(getattr(recovered, "status", recovered_status)).upper()
                         recovered_price = getattr(recovered, "filled_avg_price", recovered_price)
                         recovered_qty = getattr(recovered, "filled_qty", recovered_qty)
+                        known_filled_price = recovered_price
+                        known_filled_qty = recovered_qty
 
                     safe_price, safe_qty, fill_reason = _validated_fill_details(
                         recovered_price,
@@ -357,7 +346,7 @@ class AlpacaTrader(BaseTraderInterface):
                             reason_code = terminal_reason
 
                     return OrderResult(
-                        order_id=recovered_id or f"client:{client_order_id}",
+                        order_id=known_order_id,
                         status=recovered_status,
                         filled_price=safe_price,
                         filled_quantity=safe_qty,
@@ -375,11 +364,8 @@ class AlpacaTrader(BaseTraderInterface):
                         client_order_id,
                         recovery_exc,
                     )
-                    # Preserve a durable, explicitly typed reference in the
-                    # existing external-order audit field. No production code
-                    # treats this value as a broker UUID, and the prefix makes
-                    # the distinction unambiguous to operators.
-                    known_order_id = f"client:{client_order_id}"
+                    if not known_order_id:
+                        known_order_id = f"client:{client_order_id}"
 
             status = "RECONCILIATION_REQUIRED" if submission_started else "REJECTED"
             safe_filled_price, safe_filled_qty, _fill_reason = _validated_fill_details(
