@@ -323,6 +323,22 @@ class AlpacaTrader(BaseTraderInterface):
                     recovered_status = _value(getattr(recovered, "status", "UNKNOWN")).upper()
                     recovered_price = getattr(recovered, "filled_avg_price", None)
                     recovered_qty = getattr(recovered, "filled_qty", None)
+
+                    if recovered_status not in _TERMINAL and recovered_id:
+                        try:
+                            await asyncio.to_thread(trading.cancel_order_by_id, recovered_id)
+                        except Exception as cancel_exc:
+                            _logger.warning(
+                                "Could not cancel recovered open Alpaca order %s: %s",
+                                recovered_id,
+                                cancel_exc,
+                            )
+                        await asyncio.sleep(0.25)
+                        recovered = await asyncio.to_thread(trading.get_order_by_id, recovered_id)
+                        recovered_status = _value(getattr(recovered, "status", recovered_status)).upper()
+                        recovered_price = getattr(recovered, "filled_avg_price", recovered_price)
+                        recovered_qty = getattr(recovered, "filled_qty", recovered_qty)
+
                     safe_price, safe_qty, fill_reason = _validated_fill_details(
                         recovered_price,
                         recovered_qty,
