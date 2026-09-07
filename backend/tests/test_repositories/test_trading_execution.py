@@ -159,6 +159,73 @@ async def test_analysis_broker_audit_retry_reuses_the_same_order_row(
     assert rows[0].price_per_share == Decimal("201")
 
 
+async def test_terminal_broker_audit_is_not_downgraded_by_retry_uncertainty(
+    db: AsyncSession,
+    test_user: User,
+) -> None:
+    portfolio = await get_or_create_broker_audit_portfolio(
+        db,
+        user_id=test_user.id,
+        mode="simulation",
+        equity=Decimal("10000"),
+        cash=Decimal("5000"),
+    )
+    analysis = AnalysisResult(
+        user_id=test_user.id,
+        ticker="MSFT",
+        trade_date="2026-09-07",
+        signal="Buy",
+    )
+    db.add(analysis)
+    await db.flush()
+
+    terminal = await persist_broker_order(
+        db,
+        portfolio_id=portfolio.id,
+        ticker="MSFT",
+        action="BUY",
+        side="long",
+        leverage=Decimal("1"),
+        quantity_requested=Decimal("1"),
+        quantity_filled=Decimal("1"),
+        status="FILLED",
+        price_per_share=Decimal("300"),
+        total_value=Decimal("300"),
+        commission=Decimal("0"),
+        external_order_id="alpaca-terminal-1",
+        analysis_id=analysis.id,
+        ai_signal="Buy",
+        ai_reasoning="terminal snapshot",
+        executed_at=datetime.now(UTC),
+    )
+
+    retry = await persist_broker_order(
+        db,
+        portfolio_id=portfolio.id,
+        ticker="MSFT",
+        action="BUY",
+        side="long",
+        leverage=Decimal("1"),
+        quantity_requested=Decimal("1"),
+        quantity_filled=Decimal("0"),
+        status="RECONCILIATION_REQUIRED",
+        price_per_share=None,
+        total_value=None,
+        commission=Decimal("0"),
+        external_order_id="client:ta-retry-uncertain",
+        analysis_id=analysis.id,
+        ai_signal="Buy",
+        ai_reasoning="retry could not reach broker",
+        executed_at=None,
+    )
+
+    assert retry.id == terminal.id
+    assert retry.status == "FILLED"
+    assert retry.external_order_id == "alpaca-terminal-1"
+    assert retry.quantity_filled == Decimal("1")
+    assert retry.price_per_share == Decimal("300")
+
+
 def test_apply_broker_account_balances_only_updates_authoritative_balances() -> None:
     class PortfolioStub:
         cash_available = Decimal("1")
