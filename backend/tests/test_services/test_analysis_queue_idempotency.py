@@ -160,7 +160,7 @@ async def test_alert_dispatch_reuses_one_durable_analysis_identity(monkeypatch, 
     )
 
     assert retry_task_id == stable_task_id
-    assert retry_should_dispatch is False
+    assert retry_should_dispatch is True
     rows = list(
         (
             await db.execute(
@@ -177,7 +177,140 @@ async def test_alert_dispatch_reuses_one_durable_analysis_identity(monkeypatch, 
     )
     assert [row.id for row in rows] == [first.id]
     discard.assert_awaited_once_with("random-retry", test_user.id)
+    register.assert_awaited_once_with(
+        stable_task_id,
+        ticker="NVDA",
+        trade_date="2026-09-05",
+        asset_type="stock",
+        user_id=test_user.id,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("canonical_status", ["running", "completed", "failed"])
+async def test_alert_retry_suppresses_nonqueued_canonical_analysis(
+    monkeypatch,
+    db,
+    test_user,
+    canonical_status,
+):
+    from backend.core import database
+    from backend.models.analysis import AnalysisResult
+    from backend.services import analysis_queue, analysis_service
+
+    stable_task_id = analysis_queue._alert_task_id(
+        user_id=test_user.id,
+        ticker="NVDA",
+        trade_date="2026-09-05",
+    )
+    canonical = AnalysisResult(
+        user_id=test_user.id,
+        ticker="NVDA",
+        trade_date="2026-09-05",
+        asset_type="stock",
+        task_id=stable_task_id,
+        status=canonical_status,
+        triggered_by="alert",
+    )
+    duplicate = AnalysisResult(
+        user_id=test_user.id,
+        ticker="NVDA",
+        trade_date="2026-09-05",
+        asset_type="stock",
+        task_id="random-retry",
+        status="queued",
+        triggered_by="alert",
+    )
+    db.add_all([canonical, duplicate])
+    await db.flush()
+
+    @asynccontextmanager
+    async def same_session():
+        yield db
+
+    discard = AsyncMock()
+    register = AsyncMock()
+    monkeypatch.setattr(database, "AsyncSessionLocal", same_session)
+    monkeypatch.setattr(analysis_service, "discard_queued_task", discard)
+    monkeypatch.setattr(analysis_service, "register_queued_task", register)
+
+    resolved, should_dispatch = await analysis_queue._prepare_alert_dispatch_identity(
+        task_id="random-retry",
+        ticker="NVDA",
+        trade_date="2026-09-05",
+        asset_type="stock",
+        user=test_user,
+    )
+
+    assert resolved == stable_task_id
+    assert should_dispatch is False
+    rows = list(
+        (
+            await db.execute(
+                select(AnalysisResult).where(
+                    AnalysisResult.user_id == test_user.id,
+                    AnalysisResult.ticker == "NVDA",
+                    AnalysisResult.trade_date == "2026-09-05",
+                    AnalysisResult.triggered_by == "alert",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [row.id for row in rows] == [canonical.id]
+    discard.assert_awaited_once_with("random-retry", test_user.id)
     register.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_first_alert_task_store_registration_failure_removes_unowned_canonical_row(monkeypatch, db, test_user):
+    from backend.core import database
+    from backend.models.analysis import AnalysisResult
+    from backend.services import analysis_queue, analysis_service
+
+    row = AnalysisResult(
+        user_id=test_user.id,
+        ticker="NVDA",
+        trade_date="2026-09-05",
+        asset_type="stock",
+        task_id="random-first",
+        status="queued",
+        triggered_by="alert",
+    )
+    db.add(row)
+    await db.flush()
+
+    @asynccontextmanager
+    async def same_session():
+        yield db
+
+    discard = AsyncMock()
+    register = AsyncMock(side_effect=RuntimeError("task store unavailable"))
+    monkeypatch.setattr(database, "AsyncSessionLocal", same_session)
+    monkeypatch.setattr(analysis_service, "discard_queued_task", discard)
+    monkeypatch.setattr(analysis_service, "register_queued_task", register)
+
+    stable_task_id = analysis_queue._alert_task_id(
+        user_id=test_user.id,
+        ticker="NVDA",
+        trade_date="2026-09-05",
+    )
+    with pytest.raises(RuntimeError, match="task store unavailable"):
+        await analysis_queue._prepare_alert_dispatch_identity(
+            task_id="random-first",
+            ticker="NVDA",
+            trade_date="2026-09-05",
+            asset_type="stock",
+            user=test_user,
+        )
+
+    assert (
+        await db.execute(select(AnalysisResult).where(AnalysisResult.task_id == stable_task_id))
+    ).scalar_one_or_none() is None
+    assert discard.await_count == 2
+    discard.assert_any_await("random-first", test_user.id)
+    discard.assert_any_await(stable_task_id, test_user.id)
 
 
 @pytest.mark.asyncio
